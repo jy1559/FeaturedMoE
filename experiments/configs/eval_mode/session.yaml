@@ -1,0 +1,25 @@
+# @package _global_
+
+# SESSION mode: Session-level split (completely separate sessions for train/valid/test)
+#
+# How it works:
+# 1. All sessions (USER_ID_FIELD=session_id) are grouped
+# 2. Sessions are sorted by time (order: TO)
+# 3. Sessions are split 70/15/15 into train/valid/test
+# 4. NO session overlap between splits (완전히 분리됨)
+# 5. Training: all interactions in train sessions (data augmentation)
+# 6. Evaluation: predict last item in valid/test sessions
+#
+# Example:
+#   757 total sessions → ~530 train / ~114 valid / ~114 test sessions
+#   Train sessions: all interactions used for training
+#   Valid sessions: last item predicted, rest used as sequence
+#   Test sessions: last item predicted, rest used as sequence
+
+benchmark_filename: null
+
+eval_args:
+  split: {'RS': [0.7, 0.15, 0.15]}  # 70% train / 15% valid / 15% test sessions
+  group_by: user  # Group by USER_ID_FIELD (=session_id)
+  order: TO  # Temporal order (sort by TIME_FIELD before splitting)
+  mode: full  # overridden by eval_sampling in config.yaml

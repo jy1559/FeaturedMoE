@@ -1,0 +1,57 @@
+# Foursquare (NYC) Hyperparameter Tuning
+
+defaults:
+  - eval_mode: session
+  - feature_mode: basic
+  - model: ???
+  - _self_
+
+dataset: foursquare
+dataset_root: ../Datasets/processed
+
+# ============ Core Fields ============
+USER_ID_FIELD: session_id
+ITEM_ID_FIELD: item_id
+TIME_FIELD: timestamp
+load_col:
+  inter: [session_id, item_id, timestamp]
+field_separator: "\t"
+
+# ============ Device ============
+gpu_id: 0
+use_gpu: true
+
+# ============ Saving (disabled for tuning) ============
+save_dataset: false
+save_dataloaders: false
+saved: false
+show_progress: true
+state: INFO
+
+# ============ Training ============
+loss_type: CE
+train_neg_sample_args: null
+learning_rate: 0.001
+hidden_dropout_prob: 0.2
+attn_dropout_prob: 0.2
+train_batch_size: 4096
+eval_batch_size: 4096
+
+epochs: 100
+stopping_step: 10
+valid_metric: MRR@20
+metrics: [Hit, NDCG, MRR]
+topk: [5, 10, 20]
+
+clip_grad_norm:
+  max_norm: 5.0
+
+log_wandb: false
+wandb_project: FMoE_2026
+
+# ============ Common Search Space ============
+search:
+  learning_rate: [1e-4, 5e-4, 1e-3, 5e-3, 1e-2]
+  weight_decay: [0.0, 1e-5, 1e-4, 1e-3]
+  hidden_dropout_prob: [0.0, 0.1, 0.2, 0.3]
+  MAX_ITEM_LIST_LENGTH: [5, 10, 30]

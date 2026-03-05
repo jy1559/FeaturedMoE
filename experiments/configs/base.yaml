@@ -1,0 +1,62 @@
+# RecBole base configuration
+# This file defines defaults shared across all RecBole runs.
+
+# ============ Core ============
+model: featured_moe
+dataset: retail_rocket
+data_path: ../Datasets/processed/feature_added_v2
+
+# Use pre-split files: {dataset}.train.inter/.valid.inter/.test.inter
+benchmark_filename: [train, valid, test]
+
+# ============ Fields ============
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+TIME_FIELD: timestamp
+SESSION_ID_FIELD: session_id
+
+load_col:
+  inter: [user_id, item_id, session_id, timestamp]
+  item: [item_id, category]
+
+field_separator: "\t"
+
+# ============ Training ============
+epochs: 100
+train_batch_size: 256
+eval_batch_size: 512
+learning_rate: 0.001
+stopping_step: 10
+train_neg_sample_args:
+  distribution: uniform
+  sample_num: 1
+
+# ============ Sequence ============
+MAX_ITEM_LIST_LENGTH: 50
+
+# ============ Evaluation ============
+eval_args:
+  group_by: user
+  order: TO
+  mode: full
+metrics: [Hit, NDCG, MRR]
+topk: [5, 10, 20]
+valid_metric: NDCG@10
+
+# Adaptive eval sampling: full for small item sets, sampled for large
+eval_sampling:
+  mode: auto          # auto | full | uniform | pop
+  strategy: pop       # pop | uniform (for auto/sample)
+  sample_num: 1000    # negatives per user when sampling
+  auto_full_threshold: 20000  # if n_items <= threshold -> full ranking
+
+# ============ Misc ============
+seed: 42
+reproducibility: true
+device: cuda
+
+# ============ Search (global) ============
+# Merged with configs/models/base.yaml and model-specific search
+search:
+  learning_rate: [0.001, 0.0005]
+  weight_decay: [0.0, 0.0001]

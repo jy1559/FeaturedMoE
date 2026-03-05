@@ -1,0 +1,29 @@
+# @package _global_
+
+# INTERACTION mode: Leave-One-Out split WITHIN each session
+#
+# How it works:
+# 1. ALL sessions go to the model (no session separation)
+# 2. Within each session: split interactions by position
+#    - Last interaction → test
+#    - Second-to-last interaction → valid
+#    - All other interactions → train
+# 3. Minimum session length: 3 interactions
+#
+# Example session: [item1, item2, item3, item4, item5]
+#   Train: item1, item2, item3 (+ data augmentation)
+#   Valid: item4
+#   Test: item5
+#
+# Advantages:
+# - More training data (all sessions contribute)
+# - No data leakage (position-based split)
+# - Standard next-item prediction setup
+
+benchmark_filename: null
+
+eval_args:
+  split: {'LS': 'valid_and_test'}  # LS = Leave-one-out Split
+  group_by: user  # Group by USER_ID_FIELD (=session_id)
+  order: TO  # Temporal order
+  mode: full

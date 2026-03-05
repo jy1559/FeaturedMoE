@@ -1,0 +1,164 @@
+# RecBole base configuration with Hydra composition
+#
+# Config loading order (priority increases):
+# 1. config.yaml (this file) - base defaults
+# 2. eval_mode/{mode}.yaml - evaluation split strategy
+# 3. feature_mode/{mode}.yaml - feature set and data path
+# 4. model/{modelname}.yaml - model-specific hyperparameters
+# 5. CLI overrides - command-line arguments (highest priority)
+#
+# Usage examples:
+#   python recbole_train.py model=caser dataset=amazon_beauty
+#   python recbole_train.py model=sasrec dataset=lastfm eval_mode=interaction feature_mode=basic
+#   python recbole_train.py model=caser dataset=amazon_beauty epochs=50 gpu_id=5
+#
+# See docs/CONFIG_GUIDE.md for detailed documentation.
+
+defaults:
+  - eval_mode: session       # Default: session-level split (can be overridden)
+  - feature_mode: full_v2    # Default: v2 strict-prefix engineered features (can be overridden)
+  - _self_                   # config.yaml values have medium priority
+  - model: ???               # MUST be specified via CLI: model=caser|sasrec|... (highest file priority)
+
+# ============ Core Parameters ============
+# These are placeholders - they MUST be specified via CLI
+model: ???                   # Must specify: model=caser, model=sasrec, etc.
+                             # This loads model/{modelname}.yaml
+dataset: ???                 # Must specify: dataset=amazon_beauty, dataset=lastfm, etc.
+dataset_root: ../Datasets/processed  # Base path for all datasets
+# data_path is automatically set by feature_mode/*.yaml
+
+# ============ Device ============
+gpu_id: 0
+use_gpu: true
+
+# ============ Saving (disabled by default for early experiments) ============
+save_dataset: false
+save_dataloaders: false
+enable_data_cache: true
+data_cache_dir: saved/recbole_cache
+in_memory_data_cache: true
+max_in_memory_data_cache: 1
+cache_dataloaders: false          # keep false to avoid heavy dataloader pickle overhead on first run
+# Large-dataset cache policy:
+# - keep experiment MAX_ITEM_LIST_LENGTH unchanged
+# - write disk cache only at anchor len (default: 50)
+# - non-anchor len runs skip disk cache to prevent cache explosion
+large_dataset_cache_policy_enabled: true
+large_dataset_cache_datasets: [lastfm, lastfm0.3, kuairec, kuairec0.3]
+large_dataset_cache_anchor_len: 50
+enable_session_split_cache: true  # cache converted session splits to skip interaction->sequence rebuild
+use_fast_data_augmentation: true  # optimized SequentialDataset.data_augmentation patch
+sequence_convert_chunk_size: 16384  # interaction->sequence conversion chunk size (SESSION mode)
+fmoe_feature_fp16: true             # store mac_/mid_/mic_ sequence fields as fp16 for faster/lighter data build
+checkpoint_dir: saved
+saved: false  # Whether to save model checkpoint (.pth)
+show_progress: true
+state: INFO
+
+# ============ Fields ============
+# Session-based recommendation: session_id as primary unit
+# user_id not used in model (optional field in data)
+USER_ID_FIELD: session_id
+ITEM_ID_FIELD: item_id
+TIME_FIELD: timestamp
+
+load_col:
+  inter: [session_id, item_id, timestamp]
+
+field_separator: "\t"
+
+# ============ Training ============
+epochs: 100
+train_batch_size: 2048
+eval_batch_size: 2048  # Keep reasonable for large datasets (scores: batch * n_items)
+learning_rate: 0.001
+stopping_step: 10
+
+# Loss function: CE with in-batch negatives
+# - Fast and effective for sequential recommendation
+# - In-batch negatives: other items in the batch serve as negatives (batch_size=256 → ~256 negatives)
+# - No explicit sampling needed, efficient computation
+# - Works well even with 100k+ items (output layer computed only for batch items)
+loss_type: CE
+
+# Training negative sampling: not used with CE in-batch
+# Set to null for CE loss (in-batch negatives are sufficient)
+train_neg_sample_args: null
+
+# ============ Sequence ============
+# MAX_ITEM_LIST_LENGTH: set per model in model/*.yaml
+# Default is 50, but models like Caser may override to smaller values
+
+# ============ Model Hyperparameters ============
+# RecBole common params (override per model as needed)
+hidden_size: 128
+embedding_size: 128
+num_layers: 2
+hidden_dropout_prob: 0.2
+attn_dropout_prob: 0.2
+num_heads: 4
+inner_size: 256
+
+# ============ Evaluation ============
+# Evaluation modes (set via eval_mode/*.yaml):
+#
+# SESSION mode (eval_mode=session):
+#   - Splits SESSIONS into 70/15/15 (completely separate)
+#   - Train sessions: all interactions for training
+#   - Valid/test sessions: predict last item only
+#   - No session overlap between splits
+#
+# INTERACTION mode (eval_mode=interaction):
+#   - ALL sessions used, splits INTERACTIONS within each session
+#   - Per session: last → test, 2nd-last → valid, rest → train
+#   - Minimum session length: 3 interactions
+#
+# Note: eval_args below are defaults, overridden by eval_mode/*.yaml
+
+eval_args:
+  group_by: user  # USER_ID_FIELD (=session_id)
+  order: TO  # Temporal order
+  mode: full  # overridden by eval_sampling below
+
+metrics: [Hit, NDCG, MRR]
+topk: [5, 10, 20]
+valid_metric: NDCG@10
+
+# Evaluation negative sampling: fixed, consistent across epochs
+# Strategy:
+# 1. If n_items <= auto_full_threshold: Full ranking (evaluate against all items)
+# 2. If n_items > auto_full_threshold: 
+#    - Use precomputed negatives (popularity-sorted, fixed across epochs)
+#    - Precompute with: python tools/precompute_neg_samples.py --dataset <name> --n_neg 3000
+#
+# NOTE: Most datasets fit in GPU memory with eval_batch_size=4096
+#       Only lastfm (~955K items) and lastfm0.3 (~598K items) truly need sampled eval
+eval_sampling:
+  mode: auto  # auto: switch between full and sampled based on dataset size
+  strategy: pop  # popularity-based (precomputed, sorted by popularity)
+  sample_num: 1000  # negatives to use (must be <= precomputed n_neg, typically 3000)
+  auto_full_threshold: 5000000  # Use full ranking for most datasets
+
+# ============ Misc ============
+seed: 42
+reproducibility: true
+
+# ============ Logging ============
+log_wandb: false
+wandb_project: FMoE_2026
+
+# ============ Grid Search ============
+# Use search: lists for grid search (requires --search flag)
+# Example: search: {learning_rate: [0.001, 0.0005], dropout: [0.1, 0.2]}
+search: {}
+
+# Staged search (successive halving). Leave empty to use full grid.
+# Example:
+# search_strategy: successive_halving
+# search_stages:
+#   - {max_configs: 80, epochs: 10, top_ratio: 0.25}
+#   - {max_configs: 20, epochs: 30, top_ratio: 0.25}
+#   - {max_configs: 5, epochs: 80, top_ratio: 1.0}
+search_strategy: grid
+search_stages: []
