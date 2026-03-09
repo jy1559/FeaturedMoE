@@ -86,12 +86,15 @@ import recbole_patch  # noqa: F401
 
 import copy
 import gc
+import importlib
 import io
 import json
 import time
 import argparse
 import warnings
 import traceback
+import signal
+import atexit
 import re
 import numpy as np
 import yaml
@@ -115,7 +118,49 @@ _FEATURE_AWARE_MOE_MODELS = {
     "featuredmoe",
     "featured_moe_hir",
     "featuredmoe_hir",
+    "featured_moe_hgr",
+    "featuredmoe_hgr",
+    "featured_moe_hir2",
+    "featuredmoe_hir2",
+    "featured_moe_protox",
+    "featuredmoe_protox",
+    "featured_moe_v2",
+    "featuredmoe_v2",
 }
+
+_FEATURED_MOE_V2_MODELS = {
+    "featured_moe_hgr",
+    "featuredmoe_hgr",
+    "featured_moe_v2",
+    "featuredmoe_v2",
+    "featured_moe_hir2",
+    "featuredmoe_hir2",
+    "featured_moe_protox",
+    "featuredmoe_protox",
+}
+
+
+def _sync_model_dimensions(cfg_dict: dict) -> None:
+    """Synchronize hidden/embedding size according to model family policy."""
+    model_name = str(cfg_dict.get("model", "")).strip().lower()
+
+    # v2 uses embedding_size as primary; keep hidden_size aligned for RecBole internals.
+    if model_name in _FEATURED_MOE_V2_MODELS:
+        if "embedding_size" in cfg_dict:
+            emb = int(cfg_dict["embedding_size"])
+            cfg_dict["hidden_size"] = emb
+            cfg_dict["inner_size"] = emb * 2
+        elif "hidden_size" in cfg_dict:
+            hid = int(cfg_dict["hidden_size"])
+            cfg_dict["embedding_size"] = hid
+            cfg_dict["inner_size"] = hid * 2
+        return
+
+    # Legacy behavior for v1/baseline models.
+    if "hidden_size" in cfg_dict:
+        hid = int(cfg_dict["hidden_size"])
+        cfg_dict["embedding_size"] = hid
+        cfg_dict["inner_size"] = hid * 2
 
 # Optional log tee: keep console live, strip tqdm/ANSI from log files.
 _log_path = os.environ.get("LOG_FILE", "").strip()
@@ -178,6 +223,49 @@ tqdm_module.tqdm = TqdmWithoutLeave
 tqdm_module.std.tqdm = TqdmWithoutLeave
 
 _DATA_BUNDLE_CACHE = OrderedDict()
+
+_TERMINATION_SIGNAL = None
+_RUN_START_TS = datetime.now().isoformat(timespec="seconds")
+
+
+def _sig_name(signum: int) -> str:
+    try:
+        return signal.Signals(signum).name
+    except Exception:
+        return str(signum)
+
+
+def _on_termination_signal(signum, _frame):
+    global _TERMINATION_SIGNAL
+    _TERMINATION_SIGNAL = int(signum)
+    ts = datetime.now().isoformat(timespec="seconds")
+    print(f"[RUN_STATUS] TERMINATED signal={_sig_name(signum)}({signum}) pid={os.getpid()} ts={ts}")
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    raise SystemExit(128 + int(signum))
+
+
+def _on_process_exit():
+    ts = datetime.now().isoformat(timespec="seconds")
+    if _TERMINATION_SIGNAL is None:
+        print(f"[RUN_STATUS] END status=normal pid={os.getpid()} start={_RUN_START_TS} end={ts}")
+    else:
+        print(
+            f"[RUN_STATUS] END status=terminated signal={_sig_name(_TERMINATION_SIGNAL)}"
+            f"({_TERMINATION_SIGNAL}) pid={os.getpid()} start={_RUN_START_TS} end={ts}"
+        )
+
+
+for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
+    try:
+        signal.signal(_sig, _on_termination_signal)
+    except Exception:
+        pass
+atexit.register(_on_process_exit)
+print(f"[RUN_STATUS] START pid={os.getpid()} ts={_RUN_START_TS}")
 
 
 def _strip_dataset_suffix(name: str):
@@ -429,9 +517,17 @@ def get_args():
 # ═══════════════════════════════════════════════════════════════════
 #  Search-space builder
 # ═══════════════════════════════════════════════════════════════════
-def _space_type(key: str) -> str:
+def _space_type(key: str, type_overrides: dict | None = None) -> str:
     """Determine the hyperopt distribution type for a parameter name."""
     k = key.lower()
+    if isinstance(type_overrides, dict):
+        override = type_overrides.get(key)
+        if override is None:
+            override = type_overrides.get(k)
+        if override is not None:
+            ov = str(override).strip().lower()
+            if ov in {"choice", "uniform", "loguniform", "loguniform_zero"}:
+                return ov
     if k == "learning_rate":
         return "loguniform"
     if k == "weight_decay":
@@ -460,7 +556,7 @@ def split_search_params(search: dict) -> tuple[dict, dict]:
     return tuned, fixed
 
 
-def build_hyperopt_space(search: dict) -> dict:
+def build_hyperopt_space(search: dict, type_overrides: dict | None = None) -> dict:
     """Convert search dict to hyperopt space.
 
     Mapping:
@@ -476,7 +572,7 @@ def build_hyperopt_space(search: dict) -> dict:
             continue
 
         all_numeric = all(isinstance(v, (int, float)) for v in values)
-        stype = _space_type(key)
+        stype = _space_type(key, type_overrides=type_overrides)
 
         if stype == "loguniform" and all_numeric:
             lo, hi = float(min(values)), float(max(values))
@@ -510,6 +606,176 @@ def build_hyperopt_space(search: dict) -> dict:
             space[key] = hp.choice(key, values)
 
     return space
+
+
+def _hparam_group(key: str) -> str:
+    k = str(key).lower()
+    if (
+        k in {"learning_rate", "weight_decay", "hidden_dropout_prob", "balance_loss_lambda"}
+        or "batch_size" in k
+        or k in {"epochs", "stopping_step"}
+    ):
+        return "optimization"
+    if (
+        k in {"hidden_size", "embedding_size", "num_heads", "num_layers", "inner_size"}
+        or k.startswith("d_")
+        or k == "expert_scale"
+        or "dropout" in k
+    ):
+        return "model_core"
+    if (
+        "layout" in k
+        or k.startswith("n_pre_")
+        or k in {"n_pre_layer", "n_post_layer", "n_total_attn_layers"}
+    ):
+        return "layout"
+    if (
+        k.startswith("moe_top_k")
+        or k in {"moe_top_k", "moe_top_k_policy", "moe_top_k_ratio", "moe_top_k_min"}
+        or "router" in k
+        or "routing" in k
+        or "macro_session_pooling" in k
+    ):
+        return "routing_moe"
+    if (
+        k.startswith("fmoe_schedule")
+        or "warmup" in k
+        or "temperature_start" in k
+        or "alpha_" in k
+    ):
+        return "schedule"
+    if (
+        "stage_merge" in k
+        or "bundle_" in k
+        or "parallel_stage_gate" in k
+        or "hir_" in k
+        or k.startswith("proto_")
+        or "protox_" in k
+        or "stage_weight_floor" in k
+        or "stage_delta_scale" in k
+    ):
+        return "merge_hir"
+    return "other"
+
+
+def _print_grouped_params(
+    title: str,
+    params: dict,
+    *,
+    tuned: bool = False,
+    type_overrides: dict | None = None,
+) -> None:
+    print(f"{title}: {len(params)}")
+    if not params:
+        print("  (none)")
+        return
+
+    order = ["optimization", "model_core", "layout", "routing_moe", "schedule", "merge_hir", "other"]
+    bucket: dict[str, list[str]] = OrderedDict((g, []) for g in order)
+    for key in sorted(params.keys()):
+        bucket.setdefault(_hparam_group(key), []).append(key)
+
+    for group in order:
+        keys = bucket.get(group, [])
+        if not keys:
+            continue
+        print(f"  [{group}]")
+        for key in keys:
+            if tuned:
+                stype = _space_type(key, type_overrides=type_overrides)
+                print(f"    {key:30s}  {str(params[key]):40s}  -> {stype}")
+            else:
+                print(f"    {key:30s}  {str(params[key]):40s}")
+
+
+def _layout_catalog_from_cfg(cfg: dict) -> list | None:
+    catalog = cfg.get("fmoe_v2_layout_catalog")
+    if isinstance(catalog, list):
+        return catalog
+
+    layout_execution = cfg.get("layout_execution")
+    if isinstance(layout_execution, dict):
+        catalog = layout_execution.get("fmoe_v2_layout_catalog")
+        if isinstance(catalog, list):
+            return catalog
+
+    catalog = cfg.get("arch_layout_catalog")
+    if isinstance(catalog, list):
+        return catalog
+    return None
+
+
+def _safe_int(v) -> int | None:
+    try:
+        return int(v)
+    except Exception:
+        return None
+
+
+def _format_layout_entry(layout_id, entry) -> str:
+    if not isinstance(entry, dict):
+        return f"id={layout_id} raw={entry}"
+
+    exec_mode = entry.get("execution", "?")
+    pre = entry.get("global_pre_layers", entry.get("n_pre_layer", "?"))
+    post = entry.get("global_post_layers", entry.get("n_post_layer", "?"))
+    total_layers = _safe_int(pre) or 0
+    total_layers += _safe_int(post) or 0
+    total_moe = 0
+    stage_bits: list[str] = []
+    stages = entry.get("stages")
+    if isinstance(stages, dict):
+        for stage_name in ("macro", "mid", "micro"):
+            s = stages.get(stage_name)
+            if isinstance(s, dict):
+                p = s.get("pass_layers", "?")
+                m = s.get("moe_blocks", "?")
+                stage_bits.append(f"{stage_name}(pass={p},moe={m})")
+                total_layers += (_safe_int(p) or 0) + (_safe_int(m) or 0)
+                total_moe += _safe_int(m) or 0
+    stage_desc = " | ".join(stage_bits) if stage_bits else "stages=?"
+    return (
+        f"id={layout_id} exec={exec_mode} pre={pre} post={post} "
+        f"total_layers={total_layers} total_moe={total_moe} | {stage_desc}"
+    )
+
+
+def _print_layout_details(cfg: dict, tuned_search: dict, fixed_search: dict) -> None:
+    layout_ids: list[int] = []
+    for key in ("fmoe_v2_layout_id", "arch_layout_id"):
+        if key in fixed_search:
+            i = _safe_int(fixed_search[key])
+            if i is not None and i not in layout_ids:
+                layout_ids.append(i)
+        if key in tuned_search and isinstance(tuned_search[key], list):
+            for v in tuned_search[key]:
+                i = _safe_int(v)
+                if i is not None and i not in layout_ids:
+                    layout_ids.append(i)
+
+    if not layout_ids:
+        return
+
+    layout_ids = sorted(layout_ids)
+    catalog = _layout_catalog_from_cfg(cfg)
+    exec_fixed = fixed_search.get("fmoe_stage_execution_mode", cfg.get("fmoe_stage_execution_mode", ""))
+    exec_tuned = tuned_search.get("fmoe_stage_execution_mode")
+
+    print("Layout details:")
+    print(f"  execution(fixed)={exec_fixed}")
+    if exec_tuned is not None:
+        print(f"  execution(candidates)={exec_tuned}")
+
+    if not isinstance(catalog, list) or not catalog:
+        print(f"  layout_ids={layout_ids} (catalog not found in cfg)")
+        return
+
+    for lid in layout_ids:
+        if 0 <= lid < len(catalog):
+            entry = catalog[lid]
+            print(f"  {_format_layout_entry(lid, entry)}")
+        else:
+            print(f"  id={lid} (out-of-range; catalog_size={len(catalog)})")
 
 
 def _deep_update(dst: dict, src: dict):
@@ -571,13 +837,30 @@ def _reapply_cli_overrides(cfg: dict, overrides: list[str]):
     allowed_top_keys = {
         "MAX_ITEM_LIST_LENGTH",
         "moe_top_k",
+        "moe_top_k_policy",
+        "moe_top_k_ratio",
+        "moe_top_k_min",
+        "router_impl",
+        "router_impl_by_stage",
+        "rule_router",
+        "rule_router.n_bins",
+        "rule_router.feature_per_expert",
+        "rule_router.custom_stage_feature_map",
+        "rule_router.expert_bias",
         "expert_scale",
         "learning_rate",
         "weight_decay",
         "hidden_dropout_prob",
         "balance_loss_lambda",
+        "search_space_type_overrides",
         "num_heads",
         "arch_layout_id",
+        "fmoe_v2_layout_id",
+        "fmoe_stage_execution_mode",
+        "fmoe_v2_parallel_stage_gate_top_k",
+        "fmoe_v2_parallel_stage_gate_temperature",
+        "fmoe_v2_stage_merge_aux_enable",
+        "fmoe_v2_stage_merge_aux_lambda_scale",
         "num_layers",
         "n_pre_layer",
         "n_pre_macro",
@@ -586,10 +869,21 @@ def _reapply_cli_overrides(cfg: dict, overrides: list[str]):
         "n_post_layer",
         "stage_moe_repeat_after_pre_layer",
         "stage_merge_mode",
+        "group_router_mode",
+        "group_top_k",
         "bundle_top_k",
         "parallel_stage_gate_top_k",
         "hir_use_bundle_aux_loss",
         "hir_bundle_aux_lambda_scale",
+        "fmoe_schedule_enable",
+        "alpha_warmup_until",
+        "alpha_warmup_start",
+        "alpha_warmup_end",
+        "temperature_warmup_until",
+        "mid_router_temperature_start",
+        "micro_router_temperature_start",
+        "moe_top_k_start",
+        "moe_top_k_warmup_until",
         "eval_every",
     }
     for token in overrides:
@@ -616,6 +910,11 @@ def _extract_featured_moe_arch(model, cfg: dict) -> dict:
     """Collect FeaturedMoE architecture/depth fields for trial logging."""
     keys = (
         "arch_layout_id",
+        "fmoe_v2_layout_id",
+        "fmoe_stage_execution_mode",
+        "router_impl",
+        "router_impl_by_stage",
+        "rule_router_cfg",
         "n_pre_layer",
         "n_pre_macro",
         "n_pre_mid",
@@ -644,6 +943,12 @@ def _extract_context_fixed(cfg: dict) -> dict:
     keys = (
         "arch_layout_catalog",
         "arch_layout_id",
+        "fmoe_v2_layout_catalog",
+        "fmoe_v2_layout_id",
+        "fmoe_stage_execution_mode",
+        "router_impl",
+        "router_impl_by_stage",
+        "rule_router",
         "num_layers",
         "n_pre_layer",
         "n_pre_macro",
@@ -652,8 +957,14 @@ def _extract_context_fixed(cfg: dict) -> dict:
         "n_post_layer",
         "stage_moe_repeat_after_pre_layer",
         "stage_merge_mode",
+        "group_router_mode",
+        "group_top_k",
         "bundle_top_k",
         "parallel_stage_gate_top_k",
+        "fmoe_v2_parallel_stage_gate_top_k",
+        "fmoe_v2_parallel_stage_gate_temperature",
+        "fmoe_v2_stage_merge_aux_enable",
+        "fmoe_v2_stage_merge_aux_lambda_scale",
         "hir_use_bundle_aux_loss",
         "hir_bundle_aux_lambda_scale",
         "fmoe_schedule_enable",
@@ -661,6 +972,7 @@ def _extract_context_fixed(cfg: dict) -> dict:
         "temperature_warmup_until",
         "moe_top_k",
         "moe_top_k_warmup_until",
+        "search_space_type_overrides",
     )
     out = {}
     for key in keys:
@@ -753,10 +1065,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
 
     cfg["valid_metric"] = "MRR@20"
 
-    # Dimension sync: hidden_size → embedding_size, inner_size
-    if "hidden_size" in cfg:
-        cfg["embedding_size"] = cfg["hidden_size"]
-        cfg["inner_size"] = cfg["hidden_size"] * 2
+    _sync_model_dimensions(cfg)
 
     # CE loss → disable negative sampling
     if cfg.get("loss_type", "CE").upper() == "CE":
@@ -1104,13 +1413,46 @@ _wandb_enabled = False
 _wandb_trial_open = False
 _wandb_live_error_reported = False
 _wandb_trial_error_reported = False
+_wandb_mod = None
+_wandb_import_error = ""
+
+
+def _get_wandb_module():
+    """Import wandb with shadowing diagnostics."""
+    global _wandb_mod, _wandb_import_error
+    if _wandb_mod is not None:
+        return _wandb_mod
+    if _wandb_import_error:
+        raise RuntimeError(_wandb_import_error)
+
+    try:
+        wb = importlib.import_module("wandb")
+    except Exception as e:
+        _wandb_import_error = (
+            "wandb import failed. Install with `pip install wandb` in the active env."
+            f" ({e})"
+        )
+        raise RuntimeError(_wandb_import_error) from e
+
+    if not hasattr(wb, "init"):
+        wb_file = getattr(wb, "__file__", None)
+        wb_path = list(getattr(wb, "__path__", [])) if hasattr(wb, "__path__") else []
+        _wandb_import_error = (
+            "wandb module resolved without `init`."
+            f" module_file={wb_file}, module_path={wb_path}. "
+            "Likely a local `wandb/` directory is shadowing the real package."
+        )
+        raise RuntimeError(_wandb_import_error)
+
+    _wandb_mod = wb
+    return wb
 
 
 def _wandb_trial_start(model, dataset, args, trial_num, sampled_params, search_space_info):
     """Initialise one wandb run per hyperopt trial."""
     global _wandb_enabled, _wandb_trial_open
     try:
-        import wandb
+        wandb = _get_wandb_module()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_group = str(getattr(args, "run_group", "") or "").strip().lower()
         run_axis = str(getattr(args, "run_axis", "") or "").strip().lower()
@@ -1166,7 +1508,7 @@ def _wandb_log_trial(trial_num, params, result, *, status="ok", error=""):
     if not (_wandb_enabled and _wandb_trial_open):
         return
     try:
-        import wandb
+        wandb = _get_wandb_module()
         step = int(result.get("epochs_run", 0) or 0) if isinstance(result, dict) else 0
         step = max(1, step)
         payload = {
@@ -1205,7 +1547,7 @@ def _wandb_log_live(update: dict):
     if not (_wandb_enabled and _wandb_trial_open):
         return
     try:
-        import wandb
+        wandb = _get_wandb_module()
         trial_num = int(update.get("trial_num", 0) or 0)
         epoch = int(update.get("epoch", 0) or 0)
         max_epochs = int(update.get("max_epochs", 0) or 0)
@@ -1241,7 +1583,7 @@ def _wandb_trial_finish(extra_summary=None):
     if not _wandb_trial_open:
         return
     try:
-        import wandb
+        wandb = _get_wandb_module()
         run_name = wandb.run.name if wandb.run is not None else ""
         if wandb.run is not None and isinstance(extra_summary, dict):
             for k, v in extra_summary.items():
@@ -1303,6 +1645,9 @@ def main():
     model = cfg.get("model", "?")
     dataset = cfg.get("dataset", "?")
     dataset_canonical = _canonical_dataset_name(dataset)
+    run_group = str(args.run_group or "").strip().lower()
+    run_axis = str(args.run_axis or "").strip().lower()
+    run_phase = str(args.run_phase or "").strip()
 
     # Build search space (tuned vs fixed split)
     search = cfg.get("search", {})
@@ -1310,15 +1655,25 @@ def main():
         print("[ERROR] No 'search' block in merged config. Nothing to tune.")
         sys.exit(1)
 
+    raw_space_type_overrides = cfg.get("search_space_type_overrides", {}) or {}
+    if isinstance(raw_space_type_overrides, dict):
+        space_type_overrides = {
+            str(k).strip(): str(v).strip().lower()
+            for k, v in raw_space_type_overrides.items()
+            if str(k).strip()
+        }
+    else:
+        space_type_overrides = {}
+
     tuned_search, fixed_search = split_search_params(search)
     if fixed_search:
         for k, v in fixed_search.items():
-            cfg[k] = copy.deepcopy(v)
+            _set_nested_value(cfg, str(k), copy.deepcopy(v))
     context_fixed = _extract_context_fixed(cfg)
 
     single_run_mode = False
     if tuned_search:
-        space = build_hyperopt_space(tuned_search)
+        space = build_hyperopt_space(tuned_search, type_overrides=space_type_overrides)
         if not space:
             single_run_mode = True
             space = {"__single_run__": hp.choice("__single_run__", [0])}
@@ -1336,7 +1691,7 @@ def main():
     # Print header
     n_discrete = 1
     for k, vals in tuned_search.items():
-        if isinstance(vals, list) and _space_type(k) == "choice":
+        if isinstance(vals, list) and _space_type(k, type_overrides=space_type_overrides) == "choice":
             n_discrete *= len(vals)
     total_pool_est = n_discrete  # continuous params are infinite, show discrete combos
 
@@ -1347,6 +1702,7 @@ def main():
     train_bs = cfg.get("train_batch_size", "?")
     eval_bs = cfg.get("eval_batch_size", "?")
     print(f"  batch_size(train/valid/test)={train_bs}/{eval_bs}/{eval_bs}")
+    print(f"  track={run_group or '-'}  axis={run_axis or '-'}  phase={run_phase or '-'}")
     if "train_batch_size" in tuned_search:
         print(f"  search.train_batch_size={tuned_search['train_batch_size']}")
     elif "train_batch_size" in fixed_search:
@@ -1356,24 +1712,27 @@ def main():
     elif "eval_batch_size" in fixed_search:
         print(f"  search.eval_batch_size=[{fixed_search['eval_batch_size']}]")
     print(f"{'=' * 65}")
+    tuned_keys = sorted(tuned_search.keys())
+    if tuned_keys:
+        changed = ", ".join(tuned_keys[:12])
+        if len(tuned_keys) > 12:
+            changed += f", ... (+{len(tuned_keys) - 12})"
+        print(f"Changed knobs: {changed}")
+    else:
+        print("Changed knobs: (none; single-run mode)")
+
     print(f"Tuned params(len>1): {len(tuned_search)}  (~{total_pool_est} discrete combos)")
-    for k in sorted(tuned_search.keys()):
-        orig = tuned_search.get(k, "?")
-        stype = _space_type(k)
-        print(f"  {k:30s}  {str(orig):40s}  -> {stype}")
-    if not tuned_search:
-        print("  (none)")
+    _print_grouped_params("Tuned groups", tuned_search, tuned=True, type_overrides=space_type_overrides)
     print(f"Fixed params(singleton/non-list): {len(fixed_search)}")
-    for k in sorted(fixed_search.keys()):
-        print(f"  {k:30s}  {str(fixed_search[k]):40s}")
-    if not fixed_search:
-        print("  (none)")
+    _print_grouped_params("Fixed groups", fixed_search, tuned=False)
+    _print_layout_details(cfg, tuned_search, fixed_search)
     print()
 
     search_info = {
         "tuned": {k: str(v) for k, v in tuned_search.items()},
         "fixed": {k: str(v) for k, v in fixed_search.items()},
         "space_yaml": str(args.space_yaml) if args.space_yaml else "",
+        "space_type_overrides": {k: str(v) for k, v in space_type_overrides.items()},
     }
 
     # Wandb (per-trial run mode)
@@ -1391,11 +1750,21 @@ def main():
     else:
         results_dir = Path(__file__).parent / "run" / "artifacts" / "results"
     run_group = str(args.run_group or "").strip().lower()
-    if run_group in ("baseline", "fmoe", "fmoe_hir"):
-        results_dir = results_dir / run_group
+    if run_group:
+        safe_group = re.sub(r"[^a-z0-9._-]+", "_", run_group).strip("._-")
+        if safe_group:
+            results_dir = results_dir / safe_group
     results_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    result_file = results_dir / f"{dataset_canonical}_{model}_{ts}.json"
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    phase_for_file = str(args.run_phase or "").strip().lower()
+    phase_slug = re.sub(r"[^a-z0-9._-]+", "_", phase_for_file).strip("._-")
+    if phase_slug:
+        phase_slug = phase_slug[:80]
+    file_parts = [dataset_canonical, model]
+    if phase_slug:
+        file_parts.append(phase_slug)
+    file_parts.extend([ts, f"pid{os.getpid()}"])
+    result_file = results_dir / ("_".join(file_parts) + ".json")
 
     trials = Trials()
     all_trials_data: list[dict] = []
@@ -1420,7 +1789,7 @@ def main():
         cfg_trial = copy.deepcopy(cfg)
         cfg_trial.pop("search", None)
         for k, v in sampled_params.items():
-            cfg_trial[k] = _ser(v)
+            _set_nested_value(cfg_trial, str(k), _ser(v))
 
         # Compact trial header
         parts = []

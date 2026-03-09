@@ -5,6 +5,10 @@
 - `baseline`: `experiments/run/baseline/*` only
 - `fmoe`: `experiments/run/fmoe/*` only
 - `fmoe_hir`: `experiments/run/fmoe_hir/*` only
+- `fmoe_hgr`: `experiments/run/fmoe_hgr/*` only
+- `fmoe_hir2`: `experiments/run/fmoe_hir2/*` only
+- `fmoe_v2`: `experiments/run/fmoe_v2/*` only
+- `fmoe_rule`: `experiments/run/fmoe_rule/*` only
 - common helpers: `experiments/run/common/*`
 
 HiR scripts are not part of `run/fmoe`.

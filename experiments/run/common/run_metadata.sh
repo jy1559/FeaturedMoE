@@ -38,6 +38,47 @@ run_sanitize() {
   printf '%s' "$s"
 }
 
+run_dataset_tag() {
+  local raw="${1:-}"
+  local key
+  key="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$key" in
+    movielens1m) echo "ML1" ;;
+    retail_rocket|retailrocket) echo "ReR" ;;
+    foursquare) echo "FSQ" ;;
+    lastfm0.3) echo "LF3" ;;
+    kuairec0.3) echo "KU3" ;;
+    amazon_beauty|amazonbeauty) echo "AMA" ;;
+    *)
+      key="$(printf '%s' "$raw" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')"
+      if [ "${#key}" -ge 3 ]; then
+        echo "${key:0:3}"
+      elif [ -n "$key" ]; then
+        printf '%-3s' "$key" | tr ' ' 'X'
+      else
+        echo "UNK"
+      fi
+      ;;
+  esac
+}
+
+run_model_tag() {
+  local raw="${1:-}"
+  local key
+  key="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$key" in
+    *featuredmoe_protox*) echo "FMoEProtoX" ;;
+    *featuredmoe_hir2*) echo "FMoEHiR2" ;;
+    *featured_moe_hgr*|*featuredmoe_hgr*) echo "FMoEHGR" ;;
+    *featuredmoe_hir*) echo "FMoEHiR" ;;
+    *featuredmoe_v2*) echo "FMoEv2" ;;
+    *featuredmoe*) echo "FMoE" ;;
+    *)
+      echo "$(run_sanitize "$raw")"
+      ;;
+  esac
+}
+
 run_ensure_dir() {
   mkdir -p "$1"
 }
@@ -114,6 +155,18 @@ run_tracker_script() {
   echo "${run_dir}/common/experiment_tracker.py"
 }
 
+run_model_report_script() {
+  local run_dir
+  run_dir="$(run_root_dir)"
+  echo "${run_dir}/common/model_experiment_report.py"
+}
+
+run_track_report_script() {
+  local run_dir
+  run_dir="$(run_root_dir)"
+  echo "${run_dir}/common/track_experiment_report.py"
+}
+
 run_python_bin() {
   if [ -n "${RUN_PYTHON_BIN:-}" ]; then
     echo "${RUN_PYTHON_BIN}"
@@ -138,15 +191,17 @@ run_make_log_path() {
   local gpu="${5:-na}"
   local phase="${6:-PNA}"
 
-  local d tag axis_tag phase_bucket
+  local d tag axis_tag phase_bucket dataset_tag model_tag
   axis_tag="$(run_sanitize "${axis}")"
   phase_bucket="$(run_sanitize "${phase%%_*}")"
   [ -z "$phase_bucket" ] && phase_bucket="PNA"
+  dataset_tag="$(run_dataset_tag "${dataset}")"
+  model_tag="$(run_model_tag "${model}")"
 
-  d="$(run_log_dir "$group")/${axis_tag}/${phase_bucket}/$(run_sanitize "${dataset}")/$(run_sanitize "${model}")"
+  d="$(run_log_dir "$group")/${axis_tag}/${phase_bucket}/${dataset_tag}/${model_tag}"
   run_ensure_dir "$d"
 
-  tag="$(run_sanitize "${dataset}")_$(run_sanitize "${model}")_$(run_sanitize "${axis}")_${phase}_gpu${gpu}_$(run_timestamp)"
+  tag="$(run_timestamp)_$(run_sanitize "${axis}")_$(run_sanitize "${phase}")"
   echo "${d}/${tag}.log"
 }
 
@@ -158,6 +213,39 @@ run_tracker_end() {
   "$(run_python_bin)" "$(run_tracker_script)" end "$@"
 }
 
+run_update_model_report() {
+  local track="${1:?track required}"
+  local model="${2:?model required}"
+  local model_dir="${3:?model_dir required}"
+  local py_bin
+  py_bin="$(run_python_bin)"
+
+  if ! "$py_bin" "$(run_model_report_script)" \
+    --track "$track" \
+    --model "$model" \
+    --model-dir "$model_dir"; then
+    echo "[WARN] model experiment report update failed: track=${track}, model=${model}" >&2
+  fi
+}
+
+run_update_track_report() {
+  local track="${1:?track required}"
+  local py_bin
+  local logs_root
+  local out_dir
+  py_bin="$(run_python_bin)"
+  logs_root="$(run_logs_root)"
+  out_dir="${logs_root}/${track}"
+  run_ensure_dir "${out_dir}"
+
+  if ! "$py_bin" "$(run_track_report_script)" \
+    --track "$track" \
+    --output-csv "${out_dir}/experiment_overview.csv" \
+    --output-md "${out_dir}/experiment_overview.md"; then
+    echo "[WARN] track experiment report update failed: track=${track}" >&2
+  fi
+}
+
 run_export_runtime_env() {
   local exp_dir
   local run_dir
@@ -165,6 +253,7 @@ run_export_runtime_env() {
   local results_root
   local timeline_dir
   local inventory_dir
+  local wandb_dir
 
   exp_dir="$(run_experiments_dir)"
   run_dir="$(run_root_dir)"
@@ -172,6 +261,7 @@ run_export_runtime_env() {
   results_root="$(run_results_root)"
   timeline_dir="$(run_timeline_dir)"
   inventory_dir="$(run_inventory_dir)"
+  wandb_dir="${RUN_WANDB_DIR:-${art_dir}/wandb}"
 
   export PYTHONPATH="${exp_dir}"
   export RUN_ARTIFACTS_DIR="${RUN_ARTIFACTS_DIR:-${art_dir}}"
@@ -179,6 +269,8 @@ run_export_runtime_env() {
   export HYPEROPT_RESULTS_DIR="${HYPEROPT_RESULTS_DIR:-${results_root}}"
   export RUN_TIMELINE_DIR="${RUN_TIMELINE_DIR:-${timeline_dir}}"
   export RUN_INVENTORY_DIR="${RUN_INVENTORY_DIR:-${inventory_dir}}"
+  export RUN_WANDB_DIR="${wandb_dir}"
+  export WANDB_DIR="${WANDB_DIR:-${wandb_dir}}"
 
   run_ensure_dir "${RUN_ARTIFACTS_DIR}"
   run_ensure_dir "${RUN_LOGS_DIR}"
@@ -186,8 +278,14 @@ run_export_runtime_env() {
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/baseline"
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe"
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_hir"
+  run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_hgr"
+  run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_hir2"
+  run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_protox"
+  run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_v2"
+  run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_rule"
   run_ensure_dir "${RUN_TIMELINE_DIR}"
   run_ensure_dir "${RUN_INVENTORY_DIR}"
+  run_ensure_dir "${WANDB_DIR}"
 
   # Keep legacy folders for read fallback compatibility.
   run_ensure_dir "${run_dir}/log"

@@ -53,6 +53,9 @@ import argparse
 import time
 import warnings
 import json
+import importlib
+import signal
+import atexit
 from pathlib import Path
 from datetime import datetime
 from collections import OrderedDict
@@ -87,7 +90,79 @@ _FEATURE_AWARE_MOE_MODELS = {
     "featuredmoe",
     "featured_moe_hir",
     "featuredmoe_hir",
+    "featured_moe_hgr",
+    "featuredmoe_hgr",
+    "featured_moe_hir2",
+    "featuredmoe_hir2",
+    "featured_moe_v2",
+    "featuredmoe_v2",
 }
+
+_FEATURED_MOE_V2_MODELS = {
+    "featured_moe_hgr",
+    "featuredmoe_hgr",
+    "featured_moe_v2",
+    "featuredmoe_v2",
+    "featured_moe_hir2",
+    "featuredmoe_hir2",
+}
+_WANDB_MODULE = None
+_WANDB_IMPORT_ERROR = ""
+
+
+def _get_wandb_module():
+    """Import wandb with clear diagnostics for shadowing/missing package."""
+    global _WANDB_MODULE, _WANDB_IMPORT_ERROR
+    if _WANDB_MODULE is not None:
+        return _WANDB_MODULE
+    if _WANDB_IMPORT_ERROR:
+        raise RuntimeError(_WANDB_IMPORT_ERROR)
+
+    try:
+        wb = importlib.import_module("wandb")
+    except Exception as e:
+        _WANDB_IMPORT_ERROR = (
+            "wandb import failed. Install wandb in the active environment "
+            "(e.g. `pip install wandb`). "
+            f"({e})"
+        )
+        raise RuntimeError(_WANDB_IMPORT_ERROR) from e
+
+    if not hasattr(wb, "init"):
+        wb_file = getattr(wb, "__file__", None)
+        wb_path = list(getattr(wb, "__path__", [])) if hasattr(wb, "__path__") else []
+        _WANDB_IMPORT_ERROR = (
+            "wandb module resolved without `init`."
+            f" module_file={wb_file}, module_path={wb_path}. "
+            "Likely a local `wandb/` directory is shadowing the package."
+        )
+        raise RuntimeError(_WANDB_IMPORT_ERROR)
+
+    _WANDB_MODULE = wb
+    return wb
+
+
+def _sync_model_dimensions(cfg_dict: dict) -> None:
+    """Synchronize hidden/embedding size according to model family policy."""
+    model_name = str(cfg_dict.get("model", "")).strip().lower()
+
+    # v2 uses embedding_size as the primary key; keep hidden_size aligned.
+    if model_name in _FEATURED_MOE_V2_MODELS:
+        if "embedding_size" in cfg_dict:
+            emb = int(cfg_dict["embedding_size"])
+            cfg_dict["hidden_size"] = emb
+            cfg_dict["inner_size"] = emb * 2
+        elif "hidden_size" in cfg_dict:
+            hid = int(cfg_dict["hidden_size"])
+            cfg_dict["embedding_size"] = hid
+            cfg_dict["inner_size"] = hid * 2
+        return
+
+    # Legacy behavior for v1 and baseline models.
+    if "hidden_size" in cfg_dict:
+        hid = int(cfg_dict["hidden_size"])
+        cfg_dict["embedding_size"] = hid
+        cfg_dict["inner_size"] = hid * 2
 
 # Optional log tee: keep console clean, strip tqdm/ANSI from log
 _log_path = os.environ.get("LOG_FILE", "").strip()
@@ -151,6 +226,49 @@ tqdm_module.tqdm = TqdmWithoutLeave
 tqdm_module.std.tqdm = TqdmWithoutLeave
 
 _DATA_BUNDLE_CACHE = OrderedDict()
+
+_TERMINATION_SIGNAL = None
+_RUN_START_TS = datetime.now().isoformat(timespec="seconds")
+
+
+def _sig_name(signum: int) -> str:
+    try:
+        return signal.Signals(signum).name
+    except Exception:
+        return str(signum)
+
+
+def _on_termination_signal(signum, _frame):
+    global _TERMINATION_SIGNAL
+    _TERMINATION_SIGNAL = int(signum)
+    ts = datetime.now().isoformat(timespec="seconds")
+    print(f"[RUN_STATUS] TERMINATED signal={_sig_name(signum)}({signum}) pid={os.getpid()} ts={ts}")
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    raise SystemExit(128 + int(signum))
+
+
+def _on_process_exit():
+    ts = datetime.now().isoformat(timespec="seconds")
+    if _TERMINATION_SIGNAL is None:
+        print(f"[RUN_STATUS] END status=normal pid={os.getpid()} start={_RUN_START_TS} end={ts}")
+    else:
+        print(
+            f"[RUN_STATUS] END status=terminated signal={_sig_name(_TERMINATION_SIGNAL)}"
+            f"({_TERMINATION_SIGNAL}) pid={os.getpid()} start={_RUN_START_TS} end={ts}"
+        )
+
+
+for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
+    try:
+        signal.signal(_sig, _on_termination_signal)
+    except Exception:
+        pass
+atexit.register(_on_process_exit)
+print(f"[RUN_STATUS] START pid={os.getpid()} ts={_RUN_START_TS}")
 
 
 def _strip_dataset_suffix(name: str):
@@ -540,7 +658,7 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
                     pass
             if cfg_i.get("log_wandb", False):
                 try:
-                    import wandb
+                    wandb = _get_wandb_module()
                     if wandb.run is not None:
                         wandb.config.update(resolved, allow_val_change=True)
                 except Exception:
@@ -729,7 +847,7 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
                 pass
 
         if log_wandb:
-            import wandb
+            wandb = _get_wandb_module()
             payload = {
                 'train/loss': train_loss,
                 # timing and steps
@@ -864,9 +982,7 @@ def main():
         cfg_i = cfg_i.copy()
         cfg_i.pop("search", None)
 
-        if "hidden_size" in cfg_i:
-            cfg_i["embedding_size"] = cfg_i["hidden_size"]
-            cfg_i["inner_size"] = cfg_i["hidden_size"] * 2
+        _sync_model_dimensions(cfg_i)
 
         save_model = cfg_i.pop("saved", False)
 
@@ -899,6 +1015,10 @@ def main():
             'featured_moe': 'FME',
             'featuredmoe_hir': 'FHR',
             'featured_moe_hir': 'FHR',
+            'featuredmoe_hgr': 'FHG',
+            'featured_moe_hgr': 'FHG',
+            'featuredmoe_v2': 'FM2',
+            'featured_moe_v2': 'FM2',
         }.get(model.lower(), model[:3].upper())
         code = f"{dataset_abbrev}_{model_abbrev}"
 
@@ -939,7 +1059,7 @@ def main():
 
         if cfg_i.get("log_wandb", False):
             try:
-                import wandb
+                wandb = _get_wandb_module()
                 wandb.init(
                     project=cfg_i.get("wandb_project", "FMoE_2026"),
                     name=run_name,
@@ -997,7 +1117,7 @@ def main():
 
         if cfg_i.get("log_wandb", False):
             try:
-                import wandb
+                wandb = _get_wandb_module()
                 if wandb.run is not None:
                     val_mrr20 = best_valid_result.get('mrr@20', 0)
                     test_mrr20 = test_result.get('mrr@20', 0)
@@ -1023,7 +1143,7 @@ def main():
             except Exception as e:
                 print(f"⚠️  wandb summary logging failed: {e}")
                 try:
-                    import wandb
+                    wandb = _get_wandb_module()
                     if wandb.run is not None:
                         wandb.finish()
                 except:

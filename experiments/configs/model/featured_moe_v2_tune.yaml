@@ -1,0 +1,367 @@
+# @package _global_
+# FeaturedMoE_v2 tuning config
+
+model: FeaturedMoE_v2
+MAX_ITEM_LIST_LENGTH: 10
+
+load_col:
+  inter: [session_id, item_id, timestamp,
+    mac_user_level, mac_sess_gap, mac_is_new, mac_hist_len,
+    mac_time_sin, mac_time_cos, mac_is_weekend, mac_hist_speed,
+    mac_hist_ent, mac_hist_uniq_r, mac_hist_top1, mac_hist_switch_r,
+    mac_hist_pop_avg, mac_hist_pop_std,
+    mid_win_ent, mid_win_top1, mid_int_std, mid_sess_time,
+    mid_pop_avg, mid_win_switch, mid_int_avg, mid_accel, mid_last_dev,
+    mid_valid_r, mid_novel_r, mid_uniq_item_r, mid_uniq_cat_r, mid_max_run,
+    mid_pop_drift, mid_ent_drift,
+    mic_last_int, mic_short_avg, mic_short_std, mic_valid_r,
+    mic_switch, mic_uniq_c, mic_cat_ent, mic_cat_top1,
+    mic_is_recons, mic_uniq_i, mic_recons_r, mic_max_run_i,
+    mic_pop_avg, mic_pop_std, mic_pop_drift, mic_pop_ent]
+
+model_core:
+  embedding_size: 128
+  num_heads: 8
+  hidden_dropout_prob: 0.1
+  d_ff: 0
+  d_feat_emb: 16
+  d_expert_hidden: 128
+  d_router_hidden: 64
+  expert_scale: 3
+
+layout_execution:
+  fmoe_v2_layout_id: 0
+  fmoe_stage_execution_mode: serial
+  fmoe_v2_layout_catalog:
+    - id: L0
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 0}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L1
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 0, moe_blocks: 0}
+    - id: L2
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L3
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 0, moe_blocks: 1}
+    - id: L4
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 0, moe_blocks: 0}
+    - id: L5
+      execution: serial
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 1}
+    - id: L6
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L7
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 1}
+    - id: L8
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 1}
+    - id: L9
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 0, moe_blocks: 1}
+    - id: L10
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 0, moe_blocks: 0}
+    - id: L11
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L12
+      execution: parallel
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 1}
+    - id: L13
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L14
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 1}
+    - id: L15
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L16
+      execution: serial
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L17
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L18
+      execution: serial
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L19
+      execution: serial
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 1}
+    - id: L20
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L21
+      execution: parallel
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L22
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L23
+      execution: parallel
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L24
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 0}
+        micro: {pass_layers: 0, moe_blocks: 0}
+    - id: L25
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 0}
+        micro: {pass_layers: 0, moe_blocks: 0}
+    - id: L26
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L27
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 0}
+    - id: L28
+      execution: parallel
+      global_pre_layers: 0
+      global_post_layers: 1
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 2}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L29
+      execution: parallel
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 1, moe_blocks: 1}
+        mid: {pass_layers: 1, moe_blocks: 1}
+        micro: {pass_layers: 1, moe_blocks: 0}
+
+routing_common:
+  router_use_hidden: true
+  router_use_feature: true
+  expert_use_hidden: true
+  expert_use_feature: true
+  router_impl: learned
+  router_impl_by_stage: {}
+  rule_router:
+    n_bins: 5
+    feature_per_expert: 4
+    custom_stage_feature_map: {}
+    expert_bias: {}
+  moe_top_k: 0
+  moe_top_k_policy: auto
+  moe_top_k_ratio: 0.5
+  moe_top_k_min: 1
+  macro_routing_scope: session
+  macro_session_pooling: query
+  mid_router_temperature: 1.3
+  micro_router_temperature: 1.3
+  mid_router_feature_dropout: 0.1
+  micro_router_feature_dropout: 0.1
+  use_valid_ratio_gating: true
+
+parallel_merge:
+  fmoe_v2_parallel_stage_gate_top_k: 0
+  fmoe_v2_parallel_stage_gate_temperature: 1.0
+
+schedule:
+  fmoe_schedule_enable: false
+  alpha_warmup_until: 0
+  alpha_warmup_start: 0.0
+  alpha_warmup_end: 1.0
+  temperature_warmup_until: 0
+  mid_router_temperature_start: 1.3
+  micro_router_temperature_start: 1.3
+  moe_top_k_start: 0
+  moe_top_k_warmup_until: 0
+  fmoe_schedule_log_every_epoch: 1
+
+loss_regularization:
+  use_aux_loss: true
+  balance_loss_lambda: 0.01
+  fmoe_v2_stage_merge_aux_enable: false
+  fmoe_v2_stage_merge_aux_lambda_scale: 1.0
+  fmoe_v2_feature_spec_aux_enable: false
+  fmoe_v2_feature_spec_aux_lambda: 0.0
+  fmoe_v2_feature_spec_stages: [mid, micro]
+  fmoe_v2_feature_spec_min_tokens: 16
+
+runtime:
+  fmoe_debug_logging: false
+  ffn_moe: false
+  n_ffn_experts: 4
+  ffn_top_k: 0
+
+learning_rate: 0.001
+
+search:
+  fmoe_v2_layout_id: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+  fmoe_stage_execution_mode: [serial, parallel]
+
+  embedding_size: [128]
+  num_heads: [8]
+  d_feat_emb: [16, 32]
+  d_expert_hidden: [128]
+  d_router_hidden: [64, 128]
+  expert_scale: [2, 3]
+  router_impl: [learned]
+  router_impl_by_stage: [{}]
+  rule_router.n_bins: [5]
+  rule_router.feature_per_expert: [4]
+
+  learning_rate: [1e-4, 3e-2]
+  weight_decay: [0.0, 1.0e-6, 1.0e-5, 1.0e-4]
+  hidden_dropout_prob: [0.05, 0.2]
+  balance_loss_lambda: [0.0005, 0.1]
+
+  moe_top_k: [0, 2]
+  moe_top_k_policy: [auto]
+  moe_top_k_ratio: [0.5]
+
+  fmoe_schedule_enable: [false]
+
+  # parallel-only knobs (fixed in serial runs)
+  fmoe_v2_parallel_stage_gate_top_k: [0, 1, 2]
+  fmoe_v2_parallel_stage_gate_temperature: [0.8, 1.0, 1.2]
+  fmoe_v2_stage_merge_aux_enable: [false, true]
+  fmoe_v2_stage_merge_aux_lambda_scale: [0.5, 1.0]
+  fmoe_v2_feature_spec_aux_enable: [false]
+  fmoe_v2_feature_spec_aux_lambda: [0.0]

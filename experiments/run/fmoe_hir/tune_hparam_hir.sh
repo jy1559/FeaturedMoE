@@ -478,4 +478,11 @@ run_tracker_end \
   --log-file "$LOG_FILE_PATH" \
   --status "$STATUS" \
   --exit-code "$RC"
+
+run_update_model_report \
+  fmoe_hir \
+  FeaturedMoE_HiR \
+  "$(run_experiments_dir)/models/FeaturedMoE_HiR"
+run_update_track_report fmoe_hir
+
 exit "$RC"

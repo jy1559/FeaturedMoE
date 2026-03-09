@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import math
 from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 
 from .experts import ExpertGroup
-from .routers import Router, load_balance_loss
+from .routers import RouterBackend, load_balance_loss
 from .feature_config import (
     STAGES,
     STAGE_ALL_FEATURES,
@@ -96,6 +96,9 @@ class MoEStage(nn.Module):
         router_use_feature: bool = True,
         expert_use_hidden: bool = True,
         expert_use_feature: bool = True,
+        expert_names: Optional[List[str]] = None,
+        router_impl: str = "learned",
+        rule_router_cfg: Optional[Dict[str, Any]] = None,
         router_mode: str = "token",
         session_pooling: str = "query",
         router_temperature: float = 1.0,
@@ -105,10 +108,13 @@ class MoEStage(nn.Module):
         super().__init__()
         if expert_scale not in (1, 2, 3):
             raise ValueError(f"expert_scale must be one of [1, 2, 3], got {expert_scale}")
-        if not (router_use_hidden or router_use_feature):
-            raise ValueError("Router must use at least one input source.")
         if not (expert_use_hidden or expert_use_feature):
             raise ValueError("Expert must use at least one input source.")
+        router_impl_key = str(router_impl).lower().strip()
+        if router_impl_key not in ("learned", "rule_soft"):
+            raise ValueError(f"router_impl must be one of ['learned','rule_soft'], got {router_impl}")
+        if router_impl_key == "learned" and not (router_use_hidden or router_use_feature):
+            raise ValueError("Learned router must use at least one input source.")
         if router_mode not in ("token", "session"):
             raise ValueError(f"router_mode must be one of ['token', 'session'], got {router_mode}")
         if session_pooling not in ("query", "mean", "last"):
@@ -126,10 +132,13 @@ class MoEStage(nn.Module):
         self.router_use_feature = bool(router_use_feature)
         self.expert_use_hidden = bool(expert_use_hidden)
         self.expert_use_feature = bool(expert_use_feature)
+        self.router_impl = router_impl_key
+        self.rule_router_cfg: Dict[str, Any] = dict(rule_router_cfg or {})
         self.router_mode = router_mode
         self.session_pooling = session_pooling
         self.router_temperature = float(router_temperature)
         self.router_top_k = top_k
+        self.stage_all_features = list(stage_all_features)
         self.reliability_feature_name = reliability_feature_name
         if reliability_feature_name is not None:
             if reliability_feature_name not in col2idx:
@@ -145,7 +154,15 @@ class MoEStage(nn.Module):
         self.n_experts = len(scaled_lists)
 
         # Keep readable expert names for logging.
-        base_names = [f"expert_{i}" for i in range(len(expert_feature_lists))]
+        if expert_names is not None:
+            if len(expert_names) != len(expert_feature_lists):
+                raise ValueError(
+                    "expert_names length must match expert_feature_lists length, "
+                    f"got {len(expert_names)} vs {len(expert_feature_lists)}"
+                )
+            base_names = [str(name) for name in expert_names]
+        else:
+            base_names = [f"expert_{i}" for i in range(len(expert_feature_lists))]
         self.expert_names = _scaled_expert_names(base_names, expert_scale)
 
         # ---- Index tensors (buffers) ----
@@ -168,33 +185,97 @@ class MoEStage(nn.Module):
             persistent=False,
         )
         self._n_stage_features = len(stage_idx)
+        stage_col2local = {name: idx for idx, name in enumerate(self.stage_all_features)}
 
         # ---- Submodules ----
         self.pre_ln = nn.LayerNorm(d_model)
-        self.stage_feat_proj = nn.Linear(self._n_stage_features, d_feat_emb)
-        self.router_feat_drop = nn.Dropout(router_feature_dropout)
+        if self.router_impl == "learned":
+            self.stage_feat_proj = nn.Linear(self._n_stage_features, d_feat_emb)
+            self.router_feat_drop = nn.Dropout(router_feature_dropout)
+        else:
+            self.stage_feat_proj = None
+            self.router_feat_drop = None
 
-        router_input_dim = 0
-        if self.router_use_hidden:
-            router_input_dim += d_model
-        if self.router_use_feature:
-            router_input_dim += d_feat_emb
-        self.router = Router(
-            d_in=router_input_dim,
-            n_experts=self.n_experts,
-            d_hidden=d_router_hidden,
-            top_k=top_k,
-            dropout=dropout,
-        )
+        if self.router_impl == "learned":
+            router_input_dim = 0
+            if self.router_use_hidden:
+                router_input_dim += d_model
+            if self.router_use_feature:
+                router_input_dim += d_feat_emb
+            self.router = RouterBackend(
+                impl="learned",
+                n_experts=self.n_experts,
+                top_k=top_k,
+                d_in=router_input_dim,
+                d_hidden=d_router_hidden,
+                dropout=dropout,
+            )
+        else:
+            n_bins_raw = self.rule_router_cfg.get("n_bins", 5)
+            if isinstance(n_bins_raw, (list, tuple)):
+                n_bins_raw = n_bins_raw[0] if len(n_bins_raw) > 0 else 5
+            n_bins = int(n_bins_raw)
 
-        if self.router_mode == "session" and self.session_pooling == "query" and self.router_use_hidden:
+            feature_per_expert_raw = self.rule_router_cfg.get("feature_per_expert", 4)
+            if isinstance(feature_per_expert_raw, (list, tuple)):
+                feature_per_expert_raw = (
+                    feature_per_expert_raw[0] if len(feature_per_expert_raw) > 0 else 4
+                )
+            feature_per_expert = int(feature_per_expert_raw)
+            if feature_per_expert <= 0:
+                raise ValueError(
+                    f"rule_router.feature_per_expert must be > 0, got {feature_per_expert}"
+                )
+            selected_indices, selected_names = self._resolve_rule_feature_selection(
+                stage_name=stage_name,
+                base_names=base_names,
+                scaled_names=self.expert_names,
+                scaled_feature_lists=scaled_lists,
+                expert_scale=expert_scale,
+                stage_col2local=stage_col2local,
+                feature_per_expert=feature_per_expert,
+                rule_router_cfg=self.rule_router_cfg,
+            )
+            self.rule_selected_feature_names = selected_names
+            expert_bias = self._resolve_rule_expert_bias(
+                stage_name=stage_name,
+                base_names=base_names,
+                scaled_names=self.expert_names,
+                expert_scale=expert_scale,
+                n_experts=self.n_experts,
+                rule_router_cfg=self.rule_router_cfg,
+            )
+            self.router = RouterBackend(
+                impl="rule_soft",
+                n_experts=self.n_experts,
+                top_k=top_k,
+                rule_soft_kwargs={
+                    "n_stage_features": self._n_stage_features,
+                    "selected_feature_indices": selected_indices,
+                    "feature_names": self.stage_all_features,
+                    "n_bins": n_bins,
+                    "expert_bias": expert_bias,
+                },
+            )
+
+        if (
+            self.router_impl == "learned"
+            and self.router_mode == "session"
+            and self.session_pooling == "query"
+            and self.router_use_hidden
+        ):
             self.session_query_hidden = nn.Parameter(
                 torch.randn(d_model) * (1.0 / math.sqrt(float(d_model)))
             )
         else:
             self.register_parameter("session_query_hidden", None)
 
-        if self.router_mode == "session" and self.session_pooling == "query" and self.router_use_feature:
+        if (
+            self.router_impl == "learned"
+            and self.router_mode == "session"
+            and self.session_pooling == "query"
+            and self.router_use_feature
+        ):
             self.session_query_feature = nn.Parameter(
                 torch.randn(d_feat_emb) * (1.0 / math.sqrt(float(d_feat_emb)))
             )
@@ -238,6 +319,137 @@ class MoEStage(nn.Module):
             self.current_router_temperature = max(float(router_temperature), 1e-6)
         if top_k is not None:
             self.current_top_k = None if int(top_k) <= 0 else int(top_k)
+
+    @staticmethod
+    def _extract_stage_custom_map(rule_router_cfg: Dict[str, Any], stage_name: str) -> Dict[str, List[str]]:
+        raw = rule_router_cfg.get("custom_stage_feature_map", {})
+        if not isinstance(raw, dict):
+            return {}
+        stage_map = raw.get(stage_name, {})
+        if not isinstance(stage_map, dict):
+            return {}
+        out: Dict[str, List[str]] = {}
+        for key, val in stage_map.items():
+            if isinstance(val, (list, tuple)):
+                out[str(key)] = [str(v) for v in val]
+        return out
+
+    @staticmethod
+    def _match_custom_expert_features(
+        custom_map: Dict[str, List[str]],
+        *,
+        expert_idx: int,
+        base_idx: int,
+        scaled_name: str,
+        base_name: str,
+    ) -> Optional[List[str]]:
+        candidates = [
+            str(expert_idx),
+            f"expert_{expert_idx}",
+            scaled_name,
+            str(base_idx),
+            f"expert_{base_idx}",
+            base_name,
+        ]
+        for key in candidates:
+            if key in custom_map:
+                return list(custom_map[key])
+        return None
+
+    @classmethod
+    def _resolve_rule_feature_selection(
+        cls,
+        *,
+        stage_name: str,
+        base_names: List[str],
+        scaled_names: List[str],
+        scaled_feature_lists: List[List[str]],
+        expert_scale: int,
+        stage_col2local: Dict[str, int],
+        feature_per_expert: int,
+        rule_router_cfg: Dict[str, Any],
+    ) -> Tuple[List[List[int]], List[List[str]]]:
+        custom_map = cls._extract_stage_custom_map(rule_router_cfg, stage_name=stage_name)
+
+        selected_indices: List[List[int]] = []
+        selected_names: List[List[str]] = []
+        for expert_idx, default_feats in enumerate(scaled_feature_lists):
+            base_idx = int(expert_idx // max(int(expert_scale), 1))
+            base_name = base_names[base_idx]
+            scaled_name = scaled_names[expert_idx]
+            custom_feats = cls._match_custom_expert_features(
+                custom_map,
+                expert_idx=expert_idx,
+                base_idx=base_idx,
+                scaled_name=scaled_name,
+                base_name=base_name,
+            )
+            source_feats = custom_feats if custom_feats else list(default_feats)
+            valid_names = [name for name in source_feats if name in stage_col2local]
+            if not valid_names:
+                valid_names = [name for name in default_feats if name in stage_col2local]
+            if not valid_names:
+                valid_names = [next(iter(stage_col2local.keys()))]
+            valid_names = valid_names[:feature_per_expert]
+            selected_names.append(valid_names)
+            selected_indices.append([int(stage_col2local[name]) for name in valid_names])
+        return selected_indices, selected_names
+
+    @classmethod
+    def _resolve_rule_expert_bias(
+        cls,
+        *,
+        stage_name: str,
+        base_names: List[str],
+        scaled_names: List[str],
+        expert_scale: int,
+        n_experts: int,
+        rule_router_cfg: Dict[str, Any],
+    ) -> List[float]:
+        raw = rule_router_cfg.get("expert_bias", None)
+        if raw is None:
+            return [0.0] * int(n_experts)
+
+        stage_raw = raw
+        if isinstance(raw, dict) and stage_name in raw:
+            stage_raw = raw.get(stage_name)
+
+        if isinstance(stage_raw, (list, tuple)):
+            vals = [float(v) for v in stage_raw]
+            if len(vals) == int(n_experts):
+                return vals
+            if len(vals) == len(base_names):
+                out: List[float] = []
+                for v in vals:
+                    for _ in range(max(int(expert_scale), 1)):
+                        out.append(float(v))
+                return out[: int(n_experts)]
+            raise ValueError(
+                "rule_router.expert_bias list length must match n_experts or base expert count, "
+                f"got {len(vals)} vs {n_experts}/{len(base_names)}"
+            )
+
+        if isinstance(stage_raw, dict):
+            out = [0.0] * int(n_experts)
+            for expert_idx in range(int(n_experts)):
+                base_idx = int(expert_idx // max(int(expert_scale), 1))
+                keys = [
+                    str(expert_idx),
+                    f"expert_{expert_idx}",
+                    scaled_names[expert_idx],
+                    str(base_idx),
+                    f"expert_{base_idx}",
+                    base_names[base_idx],
+                ]
+                for key in keys:
+                    if key in stage_raw:
+                        out[expert_idx] = float(stage_raw[key])
+                        break
+            return out
+
+        raise ValueError(
+            "rule_router.expert_bias must be list or dict (optionally stage-keyed dict)."
+        )
 
     def _gather_expert_inputs(self, feat: torch.Tensor) -> List[torch.Tensor]:
         inputs = []
@@ -302,6 +514,30 @@ class MoEStage(nn.Module):
             raise RuntimeError("session_pooling='query' requires a query parameter.")
         return self._pool_sequence_query(seq, valid_mask, query)
 
+    @staticmethod
+    def _pool_rule_session_features(
+        stage_feat: torch.Tensor,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+        session_pooling: str,
+    ) -> torch.Tensor:
+        if session_pooling == "last":
+            if item_seq_len is None:
+                idx = torch.full(
+                    (stage_feat.size(0),),
+                    fill_value=max(stage_feat.size(1) - 1, 0),
+                    dtype=torch.long,
+                    device=stage_feat.device,
+                )
+            else:
+                idx = item_seq_len.to(device=stage_feat.device).long().clamp(min=1, max=stage_feat.size(1)) - 1
+            return stage_feat[torch.arange(stage_feat.size(0), device=stage_feat.device), idx]
+
+        # Rule-based routing avoids learnable query pooling; use stable mean.
+        w = valid_mask.float().unsqueeze(-1)
+        denom = w.sum(dim=1).clamp(min=1.0)
+        return (stage_feat * w).sum(dim=1) / denom
+
     def forward(
         self,
         hidden: torch.Tensor,
@@ -322,46 +558,76 @@ class MoEStage(nn.Module):
         h_norm = self.pre_ln(hidden)
         valid_mask = self._build_valid_mask(B, T, item_seq_len, hidden.device)
 
-        # Stage feature embedding for router input.
-        stage_feat = feat.index_select(-1, self.stage_feat_idx)            # [B, T, F_stage]
-        stage_feat_emb = self.stage_feat_proj(stage_feat)                  # [B, T, d_feat_emb]
-        if self.reliability_feat_idx is not None:
-            rel = feat[..., self.reliability_feat_idx].clamp(0.0, 1.0).unsqueeze(-1)
-            stage_feat_emb = stage_feat_emb * rel
-        stage_feat_emb = self.router_feat_drop(stage_feat_emb)
+        stage_feat = feat.index_select(-1, self.stage_feat_idx)  # [B, T, F_stage]
 
-        if self.router_mode == "session":
-            router_inputs = []
-            if self.router_use_hidden:
-                h_sess = self._pool_sequence(
-                    h_norm, valid_mask, item_seq_len, query=self.session_query_hidden
-                )
-                router_inputs.append(h_sess)
-            if self.router_use_feature:
-                f_sess = self._pool_sequence(
-                    stage_feat_emb, valid_mask, item_seq_len, query=self.session_query_feature
-                )
-                router_inputs.append(f_sess)
-            router_in = router_inputs[0] if len(router_inputs) == 1 else torch.cat(router_inputs, dim=-1)
-            gate_w_sess, gate_l_sess = self.router(
-                router_in,
-                temperature=self.current_router_temperature,
-                top_k=self.current_top_k,
-            )  # [B, K]
-            gate_weights = gate_w_sess.unsqueeze(1).expand(-1, T, -1)
-            gate_logits = gate_l_sess.unsqueeze(1).expand(-1, T, -1)
+        if self.router_impl == "learned":
+            assert self.stage_feat_proj is not None
+            assert self.router_feat_drop is not None
+
+            stage_feat_emb = self.stage_feat_proj(stage_feat)  # [B, T, d_feat_emb]
+            if self.reliability_feat_idx is not None:
+                rel = feat[..., self.reliability_feat_idx].clamp(0.0, 1.0).unsqueeze(-1)
+                stage_feat_emb = stage_feat_emb * rel
+            stage_feat_emb = self.router_feat_drop(stage_feat_emb)
+
+            if self.router_mode == "session":
+                router_inputs = []
+                if self.router_use_hidden:
+                    h_sess = self._pool_sequence(
+                        h_norm, valid_mask, item_seq_len, query=self.session_query_hidden
+                    )
+                    router_inputs.append(h_sess)
+                if self.router_use_feature:
+                    f_sess = self._pool_sequence(
+                        stage_feat_emb, valid_mask, item_seq_len, query=self.session_query_feature
+                    )
+                    router_inputs.append(f_sess)
+                router_in = router_inputs[0] if len(router_inputs) == 1 else torch.cat(router_inputs, dim=-1)
+                gate_w_sess, gate_l_sess = self.router(
+                    router_input=router_in,
+                    temperature=self.current_router_temperature,
+                    top_k=self.current_top_k,
+                )  # [B, K]
+                gate_weights = gate_w_sess.unsqueeze(1).expand(-1, T, -1)
+                gate_logits = gate_l_sess.unsqueeze(1).expand(-1, T, -1)
+            else:
+                router_inputs = []
+                if self.router_use_hidden:
+                    router_inputs.append(h_norm)
+                if self.router_use_feature:
+                    router_inputs.append(stage_feat_emb)
+                router_in = router_inputs[0] if len(router_inputs) == 1 else torch.cat(router_inputs, dim=-1)
+                gate_weights, gate_logits = self.router(
+                    router_input=router_in,
+                    temperature=self.current_router_temperature,
+                    top_k=self.current_top_k,
+                )  # [B, T, K]
         else:
-            router_inputs = []
-            if self.router_use_hidden:
-                router_inputs.append(h_norm)
-            if self.router_use_feature:
-                router_inputs.append(stage_feat_emb)
-            router_in = router_inputs[0] if len(router_inputs) == 1 else torch.cat(router_inputs, dim=-1)
-            gate_weights, gate_logits = self.router(
-                router_in,
-                temperature=self.current_router_temperature,
-                top_k=self.current_top_k,
-            )  # [B, T, K]
+            rule_feat = stage_feat
+            if self.reliability_feat_idx is not None:
+                rel = feat[..., self.reliability_feat_idx].clamp(0.0, 1.0).unsqueeze(-1)
+                rule_feat = rule_feat * rel
+
+            if self.router_mode == "session":
+                rule_sess = self._pool_rule_session_features(
+                    rule_feat,
+                    valid_mask=valid_mask,
+                    item_seq_len=item_seq_len,
+                    session_pooling=self.session_pooling,
+                )
+                gate_w_sess, gate_l_sess = self.router(
+                    rule_features=rule_sess,
+                    temperature=self.current_router_temperature,
+                    top_k=self.current_top_k,
+                )  # [B, K]
+                gate_weights = gate_w_sess.unsqueeze(1).expand(-1, T, -1)
+                gate_logits = gate_l_sess.unsqueeze(1).expand(-1, T, -1)
+            else:
+                gate_weights, gate_logits = self.router(
+                    rule_features=rule_feat,
+                    temperature=self.current_router_temperature,
+                    top_k=self.current_top_k,
+                )  # [B, T, K]
 
         expert_inputs = self._gather_expert_inputs(feat)
         expert_out = self.expert_group(h_norm, expert_inputs)              # [B, T, K, d_model]

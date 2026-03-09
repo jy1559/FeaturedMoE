@@ -51,6 +51,10 @@ def _get_custom_model(model_name):
             FENRec,
             FeaturedMoE,
             FeaturedMoE_HiR,
+            FeaturedMoE_HGR,
+            FeaturedMoE_HiR2,
+            FeaturedMoE_ProtoX,
+            FeaturedMoE_V2,
         )
         custom_models = {
             'BiLSTM': BiLSTM, 
@@ -64,6 +68,19 @@ def _get_custom_model(model_name):
             'FENRec': FENRec,
             'FeaturedMoE': FeaturedMoE,
             'FeaturedMoE_HiR': FeaturedMoE_HiR,
+            'FeaturedMoE_HGR': FeaturedMoE_HGR,
+            'featured_moe_hgr': FeaturedMoE_HGR,
+            'featuredmoe_hgr': FeaturedMoE_HGR,
+            'FeaturedMoE_HiR2': FeaturedMoE_HiR2,
+            'featured_moe_hir2': FeaturedMoE_HiR2,
+            'featuredmoe_hir2': FeaturedMoE_HiR2,
+            'FeaturedMoE_ProtoX': FeaturedMoE_ProtoX,
+            'featured_moe_protox': FeaturedMoE_ProtoX,
+            'featuredmoe_protox': FeaturedMoE_ProtoX,
+            'FeaturedMoE_v2': FeaturedMoE_V2,
+            'FeaturedMoE_V2': FeaturedMoE_V2,
+            'featured_moe_v2': FeaturedMoE_V2,
+            'featuredmoe_v2': FeaturedMoE_V2,
         }
         return custom_models.get(model_name)
     except:
@@ -157,6 +174,14 @@ def _convert_inter_to_sequence(dataset, inter_feat, for_training=True):
         "featuredmoe",
         "featured_moe_hir",
         "featuredmoe_hir",
+        "featured_moe_hgr",
+        "featuredmoe_hgr",
+        "featured_moe_hir2",
+        "featuredmoe_hir2",
+        "featured_moe_protox",
+        "featuredmoe_protox",
+        "featured_moe_v2",
+        "featuredmoe_v2",
     }
     use_fp16 = bool(dataset.config["fmoe_feature_fp16"]) if "fmoe_feature_fp16" in dataset.config else default_fp16
 
@@ -183,7 +208,20 @@ def _convert_inter_to_sequence(dataset, inter_feat, for_training=True):
     # In FeaturedMoE mode, only keep required history lists:
     # item_id_list + engineered feature lists.
     history_fields = [f for f in fields if f != uid_field]
-    if model_name in {"featured_moe", "featuredmoe", "featured_moe_hir", "featuredmoe_hir"}:
+    if model_name in {
+        "featured_moe",
+        "featuredmoe",
+        "featured_moe_hir",
+        "featuredmoe_hir",
+        "featured_moe_hgr",
+        "featuredmoe_hgr",
+        "featured_moe_hir2",
+        "featuredmoe_hir2",
+        "featured_moe_protox",
+        "featuredmoe_protox",
+        "featured_moe_v2",
+        "featuredmoe_v2",
+    }:
         history_fields = [
             f for f in history_fields
             if (f == iid_field or _is_feature_field(f))
@@ -344,6 +382,14 @@ def _patched_data_augmentation(self):
         "featuredmoe",
         "featured_moe_hir",
         "featuredmoe_hir",
+        "featured_moe_hgr",
+        "featuredmoe_hgr",
+        "featured_moe_hir2",
+        "featuredmoe_hir2",
+        "featured_moe_protox",
+        "featuredmoe_protox",
+        "featured_moe_v2",
+        "featuredmoe_v2",
     }
     use_fp16 = bool(self.config["fmoe_feature_fp16"]) if "fmoe_feature_fp16" in self.config else default_fp16
 

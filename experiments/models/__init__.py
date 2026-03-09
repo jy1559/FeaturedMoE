@@ -14,6 +14,10 @@ from .patt import PAtt
 from .fenrec import FENRec
 from .FeaturedMoE import FeaturedMoE
 from .FeaturedMoE_HiR import FeaturedMoE_HiR
+from .FeaturedMoE_HGR import FeaturedMoE_HGR
+from .FeaturedMoE_HiR2 import FeaturedMoE_HiR2
+from .FeaturedMoE_ProtoX import FeaturedMoE_ProtoX
+from .FeaturedMoE_v2 import FeaturedMoE_V2
 
 __all__ = [
 	"BiLSTM",
@@ -27,4 +31,8 @@ __all__ = [
 	"FENRec",
 	"FeaturedMoE",
 	"FeaturedMoE_HiR",
+	"FeaturedMoE_HGR",
+	"FeaturedMoE_HiR2",
+	"FeaturedMoE_ProtoX",
+	"FeaturedMoE_V2",
 ]

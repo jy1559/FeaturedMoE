@@ -480,6 +480,7 @@ def main() -> int:
             (run_results / "baseline").mkdir(parents=True, exist_ok=True)
             (run_results / "fmoe").mkdir(parents=True, exist_ok=True)
             (run_results / "fmoe_hir").mkdir(parents=True, exist_ok=True)
+            (run_results / "fmoe_v2").mkdir(parents=True, exist_ok=True)
 
     # 30) legacy experiments/log
     legacy_log = exp / "log"

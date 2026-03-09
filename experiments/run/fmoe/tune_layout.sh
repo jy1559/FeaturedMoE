@@ -183,4 +183,11 @@ run_tracker_end \
   --log-file "$LOG_FILE_PATH" \
   --status "$STATUS" \
   --exit-code "$RC"
+
+run_update_model_report \
+  fmoe \
+  FeaturedMoE \
+  "$(run_experiments_dir)/models/FeaturedMoE"
+run_update_track_report fmoe
+
 exit "$RC"

@@ -247,6 +247,9 @@ def _start(args: argparse.Namespace) -> int:
         "phase": args.phase,
         "dataset": args.dataset,
         "model": args.model,
+        "exp_name": args.exp_name,
+        "exp_desc": args.exp_desc,
+        "exp_focus": args.exp_focus,
         "cmd": args.cmd,
         "log_file": args.log_file,
     }
@@ -278,6 +281,9 @@ def _end(args: argparse.Namespace) -> int:
     phase = args.phase or state.get("phase", "")
     dataset = args.dataset or state.get("dataset", "")
     model = args.model or state.get("model", "")
+    exp_name = args.exp_name or state.get("exp_name", "")
+    exp_desc = args.exp_desc or state.get("exp_desc", "")
+    exp_focus = args.exp_focus or state.get("exp_focus", "")
     cmd = args.cmd or state.get("cmd", "")
     log_file_raw = args.log_file or state.get("log_file", "")
     log_file = _resolve_path(log_file_raw)
@@ -305,6 +311,9 @@ def _end(args: argparse.Namespace) -> int:
         "phase": phase,
         "dataset": dataset,
         "model": model,
+        "exp_name": exp_name,
+        "exp_desc": exp_desc,
+        "exp_focus": exp_focus,
         "cmd": cmd,
         "status": args.status,
         "exit_code": args.exit_code,
@@ -342,6 +351,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_start.add_argument("--phase", required=True)
     p_start.add_argument("--dataset", required=True)
     p_start.add_argument("--model", required=True)
+    p_start.add_argument("--exp-name", default="")
+    p_start.add_argument("--exp-desc", default="")
+    p_start.add_argument("--exp-focus", default="")
     p_start.add_argument("--cmd", required=True)
     p_start.add_argument("--log-file", required=True)
     p_start.set_defaults(func=_start)
@@ -353,6 +365,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_end.add_argument("--phase", default="")
     p_end.add_argument("--dataset", default="")
     p_end.add_argument("--model", default="")
+    p_end.add_argument("--exp-name", default="")
+    p_end.add_argument("--exp-desc", default="")
+    p_end.add_argument("--exp-focus", default="")
     p_end.add_argument("--cmd", default="")
     p_end.add_argument("--log-file", default="")
     p_end.add_argument("--result-file", default="")

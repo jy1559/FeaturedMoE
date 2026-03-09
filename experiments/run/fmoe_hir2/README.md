@@ -1,0 +1,27 @@
+# FeaturedMoE_HiR2 Run Scripts
+
+- `run_first_pass_hir2.sh`
+  - HiR2 1차 계획 실행 (combo-first):
+    - ML1: `merge_mode x allocator_top_k x layer_profile` 콤보를 외부에서 생성
+      - 기본 base combo 24개:
+        - `serial_weighted` × `top_k={0,1,2}`
+        - `parallel_weighted` × `top_k={0,1,2}`
+        - `layer_profile`:
+          - `L0`: `global_pre/post=0`, `macro/mid/micro_pre=0`
+          - `L1`: `global_pre=1, global_post=1, macro_pre=0, mid_pre=1, micro_pre=1`
+          - `L2`: `global_pre=1, global_post=2, macro_pre=1, mid_pre=1, micro_pre=2`
+          - `L3`: `global_pre=2, global_post=2, macro_pre=1, mid_pre=2, micro_pre=2`
+      - 총 job 수가 base combo 수보다 많으면 seed만 바꿔 반복 실행
+      - 총 job 수가 base combo 수보다 적어도 stride 샘플링으로 콤보 커버리지 확보
+    - 각 hyperopt run 내부 탐색:
+      - `learning_rate`, `weight_decay`, `hidden_dropout_prob`, `balance_loss_lambda`
+      - `weight_decay`, `hidden_dropout_prob`, `balance_loss_lambda`는 choice 강제
+      - 큰 구조/차원/라우팅 축은 singleton으로 고정
+    - RR: ML1 best parent 고정 후 전이 탐색
+- `pipeline_split_v2_hir2.sh`
+  - `fmoe_v2` final + `fmoe_hir2` first-pass 동시 분할 실행
+  - 공통 분할 CLI:
+    - `--group-a-gpus`
+    - `--group-b-gpus`
+    - `--datasets`
+    - `--swap-groups`
