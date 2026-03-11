@@ -25,7 +25,7 @@ LOG_WANDB="false"
 DRY_RUN="${DRY_RUN:-false}"
 OOM_RETRY_MIN_TRAIN_BS="1024"
 DROP_SPACE="0.08,0.10,0.12"
-BAL_SPACE="0.003,0.006,0.01,0.02"
+BAL_SPACE="0.001,0.003,0.01"
 
 COMBO_CATALOG=""
 SURPRISE_COMBO_CATALOG=""
@@ -438,7 +438,7 @@ run_layout_jobs_for_dataset() {
         phase="${phase_prefix}_L${layout_id}_G${gpu}_C$(printf '%02d' "$combo_idx")_E${emb}_F${dfeat}_H${dexp}_R${drouter}_B${train_bs}"
         exp_name="${phase_prefix}_${ds}_${pass_label}_serial_layout${layout_id}"
         exp_desc="${pass_desc}"
-        exp_focus="fmoe_v2_layout_id,fmoe_stage_execution_mode,embedding_size,d_feat_emb,d_expert_hidden,d_router_hidden,expert_scale,train_batch_size,eval_batch_size,hidden_dropout_prob,balance_loss_lambda,learning_rate,weight_decay"
+        exp_focus="fmoe_v2_layout_id,fmoe_stage_execution_mode,embedding_size,d_feat_emb,d_expert_hidden,d_router_hidden,expert_scale,train_batch_size,eval_batch_size,hidden_dropout_prob,balance_loss_lambda,fmoe_v2_feature_spec_aux_lambda,learning_rate,weight_decay"
 
         echo "[${phase_prefix}][${ds}] layout=L${layout_id} gpu=${gpu} combo=${combo_idx}/${combo_n} emb=${emb} dfeat=${dfeat} dexp=${dexp} drouter=${drouter} scale=${expert_scale} bs=${train_bs}/${eval_bs}"
 
@@ -561,8 +561,8 @@ run_layout_jobs_for_dataset() {
   return 0
 }
 
-MAIN_EXP_DESC="${PHASE_PREFIX}: RR-focused serial P2 from strong P1 layouts; 80-combo sweep with anchor-near, high-capacity, and outlier dim/router/batch mixes."
-SURPRISE_EXP_DESC="${SURPRISE_PHASE_PREFIX}: surprise-layout probe on high-upside non-anchor layouts from RR P1; compact anchor+outlier subset for fast contrast."
+MAIN_EXP_DESC="${PHASE_PREFIX}: RR-focused serial P2 with factorized interaction router; 80-combo sweep over anchor-near, high-capacity, and outlier dim/router/batch mixes."
+SURPRISE_EXP_DESC="${SURPRISE_PHASE_PREFIX}: surprise-layout probe with factorized interaction router on high-upside non-anchor RR layouts."
 
 for ds in "${DATASET_ARR[@]}"; do
   surprise_label="${SURPRISE_LAYOUT_IDS:-none}"

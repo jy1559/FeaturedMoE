@@ -1,0 +1,83 @@
+# @package _global_
+# FeaturedMoE_Individual default config
+
+model: FeaturedMoE_Individual
+MAX_ITEM_LIST_LENGTH: 10
+
+load_col:
+  inter: [session_id, item_id, timestamp,
+    mac_user_level, mac_sess_gap, mac_is_new, mac_hist_len,
+    mac_time_sin, mac_time_cos, mac_is_weekend, mac_hist_speed,
+    mac_hist_ent, mac_hist_uniq_r, mac_hist_top1, mac_hist_switch_r,
+    mac_hist_pop_avg, mac_hist_pop_std,
+    mid_win_ent, mid_win_top1, mid_int_std, mid_sess_time,
+    mid_pop_avg, mid_win_switch, mid_int_avg, mid_accel, mid_last_dev,
+    mid_valid_r, mid_novel_r, mid_uniq_item_r, mid_uniq_cat_r, mid_max_run,
+    mid_pop_drift, mid_ent_drift,
+    mic_last_int, mic_short_avg, mic_short_std, mic_valid_r,
+    mic_switch, mic_uniq_c, mic_cat_ent, mic_cat_top1,
+    mic_is_recons, mic_uniq_i, mic_recons_r, mic_max_run_i,
+    mic_pop_avg, mic_pop_std, mic_pop_drift, mic_pop_ent]
+
+# Dimensions
+embedding_size: 128
+hidden_size: 128
+d_feat_emb: 16
+d_expert_hidden: 160
+d_router_hidden: 64
+expert_scale: 4
+
+# Layout / attention budget
+num_layers: -1
+arch_layout_catalog:
+  # [global_pre, macro_pass, macro_moe, mid_pass, mid_moe, micro_pass, micro_moe, global_post]
+  - [0, 0, 1, 0, 1, 0, 0, 0]
+  - [0, 1, 1, 0, 1, 0, 0, 0]
+  - [0, 0, 1, 1, 1, 0, 0, 0]
+  - [0, 1, 1, 1, 1, 0, 0, 0]
+arch_layout_id: 0
+
+n_pre_layer: 0
+n_pre_macro: 0
+n_pre_mid: 0
+n_pre_micro: 0
+n_post_layer: 0
+
+# Transformer
+num_heads: 8
+hidden_dropout_prob: 0.1
+
+# Runtime
+eval_every: 1
+enable_tf32: true
+enable_cudnn_benchmark: false
+
+# MoE inputs
+outer_router_use_hidden: true
+outer_router_use_feature: true
+inner_router_use_hidden: true
+inner_router_use_feature: true
+expert_use_hidden: true
+expert_use_feature: false
+
+# MoE routing
+feature_top_k: 4
+inner_expert_top_k: 0
+stage_merge_mode: serial
+
+# Loss / regularization
+use_aux_loss: false
+balance_loss_lambda: 0.0
+group_balance_lambda: 0.0
+intra_balance_lambda: 0.0
+
+# Optional FFN-MoE
+ffn_moe: false
+n_ffn_experts: 4
+ffn_top_k: 0
+
+# Logging / optimization
+fmoe_debug_logging: false
+learning_rate: 0.0018
+wandb_project: FMoE_individual
+wandb_project_hyperopt: FMoE_individual

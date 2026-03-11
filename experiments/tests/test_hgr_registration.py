@@ -26,6 +26,12 @@ def test_hgr_hydra_config_load():
     assert "hgr" in model_name
     assert cfg.get("group_router_mode") in {"per_group", "stage_wide", "hybrid"}
     assert "group_top_k" in cfg
+    assert cfg.get("router_design") in {"legacy_concat", "group_factorized_interaction"}
+    assert "expert_top_k" in cfg
+    assert "group_balance_lambda" in cfg
+    assert "intra_balance_lambda" in cfg
+    assert "group_feature_spec_aux_enable" in cfg
+    assert "router_distill_enable" in cfg
     assert cfg.get("stage_merge_mode") in {"serial", "parallel"}
 
 

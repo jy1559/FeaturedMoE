@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -18,7 +18,7 @@ from ..FeaturedMoE.feature_config import (
     build_expert_indices,
     build_stage_indices,
 )
-from ..FeaturedMoE.routers import Router, load_balance_loss
+from ..FeaturedMoE.routers import Router, RuleSoftRouter, load_balance_loss
 
 
 def _scaled_group_expert_names(group_names: List[str], expert_scale: int) -> List[str]:
@@ -129,6 +129,9 @@ class HierarchicalGroupStageMoE(nn.Module):
         router_use_feature: bool = True,
         expert_use_hidden: bool = True,
         expert_use_feature: bool = False,
+        router_design: str = "group_factorized_interaction",
+        rule_router_cfg: Optional[Dict[str, Any]] = None,
+        router_distill_enable: bool = False,
         router_mode: str = "token",
         session_pooling: str = "query",
         router_temperature: float = 1.0,
@@ -161,13 +164,24 @@ class HierarchicalGroupStageMoE(nn.Module):
             raise ValueError(
                 f"session_pooling must be one of ['query','mean','last'], got {session_pooling}"
             )
+        router_design_key = str(router_design).lower().strip()
+        if router_design_key not in {"legacy_concat", "group_factorized_interaction"}:
+            raise ValueError(
+                "router_design must be one of ['legacy_concat','group_factorized_interaction'], "
+                f"got {router_design}"
+            )
 
         self.stage_name = stage_name
+        self.group_names = list(group_names)
+        self.stage_all_features = list(stage_all_features)
         self.group_router_mode = mode
+        self.router_design = router_design_key
         self.router_use_hidden = bool(router_use_hidden)
         self.router_use_feature = bool(router_use_feature)
         self.expert_use_hidden = bool(expert_use_hidden)
         self.expert_use_feature = bool(expert_use_feature)
+        self.rule_router_cfg = dict(rule_router_cfg or {})
+        self.router_distill_enable = bool(router_distill_enable)
         self.router_mode = router_mode_key
         self.session_pooling = session_pooling_key
         self.router_temperature = float(router_temperature)
@@ -179,14 +193,18 @@ class HierarchicalGroupStageMoE(nn.Module):
         self.expert_scale = int(expert_scale)
         self.n_experts = self.n_groups * self.expert_scale
         self.expert_names = _scaled_group_expert_names(group_names, self.expert_scale)
+        self.last_router_aux: Dict[str, torch.Tensor] = {}
 
         stage_idx = build_stage_indices(stage_all_features, col2idx)
         self.register_buffer("stage_feat_idx", torch.tensor(stage_idx, dtype=torch.long), persistent=False)
+        self._n_stage_features = len(stage_idx)
+        stage_col2local = {name: idx for idx, name in enumerate(self.stage_all_features)}
 
         group_idx_lists = build_expert_indices(
             OrderedDict(zip(group_names, group_feature_lists)),
             col2idx,
         )
+        self.group_feature_lists = [list(group_feats) for group_feats in group_feature_lists]
         self.group_feature_dims: List[int] = []
         for idx, feat_idx in enumerate(group_idx_lists):
             self.register_buffer(
@@ -206,51 +224,157 @@ class HierarchicalGroupStageMoE(nn.Module):
             self.reliability_feat_idx = None
 
         self.pre_ln = nn.LayerNorm(d_model)
-        self.stage_feat_proj = nn.Linear(len(stage_idx), d_feat_emb)
         self.group_feat_proj = nn.ModuleList([nn.Linear(fd, d_feat_emb) for fd in self.group_feature_dims])
-        self.router_feat_drop = nn.Dropout(router_feature_dropout)
+
+        if self.router_design == "legacy_concat":
+            self.stage_feat_proj = nn.Linear(len(stage_idx), d_feat_emb)
+            self.router_feat_drop = nn.Dropout(router_feature_dropout)
+        else:
+            self.stage_feat_proj = None
+            self.router_feat_drop = None
+
+        if self.router_design == "group_factorized_interaction":
+            self.router_hidden_encoder = nn.Sequential(
+                nn.LayerNorm(d_model),
+                nn.Linear(d_model, d_router_hidden),
+                nn.GELU(),
+                nn.Linear(d_router_hidden, d_router_hidden),
+            )
+            self.stage_feature_encoder = nn.Sequential(
+                nn.LayerNorm(self._n_stage_features),
+                nn.Linear(self._n_stage_features, d_router_hidden),
+                nn.GELU(),
+                nn.Linear(d_router_hidden, d_router_hidden),
+            )
+            self.group_feature_encoders = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.LayerNorm(group_dim),
+                        nn.Linear(group_dim, d_router_hidden),
+                        nn.GELU(),
+                        nn.Linear(d_router_hidden, d_router_hidden),
+                    )
+                    for group_dim in self.group_feature_dims
+                ]
+            )
+            self.factorized_router_feature_drop = nn.Dropout(router_feature_dropout)
+            self.stage_wide_router = Router(
+                d_in=4 * d_router_hidden,
+                n_experts=self.n_groups,
+                d_hidden=d_router_hidden,
+                top_k=self.group_top_k,
+                dropout=dropout,
+            )
+            self.per_group_scorer = ScalarRouter(
+                d_in=4 * d_router_hidden,
+                d_hidden=d_router_hidden,
+                dropout=dropout,
+            )
+            self.intra_routers = nn.ModuleList(
+                [
+                    Router(
+                        d_in=4 * d_router_hidden,
+                        n_experts=self.expert_scale,
+                        d_hidden=d_router_hidden,
+                        top_k=self.expert_top_k,
+                        dropout=dropout,
+                    )
+                    for _ in range(self.n_groups)
+                ]
+            )
+        else:
+            self.router_hidden_encoder = None
+            self.stage_feature_encoder = None
+            self.group_feature_encoders = None
+            self.factorized_router_feature_drop = None
 
         if self.router_mode == "session" and self.session_pooling == "query" and self.router_use_hidden:
+            query_dim = d_router_hidden if self.router_design == "group_factorized_interaction" else d_model
             self.session_query_hidden = nn.Parameter(
-                torch.randn(d_model) * (1.0 / math.sqrt(float(d_model)))
+                torch.randn(query_dim) * (1.0 / math.sqrt(float(query_dim)))
             )
         else:
             self.register_parameter("session_query_hidden", None)
         if self.router_mode == "session" and self.session_pooling == "query" and self.router_use_feature:
+            query_dim = d_router_hidden if self.router_design == "group_factorized_interaction" else d_feat_emb
             self.session_query_feature = nn.Parameter(
-                torch.randn(d_feat_emb) * (1.0 / math.sqrt(float(d_feat_emb)))
+                torch.randn(query_dim) * (1.0 / math.sqrt(float(query_dim)))
             )
         else:
             self.register_parameter("session_query_feature", None)
 
-        router_in_dim = 0
-        if self.router_use_hidden:
-            router_in_dim += d_model
-        if self.router_use_feature:
-            router_in_dim += d_feat_emb
+        if self.router_design == "legacy_concat":
+            router_in_dim = 0
+            if self.router_use_hidden:
+                router_in_dim += d_model
+            if self.router_use_feature:
+                router_in_dim += d_feat_emb
 
-        self.stage_wide_router = Router(
-            d_in=router_in_dim,
-            n_experts=self.n_groups,
-            d_hidden=d_router_hidden,
-            top_k=self.group_top_k,
-            dropout=dropout,
-        )
-        self.per_group_scorers = nn.ModuleList(
-            [ScalarRouter(d_in=router_in_dim, d_hidden=d_router_hidden, dropout=dropout) for _ in range(self.n_groups)]
-        )
-        self.intra_routers = nn.ModuleList(
-            [
-                Router(
-                    d_in=router_in_dim,
-                    n_experts=self.expert_scale,
-                    d_hidden=d_router_hidden,
-                    top_k=self.expert_top_k,
-                    dropout=dropout,
-                )
-                for _ in range(self.n_groups)
-            ]
-        )
+            self.stage_wide_router = Router(
+                d_in=router_in_dim,
+                n_experts=self.n_groups,
+                d_hidden=d_router_hidden,
+                top_k=self.group_top_k,
+                dropout=dropout,
+            )
+            self.per_group_scorers = nn.ModuleList(
+                [
+                    ScalarRouter(d_in=router_in_dim, d_hidden=d_router_hidden, dropout=dropout)
+                    for _ in range(self.n_groups)
+                ]
+            )
+            self.intra_routers = nn.ModuleList(
+                [
+                    Router(
+                        d_in=router_in_dim,
+                        n_experts=self.expert_scale,
+                        d_hidden=d_router_hidden,
+                        top_k=self.expert_top_k,
+                        dropout=dropout,
+                    )
+                    for _ in range(self.n_groups)
+                ]
+            )
+            self.per_group_scorer = None
+        else:
+            self.per_group_scorers = None
+
+        if self.router_design == "group_factorized_interaction" and self.router_distill_enable:
+            n_bins_raw = self.rule_router_cfg.get("n_bins", 5)
+            if isinstance(n_bins_raw, (list, tuple)):
+                n_bins_raw = n_bins_raw[0] if len(n_bins_raw) > 0 else 5
+            n_bins = int(n_bins_raw)
+
+            feature_per_group_raw = self.rule_router_cfg.get("feature_per_expert", 4)
+            if isinstance(feature_per_group_raw, (list, tuple)):
+                feature_per_group_raw = feature_per_group_raw[0] if len(feature_per_group_raw) > 0 else 4
+            feature_per_group = max(int(feature_per_group_raw), 1)
+
+            teacher_selected_indices, _ = self._resolve_rule_feature_selection(
+                stage_name=stage_name,
+                group_names=self.group_names,
+                group_feature_lists=self.group_feature_lists,
+                stage_col2local=stage_col2local,
+                feature_per_group=feature_per_group,
+                rule_router_cfg=self.rule_router_cfg,
+            )
+            teacher_bias = self._resolve_rule_group_bias(
+                stage_name=stage_name,
+                group_names=self.group_names,
+                rule_router_cfg=self.rule_router_cfg,
+            )
+            self.group_teacher_router = RuleSoftRouter(
+                n_experts=self.n_groups,
+                n_stage_features=self._n_stage_features,
+                selected_feature_indices=teacher_selected_indices,
+                feature_names=self.stage_all_features,
+                n_bins=n_bins,
+                expert_bias=teacher_bias,
+                top_k=None,
+            )
+        else:
+            self.group_teacher_router = None
+
         self.experts = nn.ModuleList(
             [
                 HiddenExpertMLP(
@@ -271,6 +395,7 @@ class HierarchicalGroupStageMoE(nn.Module):
         self.alpha_scale = 1.0
         self.current_router_temperature = self.router_temperature
         self.current_expert_top_k = self.expert_top_k
+        self.current_group_top_k = self.group_top_k
 
     def set_schedule_state(
         self,
@@ -284,6 +409,84 @@ class HierarchicalGroupStageMoE(nn.Module):
             self.current_router_temperature = max(float(router_temperature), 1e-6)
         if expert_top_k is not None:
             self.current_expert_top_k = None if int(expert_top_k) <= 0 else int(expert_top_k)
+
+    @staticmethod
+    def _extract_stage_custom_map(rule_router_cfg: Dict[str, Any], stage_name: str) -> Dict[str, List[str]]:
+        raw = rule_router_cfg.get("custom_stage_feature_map", {})
+        if not isinstance(raw, dict):
+            return {}
+        stage_map = raw.get(stage_name, {})
+        if not isinstance(stage_map, dict):
+            return {}
+        out: Dict[str, List[str]] = {}
+        for key, val in stage_map.items():
+            if isinstance(val, (list, tuple)):
+                out[str(key)] = [str(v) for v in val]
+        return out
+
+    @classmethod
+    def _resolve_rule_feature_selection(
+        cls,
+        *,
+        stage_name: str,
+        group_names: List[str],
+        group_feature_lists: List[List[str]],
+        stage_col2local: Dict[str, int],
+        feature_per_group: int,
+        rule_router_cfg: Dict[str, Any],
+    ) -> Tuple[List[List[int]], List[List[str]]]:
+        custom_map = cls._extract_stage_custom_map(rule_router_cfg, stage_name=stage_name)
+
+        selected_indices: List[List[int]] = []
+        selected_names: List[List[str]] = []
+        for group_idx, default_feats in enumerate(group_feature_lists):
+            group_name = str(group_names[group_idx])
+            custom_feats = custom_map.get(str(group_idx), custom_map.get(group_name, None))
+            source_feats = list(custom_feats) if custom_feats else list(default_feats)
+            valid_names = [name for name in source_feats if name in stage_col2local]
+            if not valid_names:
+                valid_names = [name for name in default_feats if name in stage_col2local]
+            if not valid_names:
+                valid_names = [next(iter(stage_col2local.keys()))]
+            valid_names = valid_names[:feature_per_group]
+            selected_names.append(valid_names)
+            selected_indices.append([int(stage_col2local[name]) for name in valid_names])
+        return selected_indices, selected_names
+
+    @staticmethod
+    def _resolve_rule_group_bias(
+        *,
+        stage_name: str,
+        group_names: List[str],
+        rule_router_cfg: Dict[str, Any],
+    ) -> List[float]:
+        raw = rule_router_cfg.get("expert_bias", None)
+        if raw is None:
+            return [0.0] * len(group_names)
+
+        stage_raw = raw
+        if isinstance(raw, dict) and stage_name in raw:
+            stage_raw = raw.get(stage_name)
+
+        if isinstance(stage_raw, (list, tuple)):
+            vals = [float(v) for v in stage_raw]
+            if len(vals) != len(group_names):
+                raise ValueError(
+                    "rule_router.expert_bias list length must match HGR base group count, "
+                    f"got {len(vals)} vs {len(group_names)}"
+                )
+            return vals
+
+        if isinstance(stage_raw, dict):
+            out = [0.0] * len(group_names)
+            for group_idx, group_name in enumerate(group_names):
+                for key in (str(group_idx), f"expert_{group_idx}", str(group_name)):
+                    if key in stage_raw:
+                        out[group_idx] = float(stage_raw[key])
+                        break
+            return out
+
+        raise ValueError("rule_router.expert_bias must be list or dict (optionally stage-keyed dict).")
 
     def _build_router_input(self, hidden: torch.Tensor, feat_emb: torch.Tensor) -> torch.Tensor:
         inputs = []
@@ -302,6 +505,12 @@ class HierarchicalGroupStageMoE(nn.Module):
             return feat_emb
         rel = feat[..., self.reliability_feat_idx].clamp(0.0, 1.0).unsqueeze(-1)
         return feat_emb * rel
+
+    def _apply_reliability_to_raw(self, raw_feat: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
+        if self.reliability_feat_idx is None:
+            return raw_feat
+        rel = feat[..., self.reliability_feat_idx].clamp(0.0, 1.0).unsqueeze(-1)
+        return raw_feat * rel
 
     @staticmethod
     def _build_valid_mask(
@@ -358,6 +567,29 @@ class HierarchicalGroupStageMoE(nn.Module):
             raise RuntimeError("session_pooling='query' requires a query parameter.")
         return self._pool_sequence_query(seq, valid_mask, query)
 
+    @staticmethod
+    def _pool_rule_session_features(
+        stage_feat: torch.Tensor,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+        session_pooling: str,
+    ) -> torch.Tensor:
+        if session_pooling == "last":
+            if item_seq_len is None:
+                idx = torch.full(
+                    (stage_feat.size(0),),
+                    fill_value=max(stage_feat.size(1) - 1, 0),
+                    dtype=torch.long,
+                    device=stage_feat.device,
+                )
+            else:
+                idx = item_seq_len.to(device=stage_feat.device).long().clamp(min=1, max=stage_feat.size(1)) - 1
+            return stage_feat[torch.arange(stage_feat.size(0), device=stage_feat.device), idx]
+
+        weights = valid_mask.float().unsqueeze(-1)
+        denom = weights.sum(dim=1).clamp(min=1.0)
+        return (stage_feat * weights).sum(dim=1) / denom
+
     def _maybe_pool_hidden(
         self,
         hidden: torch.Tensor,
@@ -366,6 +598,8 @@ class HierarchicalGroupStageMoE(nn.Module):
     ) -> torch.Tensor:
         if self.router_mode != "session":
             return hidden
+        if not self.router_use_hidden:
+            return hidden[:, 0, :]
         query = self.session_query_hidden if self.router_use_hidden else None
         return self._pool_sequence(hidden, valid_mask, item_seq_len, query=query)
 
@@ -377,8 +611,88 @@ class HierarchicalGroupStageMoE(nn.Module):
     ) -> torch.Tensor:
         if self.router_mode != "session":
             return feat_emb
+        if not self.router_use_feature:
+            return feat_emb[:, 0, :]
         query = self.session_query_feature if self.router_use_feature else None
         return self._pool_sequence(feat_emb, valid_mask, item_seq_len, query=query)
+
+    @staticmethod
+    def _compose_interaction(hidden_ctx: torch.Tensor, feat_ctx: torch.Tensor) -> torch.Tensor:
+        return torch.cat(
+            [
+                feat_ctx,
+                hidden_ctx,
+                feat_ctx * hidden_ctx,
+                (feat_ctx - hidden_ctx).abs(),
+            ],
+            dim=-1,
+        )
+
+    def _encode_router_hidden(
+        self,
+        h_norm: torch.Tensor,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        if self.router_design != "group_factorized_interaction" or self.router_hidden_encoder is None:
+            return self._maybe_pool_hidden(h_norm, valid_mask, item_seq_len)
+
+        if self.router_use_hidden:
+            hidden_enc = self.router_hidden_encoder(h_norm)
+            return self._maybe_pool_hidden(hidden_enc, valid_mask, item_seq_len)
+
+        batch_shape = (h_norm.shape[0], h_norm.shape[1], self.router_hidden_encoder[-1].out_features)
+        hidden_enc = h_norm.new_zeros(batch_shape)
+        return self._maybe_pool_hidden(hidden_enc, valid_mask, item_seq_len)
+
+    def _encode_stage_router_feature(
+        self,
+        stage_feat: torch.Tensor,
+        feat: torch.Tensor,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        if self.router_design == "legacy_concat":
+            if self.stage_feat_proj is None or self.router_feat_drop is None:
+                raise RuntimeError("legacy_concat router feature projection is not initialized")
+            feat_emb = self.stage_feat_proj(stage_feat)
+            feat_emb = self._apply_reliability(feat_emb, feat)
+            feat_emb = self.router_feat_drop(feat_emb)
+            return self._maybe_pool_feature(feat_emb, valid_mask, item_seq_len)
+
+        if self.stage_feature_encoder is None:
+            raise RuntimeError("factorized stage_feature_encoder is not initialized")
+
+        stage_feat = self._apply_reliability_to_raw(stage_feat, feat)
+        feat_enc = self.stage_feature_encoder(stage_feat)
+        if self.factorized_router_feature_drop is not None:
+            feat_enc = self.factorized_router_feature_drop(feat_enc)
+        return self._maybe_pool_feature(feat_enc, valid_mask, item_seq_len)
+
+    def _encode_group_router_feature(
+        self,
+        *,
+        group_idx: int,
+        group_feat: torch.Tensor,
+        feat: torch.Tensor,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        if self.router_design == "legacy_concat":
+            if self.router_feat_drop is None:
+                raise RuntimeError("legacy_concat router feature dropout is not initialized")
+            feat_emb = self.group_feat_proj[group_idx](group_feat)
+            feat_emb = self._apply_reliability(feat_emb, feat)
+            feat_emb = self.router_feat_drop(feat_emb)
+            return self._maybe_pool_feature(feat_emb, valid_mask, item_seq_len)
+
+        if self.group_feature_encoders is None:
+            raise RuntimeError("factorized group_feature_encoders are not initialized")
+        group_feat = self._apply_reliability_to_raw(group_feat, feat)
+        feat_enc = self.group_feature_encoders[group_idx](group_feat)
+        if self.factorized_router_feature_drop is not None:
+            feat_enc = self.factorized_router_feature_drop(feat_enc)
+        return self._maybe_pool_feature(feat_enc, valid_mask, item_seq_len)
 
     def _compute_group_logits(
         self,
@@ -389,20 +703,41 @@ class HierarchicalGroupStageMoE(nn.Module):
         logits_parts: List[torch.Tensor] = []
 
         if self.group_router_mode in {"stage_wide", "hybrid"}:
-            stage_router_in = self._build_router_input(hidden_ctx, stage_feat_ctx)
-            stage_wide_logits = self.stage_wide_router.net(stage_router_in) / self.current_router_temperature
+            if self.router_design == "group_factorized_interaction":
+                if not self.router_use_feature:
+                    stage_feat_ctx = torch.zeros_like(hidden_ctx)
+                if not self.router_use_hidden:
+                    hidden_ctx = torch.zeros_like(stage_feat_ctx)
+                stage_router_in = self._compose_interaction(hidden_ctx, stage_feat_ctx)
+                stage_wide_logits = self.stage_wide_router.net(stage_router_in) / self.current_router_temperature
+            else:
+                stage_router_in = self._build_router_input(hidden_ctx, stage_feat_ctx)
+                stage_wide_logits = self.stage_wide_router.net(stage_router_in) / self.current_router_temperature
             logits_parts.append(stage_wide_logits)
 
         if self.group_router_mode in {"per_group", "hybrid"}:
             per_group_logits = []
             for group_idx, group_feat_ctx in enumerate(group_feat_ctxs):
-                scorer_in = self._build_router_input(hidden_ctx, group_feat_ctx)
-                per_group_logits.append(
-                    self.per_group_scorers[group_idx](
-                        scorer_in,
-                        temperature=self.current_router_temperature,
+                if self.router_design == "group_factorized_interaction":
+                    if not self.router_use_feature:
+                        group_feat_ctx = torch.zeros_like(hidden_ctx)
+                    if not self.router_use_hidden:
+                        hidden_ctx = torch.zeros_like(group_feat_ctx)
+                    scorer_in = self._compose_interaction(hidden_ctx, group_feat_ctx)
+                    per_group_logits.append(
+                        self.per_group_scorer(
+                            scorer_in,
+                            temperature=self.current_router_temperature,
+                        )
                     )
-                )
+                else:
+                    scorer_in = self._build_router_input(hidden_ctx, group_feat_ctx)
+                    per_group_logits.append(
+                        self.per_group_scorers[group_idx](
+                            scorer_in,
+                            temperature=self.current_router_temperature,
+                        )
+                    )
             logits_parts.append(torch.stack(per_group_logits, dim=-1))
 
         if len(logits_parts) == 1:
@@ -420,14 +755,9 @@ class HierarchicalGroupStageMoE(nn.Module):
         valid_mask = self._build_valid_mask(bsz, tlen, item_seq_len, hidden.device)
 
         stage_feat = feat.index_select(-1, self.stage_feat_idx)
-        stage_feat_emb = self.stage_feat_proj(stage_feat)
-        stage_feat_emb = self._apply_reliability(stage_feat_emb, feat)
-        stage_feat_emb = self.router_feat_drop(stage_feat_emb)
+        stage_hidden_ctx = self._encode_router_hidden(h_norm, valid_mask, item_seq_len)
+        stage_feat_ctx = self._encode_stage_router_feature(stage_feat, feat, valid_mask, item_seq_len)
 
-        stage_hidden_ctx = self._maybe_pool_hidden(h_norm, valid_mask, item_seq_len)
-        stage_feat_ctx = self._maybe_pool_feature(stage_feat_emb, valid_mask, item_seq_len)
-
-        group_feat_embs: List[torch.Tensor] = []
         group_feat_ctxs: List[torch.Tensor] = []
         intra_weights_list: List[torch.Tensor] = []
         intra_logits_list: List[torch.Tensor] = []
@@ -435,33 +765,51 @@ class HierarchicalGroupStageMoE(nn.Module):
 
         for group_idx in range(self.n_groups):
             group_feat = self._group_feature_tensor(feat, group_idx)
-            group_feat_emb = self.group_feat_proj[group_idx](group_feat)
-            group_feat_emb = self._apply_reliability(group_feat_emb, feat)
-            group_feat_emb = self.router_feat_drop(group_feat_emb)
-            group_feat_embs.append(group_feat_emb)
-
-            group_feat_ctx = self._maybe_pool_feature(group_feat_emb, valid_mask, item_seq_len)
+            group_feat_ctx = self._encode_group_router_feature(
+                group_idx=group_idx,
+                group_feat=group_feat,
+                feat=feat,
+                valid_mask=valid_mask,
+                item_seq_len=item_seq_len,
+            )
             group_feat_ctxs.append(group_feat_ctx)
 
-            intra_in = self._build_router_input(stage_hidden_ctx, group_feat_ctx)
-            intra_w, intra_l = self.intra_routers[group_idx](
-                intra_in,
-                temperature=self.current_router_temperature,
-                top_k=self.current_expert_top_k,
-            )
+            if self.router_design == "group_factorized_interaction":
+                intra_hidden_ctx = stage_hidden_ctx
+                intra_feat_ctx = group_feat_ctx
+                if not self.router_use_feature:
+                    intra_feat_ctx = torch.zeros_like(intra_hidden_ctx)
+                if not self.router_use_hidden:
+                    intra_hidden_ctx = torch.zeros_like(intra_feat_ctx)
+                intra_in = self._compose_interaction(intra_hidden_ctx, intra_feat_ctx)
+            else:
+                intra_in = self._build_router_input(stage_hidden_ctx, group_feat_ctx)
+
+            if self.expert_scale <= 1:
+                intra_shape = tuple(intra_in.shape[:-1]) + (1,)
+                intra_w = torch.ones(intra_shape, device=hidden.device, dtype=hidden.dtype)
+                intra_l = torch.zeros_like(intra_w)
+            else:
+                intra_w, intra_l = self.intra_routers[group_idx](
+                    intra_in,
+                    temperature=self.current_router_temperature,
+                    top_k=self.current_expert_top_k,
+                )
             if self.router_mode == "session":
                 intra_w = intra_w.unsqueeze(1).expand(-1, tlen, -1)
                 intra_l = intra_l.unsqueeze(1).expand(-1, tlen, -1)
             intra_weights_list.append(intra_w)
             intra_logits_list.append(intra_l)
 
+            expert_feat_emb = self.group_feat_proj[group_idx](group_feat)
+            expert_feat_emb = self._apply_reliability(expert_feat_emb, feat)
             start = group_idx * self.expert_scale
             end = start + self.expert_scale
             expert_outputs = torch.stack(
                 [
                     expert(
                         h_norm,
-                        feat_emb=group_feat_emb if self.expert_use_feature else None,
+                        feat_emb=expert_feat_emb if self.expert_use_feature else None,
                     )
                     for expert in self.experts[start:end]
                 ],
@@ -473,7 +821,7 @@ class HierarchicalGroupStageMoE(nn.Module):
         group_logits = self._compute_group_logits(stage_hidden_ctx, stage_feat_ctx, group_feat_ctxs)
         if self.router_mode == "session":
             group_logits = group_logits.unsqueeze(1).expand(-1, tlen, -1)
-        group_weights = _topk_softmax(group_logits, top_k=self.group_top_k)
+        group_weights = _topk_softmax(group_logits, top_k=self.current_group_top_k)
 
         intra_weights = torch.stack(intra_weights_list, dim=-2)
         intra_logits = torch.stack(intra_logits_list, dim=-2)
@@ -486,6 +834,31 @@ class HierarchicalGroupStageMoE(nn.Module):
         stacked_group_outputs = torch.stack(group_outputs, dim=-2)
         stage_delta = (group_weights.unsqueeze(-1) * stacked_group_outputs).sum(dim=-2)
         next_hidden = hidden + (self.alpha * self.alpha_scale) * self.resid_drop(stage_delta)
+        self.last_router_aux = {
+            "group_weights": group_weights,
+            "group_logits": group_logits,
+            "group_logits_raw": group_logits,
+            "intra_group_weights": intra_weights,
+            "intra_group_logits": intra_logits,
+            "intra_group_logits_raw": intra_logits,
+        }
+        if self.group_teacher_router is not None:
+            teacher_feat = self._apply_reliability_to_raw(stage_feat, feat)
+            if self.router_mode == "session":
+                teacher_feat = self._pool_rule_session_features(
+                    teacher_feat,
+                    valid_mask=valid_mask,
+                    item_seq_len=item_seq_len,
+                    session_pooling=self.session_pooling,
+                )
+            _, teacher_group_logits = self.group_teacher_router(
+                rule_features=teacher_feat,
+                temperature=1.0,
+                top_k=None,
+            )
+            if self.router_mode == "session":
+                teacher_group_logits = teacher_group_logits.unsqueeze(1).expand(-1, tlen, -1)
+            self.last_router_aux["teacher_group_logits"] = teacher_group_logits
         return next_hidden, gate_weights, gate_logits, group_weights, group_logits, stage_delta
 
 
@@ -502,6 +875,9 @@ class HierarchicalMoEHGR(nn.Module):
         top_k: Optional[int] = None,
         group_top_k: Optional[int] = None,
         group_router_mode: str = "per_group",
+        router_design: str = "group_factorized_interaction",
+        rule_router_cfg: Optional[Dict[str, Any]] = None,
+        router_distill_enable: bool = False,
         parallel_stage_gate_top_k: Optional[int] = None,
         parallel_stage_gate_temperature: float = 1.0,
         dropout: float = 0.1,
@@ -541,6 +917,7 @@ class HierarchicalMoEHGR(nn.Module):
 
         self.active_stages: List[str] = []
         self.expert_names: Dict[str, List[str]] = {}
+        self.group_names: Dict[str, List[str]] = {}
         self.stage_default_temperatures: Dict[str, float] = {
             "macro": 1.0,
             "mid": float(mid_router_temperature),
@@ -586,6 +963,9 @@ class HierarchicalMoEHGR(nn.Module):
                 expert_top_k=top_k,
                 group_top_k=group_top_k,
                 group_router_mode=group_router_mode,
+                router_design=router_design,
+                rule_router_cfg=rule_router_cfg,
+                router_distill_enable=router_distill_enable,
                 dropout=dropout,
                 router_use_hidden=router_use_hidden,
                 router_use_feature=router_use_feature,
@@ -600,6 +980,7 @@ class HierarchicalMoEHGR(nn.Module):
             setattr(self, f"{stage_name}_stage", stage_module)
             self.active_stages.append(stage_name)
             self.expert_names[stage_name] = list(stage_module.expert_names)
+            self.group_names[stage_name] = list(stage_module.group_names)
 
         self.n_active = len(self.active_stages)
         if self.n_active > 0:
@@ -656,6 +1037,12 @@ class HierarchicalMoEHGR(nn.Module):
             raise ValueError(f"stage '{stage_name}' is not active in this HierarchicalMoEHGR instance")
         stage_module = getattr(self, f"{stage_name}_stage")
         return stage_module(hidden, feat, item_seq_len=item_seq_len)
+
+    def get_stage_router_aux(self, stage_name: str) -> Dict[str, torch.Tensor]:
+        if not self.has_stage(stage_name):
+            return {}
+        stage_module = getattr(self, f"{stage_name}_stage")
+        return dict(getattr(stage_module, "last_router_aux", {}) or {})
 
     def _build_stage_merge_input(self, hidden: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
         inputs = []

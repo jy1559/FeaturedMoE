@@ -68,7 +68,13 @@ run_model_tag() {
   key="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
   case "$key" in
     *featuredmoe_protox*) echo "FMoEProtoX" ;;
+    *featured_moe_individual*|*featuredmoe_individual*) echo "FMoEIndividual" ;;
     *featuredmoe_hir2*) echo "FMoEHiR2" ;;
+    *featured_moe_v2_hir*|*featuredmoe_v2_hir*) echo "FMoEv2HiR" ;;
+    *featured_moe_v3*|*featuredmoe_v3*) echo "FMoEv3" ;;
+    *featured_moe_v4_distillation*|*featuredmoe_v4_distillation*) echo "FMoEv4D" ;;
+    *featured_moe_hgr_v4*|*featuredmoe_hgr_v4*|*featuredmoe_hgrv4*|*featured_moe_hgrv4*) echo "FMoEHGRv4" ;;
+    *featured_moe_hgr_v3*|*featuredmoe_hgr_v3*|*featuredmoe_hgrv3*|*featured_moe_hgrv3*) echo "FMoEHGRv3" ;;
     *featured_moe_hgr*|*featuredmoe_hgr*) echo "FMoEHGR" ;;
     *featuredmoe_hir*) echo "FMoEHiR" ;;
     *featuredmoe_v2*) echo "FMoEv2" ;;
@@ -205,6 +211,115 @@ run_make_log_path() {
   echo "${d}/${tag}.log"
 }
 
+run_make_phase_log_path() {
+  local group="${1:?group}"
+  local axis="${2:?axis}"
+  local dataset="${3:?dataset}"
+  local model="${4:?model}"
+  local phase="${5:-PNA}"
+
+  local d axis_tag phase_bucket dataset_tag model_tag short_phase base path n combo_prefix
+  axis_tag="$(run_sanitize "${axis}")"
+  phase_bucket="$(run_sanitize "${phase%%_*}")"
+  [ -z "$phase_bucket" ] && phase_bucket="PNA"
+  dataset_tag="$(run_dataset_tag "${dataset}")"
+  model_tag="$(run_model_tag "${model}")"
+
+  d="$(run_log_dir "$group")/${axis_tag}/${phase_bucket}/${dataset_tag}/${model_tag}"
+  run_ensure_dir "$d"
+
+  short_phase="${phase#${phase%%_*}_}"
+  [ -z "$short_phase" ] && short_phase="${phase}"
+  base="$(run_sanitize "$short_phase")"
+  [ -z "$base" ] && base="run"
+  combo_prefix=""
+  if [[ "$short_phase" =~ (^|_)C([0-9]+)($|_) ]]; then
+    printf -v combo_prefix "%03d_" "$((10#${BASH_REMATCH[2]}))"
+  fi
+  base="${combo_prefix}${base}"
+
+  path="${d}/${base}.log"
+  if [ ! -e "$path" ]; then
+    echo "$path"
+    return 0
+  fi
+
+  n=2
+  while :; do
+    path="${d}/${base}_r${n}.log"
+    if [ ! -e "$path" ]; then
+      echo "$path"
+      return 0
+    fi
+    n=$((n + 1))
+  done
+}
+
+run_make_sequential_phase_log_path() {
+  local group="${1:?group}"
+  local axis="${2:?axis}"
+  local dataset="${3:?dataset}"
+  local model="${4:?model}"
+  local phase="${5:-PNA}"
+
+  local d axis_tag phase_bucket dataset_tag model_tag short_phase base lock_dir counter_file
+  local next_id max_id path n prefix
+  axis_tag="$(run_sanitize "${axis}")"
+  phase_bucket="$(run_sanitize "${phase%%_*}")"
+  [ -z "$phase_bucket" ] && phase_bucket="PNA"
+  dataset_tag="$(run_dataset_tag "${dataset}")"
+  model_tag="$(run_model_tag "${model}")"
+
+  d="$(run_log_dir "$group")/${axis_tag}/${phase_bucket}/${dataset_tag}/${model_tag}"
+  run_ensure_dir "$d"
+
+  short_phase="${phase#${phase%%_*}_}"
+  [ -z "$short_phase" ] && short_phase="${phase}"
+  base="$(run_sanitize "$short_phase")"
+  [ -z "$base" ] && base="run"
+
+  lock_dir="${d}/.log_index_lock"
+  counter_file="${d}/.log_index_counter"
+
+  while ! mkdir "$lock_dir" 2>/dev/null; do
+    sleep 0.02
+  done
+
+  if [ -f "$counter_file" ] && read -r next_id <"$counter_file" && [[ "$next_id" =~ ^[0-9]+$ ]]; then
+    :
+  else
+    max_id=-1
+    while IFS= read -r name; do
+      if [[ "$name" =~ ^([0-9]{3})_.*\.log$ ]]; then
+        n=$((10#${BASH_REMATCH[1]}))
+        if [ "$n" -gt "$max_id" ]; then
+          max_id="$n"
+        fi
+      fi
+    done < <(find "$d" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | sort)
+    next_id=$((max_id + 1))
+  fi
+  echo $((next_id + 1)) >"$counter_file"
+  rmdir "$lock_dir"
+
+  printf -v prefix "%03d" "$next_id"
+  path="${d}/${prefix}_${base}.log"
+  if [ ! -e "$path" ]; then
+    echo "$path"
+    return 0
+  fi
+
+  n=2
+  while :; do
+    path="${d}/${prefix}_${base}_r${n}.log"
+    if [ ! -e "$path" ]; then
+      echo "$path"
+      return 0
+    fi
+    n=$((n + 1))
+  done
+}
+
 run_tracker_start() {
   "$(run_python_bin)" "$(run_tracker_script)" start "$@"
 }
@@ -279,9 +394,12 @@ run_export_runtime_env() {
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe"
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_hir"
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_hgr"
+  run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_hgr_v3"
+  run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_hgr_v4"
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_hir2"
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_protox"
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_v2"
+  run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_v4_distillation"
   run_ensure_dir "${HYPEROPT_RESULTS_DIR}/fmoe_rule"
   run_ensure_dir "${RUN_TIMELINE_DIR}"
   run_ensure_dir "${RUN_INVENTORY_DIR}"

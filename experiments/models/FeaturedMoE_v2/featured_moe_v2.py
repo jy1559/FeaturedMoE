@@ -8,6 +8,7 @@ Highlights:
 
 from __future__ import annotations
 
+from collections import defaultdict
 import logging
 from typing import Dict, Optional
 
@@ -28,10 +29,12 @@ from .layout_schema import LayoutSpec, parse_layout_catalog, stage_boundary_summ
 from .losses import (
     compute_expert_aux_loss,
     compute_feature_specialization_aux_loss,
+    compute_router_distill_aux_loss,
     compute_stage_merge_aux_loss,
 )
 from .schedule import ScheduleController
 from .stage_executor import StageExecutorV2
+from ..FeaturedMoE.logging_utils import MoELogger
 from ..FeaturedMoE.routers import load_balance_loss
 from ..FeaturedMoE.transformer import TransformerEncoder
 
@@ -142,6 +145,20 @@ class FeaturedMoE_V2(SequentialRecommender):
         self.rule_router_cfg = resolver.get("rule_router", {}) or {}
         if not isinstance(self.rule_router_cfg, dict):
             raise ValueError("rule_router must be a dict when provided.")
+        self.router_design = str(
+            resolver.get("router_design", "group_factorized_interaction")
+        ).lower().strip()
+        if self.router_design not in {"flat_legacy", "group_factorized_interaction"}:
+            raise ValueError(
+                "router_design must be one of ['flat_legacy','group_factorized_interaction'], "
+                f"got {self.router_design}"
+            )
+        self.group_top_k = int(resolver.get("group_top_k", 0))
+        self.expert_top_k = int(resolver.get("expert_top_k", 1))
+        self.router_distill_enable = bool(resolver.get("router_distill_enable", False))
+        self.router_distill_lambda = float(resolver.get("router_distill_lambda", 0.0))
+        self.router_distill_temperature = float(resolver.get("router_distill_temperature", 1.5))
+        self.router_distill_until = float(resolver.get("router_distill_until", 0.2))
 
         if self.router_impl == "learned" and not (self.router_use_hidden or self.router_use_feature):
             raise ValueError("router_use_hidden and router_use_feature cannot both be false")
@@ -183,16 +200,16 @@ class FeaturedMoE_V2(SequentialRecommender):
 
         # --- Loss ---
         self.use_aux_loss = bool(resolver.get("use_aux_loss", True))
-        self.balance_loss_lambda = float(resolver.get("balance_loss_lambda", 0.01))
+        self.balance_loss_lambda = float(resolver.get("balance_loss_lambda", 0.003))
         self.stage_merge_aux_enable = bool(resolver.get("fmoe_v2_stage_merge_aux_enable", False))
         self.stage_merge_aux_lambda_scale = float(resolver.get("fmoe_v2_stage_merge_aux_lambda_scale", 1.0))
-        self.feature_spec_aux_enable = bool(resolver.get("fmoe_v2_feature_spec_aux_enable", False))
-        self.feature_spec_aux_lambda = float(resolver.get("fmoe_v2_feature_spec_aux_lambda", 0.0))
+        self.feature_spec_aux_enable = bool(resolver.get("fmoe_v2_feature_spec_aux_enable", True))
+        self.feature_spec_aux_lambda = float(resolver.get("fmoe_v2_feature_spec_aux_lambda", 3e-4))
         self.feature_spec_aux_stages = self._parse_stage_list(
-            resolver.get("fmoe_v2_feature_spec_stages", ["mid", "micro"]),
-            default=["mid", "micro"],
+            resolver.get("fmoe_v2_feature_spec_stages", ["mid"]),
+            default=["mid"],
         )
-        self.feature_spec_aux_min_tokens = float(resolver.get("fmoe_v2_feature_spec_min_tokens", 16))
+        self.feature_spec_aux_min_tokens = float(resolver.get("fmoe_v2_feature_spec_min_tokens", 8))
 
         # --- Optional FFN-MoE ---
         self.ffn_moe = bool(resolver.get("ffn_moe", False))
@@ -265,6 +282,10 @@ class FeaturedMoE_V2(SequentialRecommender):
             router_impl=self.router_impl,
             router_impl_by_stage=self.router_impl_by_stage,
             rule_router_cfg=self.rule_router_cfg,
+            router_design=self.router_design,
+            group_top_k=self.group_top_k,
+            expert_top_k=self.expert_top_k,
+            router_distill_enable=self.router_distill_enable,
             router_use_hidden=self.router_use_hidden,
             router_use_feature=self.router_use_feature,
             expert_use_hidden=self.expert_use_hidden,
@@ -281,6 +302,11 @@ class FeaturedMoE_V2(SequentialRecommender):
         )
 
         self._stage_n_experts = self.stage_executor.stage_n_experts()
+        self._stage_expert_names = self.stage_executor.stage_expert_names()
+        self._stage_group_names = self.stage_executor.stage_group_names()
+        self.moe_logger = MoELogger(self._stage_expert_names)
+        self.group_logger = MoELogger(self._stage_group_names)
+        self._reset_router_epoch_stats()
 
         self.schedule = ScheduleController(
             enable=self.fmoe_schedule_enable,
@@ -310,6 +336,13 @@ class FeaturedMoE_V2(SequentialRecommender):
             config["fmoe_v2_layout_summary"] = stage_boundary_summary(self.layout)
             config["router_impl"] = self.router_impl
             config["router_impl_by_stage"] = dict(self.router_impl_by_stage)
+            config["router_design"] = self.router_design
+            config["group_top_k"] = int(self.group_top_k)
+            config["expert_top_k"] = int(self.expert_top_k)
+            config["router_distill_enable"] = bool(self.router_distill_enable)
+            config["router_distill_lambda"] = float(self.router_distill_lambda)
+            config["router_distill_temperature"] = float(self.router_distill_temperature)
+            config["router_distill_until"] = float(self.router_distill_until)
             config["fmoe_v2_feature_spec_aux_enable"] = bool(self.feature_spec_aux_enable)
             config["fmoe_v2_feature_spec_aux_lambda"] = float(self.feature_spec_aux_lambda)
             config["fmoe_v2_feature_spec_stages"] = list(self.feature_spec_aux_stages)
@@ -324,7 +357,9 @@ class FeaturedMoE_V2(SequentialRecommender):
             "FeaturedMoE_v2 init: layout_id=%s execution=%s global_pre=%s global_post=%s boundaries=%s total_moe_blocks=%s "
             "d_model=%s d_feat=%s d_exp=%s d_router=%s expert_scale=%s top_k=%s aux=%s merge_aux=%s "
             "feature_spec_aux=%s feature_spec_lambda=%s feature_spec_stages=%s feature_spec_min_tokens=%s "
-            "router_impl=%s router_impl_by_stage=%s rule_router=%s",
+            "router_impl=%s router_impl_by_stage=%s router_design=%s group_top_k=%s expert_top_k=%s "
+            "router_distill_enable=%s router_distill_lambda=%s router_distill_temperature=%s router_distill_until=%s "
+            "rule_router=%s",
             self.layout_id,
             self.layout.execution,
             self.layout.global_pre_layers,
@@ -345,6 +380,13 @@ class FeaturedMoE_V2(SequentialRecommender):
             self.feature_spec_aux_min_tokens,
             self.router_impl,
             self.router_impl_by_stage,
+            self.router_design,
+            self.group_top_k,
+            self.expert_top_k,
+            self.router_distill_enable,
+            self.router_distill_lambda,
+            self.router_distill_temperature,
+            self.router_distill_until,
             self.rule_router_cfg,
         )
 
@@ -410,6 +452,50 @@ class FeaturedMoE_V2(SequentialRecommender):
                 logger.warning("Feature field '%s' not found - using zeros.", field)
         return torch.stack(feat_list, dim=-1)
 
+    def _reset_router_epoch_stats(self) -> None:
+        self._router_group_entropy_sum = defaultdict(float)
+        self._router_group_entropy_count = defaultdict(int)
+        self._router_active_clone_sum = {}
+        self._router_active_clone_count = defaultdict(int)
+
+    def _accumulate_router_stats(
+        self,
+        *,
+        group_weights: Dict[str, torch.Tensor],
+        intra_group_weights: Dict[str, torch.Tensor],
+        item_seq_len: Optional[torch.Tensor],
+    ) -> None:
+        for stage_key, group_w in group_weights.items():
+            _, tlen, _ = group_w.shape
+            if item_seq_len is not None:
+                lens = item_seq_len.to(device=group_w.device).long()
+                valid = torch.arange(tlen, device=group_w.device).unsqueeze(0) < lens.unsqueeze(1)
+                flat_group = group_w[valid]
+            else:
+                flat_group = group_w.reshape(-1, group_w.shape[-1])
+            if flat_group.numel() == 0:
+                continue
+            entropy = -(flat_group.clamp(min=1e-8) * flat_group.clamp(min=1e-8).log()).sum(dim=-1)
+            self._router_group_entropy_sum[stage_key] += float(entropy.sum().item())
+            self._router_group_entropy_count[stage_key] += int(entropy.numel())
+
+        for stage_key, intra_w in intra_group_weights.items():
+            _, tlen, _, _ = intra_w.shape
+            if item_seq_len is not None:
+                lens = item_seq_len.to(device=intra_w.device).long()
+                valid = torch.arange(tlen, device=intra_w.device).unsqueeze(0) < lens.unsqueeze(1)
+                flat_intra = intra_w[valid]
+            else:
+                flat_intra = intra_w.reshape(-1, intra_w.shape[-2], intra_w.shape[-1])
+            if flat_intra.numel() == 0:
+                continue
+            active = (flat_intra > 0).sum(dim=-1).float()
+            active_sum = active.sum(dim=0).detach().cpu()
+            if stage_key not in self._router_active_clone_sum:
+                self._router_active_clone_sum[stage_key] = torch.zeros_like(active_sum)
+            self._router_active_clone_sum[stage_key] += active_sum
+            self._router_active_clone_count[stage_key] += int(active.shape[0])
+
     def forward(self, item_seq, item_seq_len, feat=None):
         bsz, tlen = item_seq.shape
 
@@ -425,11 +511,12 @@ class FeaturedMoE_V2(SequentialRecommender):
 
         gate_weights: Dict[str, torch.Tensor] = {}
         gate_logits: Dict[str, torch.Tensor] = {}
+        router_aux: Dict[str, Dict[str, torch.Tensor]] = {}
         stage_merge_weights = None
         stage_merge_logits = None
 
         if feat is not None:
-            tokens, gate_weights, gate_logits, stage_merge_weights, stage_merge_logits = self.stage_executor(
+            tokens, gate_weights, gate_logits, router_aux, stage_merge_weights, stage_merge_logits = self.stage_executor(
                 hidden=tokens,
                 item_seq=item_seq,
                 feat=feat,
@@ -444,6 +531,13 @@ class FeaturedMoE_V2(SequentialRecommender):
         aux_data = {
             "gate_weights": gate_weights,
             "gate_logits": gate_logits,
+            "group_weights": router_aux.get("group_weights", {}),
+            "group_logits": router_aux.get("group_logits", {}),
+            "group_logits_raw": router_aux.get("group_logits_raw", {}),
+            "intra_group_weights": router_aux.get("intra_group_weights", {}),
+            "intra_group_logits": router_aux.get("intra_group_logits", {}),
+            "intra_group_logits_raw": router_aux.get("intra_group_logits_raw", {}),
+            "teacher_group_logits": router_aux.get("teacher_group_logits", {}),
             "stage_merge_weights": stage_merge_weights,
             "stage_merge_logits": stage_merge_logits,
             "ffn_moe_weights": ffn_moe_weights,
@@ -497,6 +591,34 @@ class FeaturedMoE_V2(SequentialRecommender):
                 enabled=self.feature_spec_aux_enable,
                 device=ce_loss.device,
             )
+            aux_loss = aux_loss + compute_router_distill_aux_loss(
+                teacher_group_logits=aux_data.get("teacher_group_logits", {}),
+                student_group_logits=aux_data.get("group_logits_raw", {}),
+                item_seq_len=item_seq_len,
+                aux_lambda=self.router_distill_lambda,
+                distill_temperature=self.router_distill_temperature,
+                enabled=self.router_distill_enable,
+                progress=float(self._schedule_epoch) / float(max(self._schedule_total_epochs - 1, 1)),
+                until=self.router_distill_until,
+                device=ce_loss.device,
+            )
+
+        if self.fmoe_debug_logging and self.training:
+            if aux_data.get("gate_weights"):
+                self.moe_logger.accumulate(
+                    gate_weights=aux_data["gate_weights"],
+                    item_seq_len=item_seq_len,
+                )
+            if aux_data.get("group_weights"):
+                self.group_logger.accumulate(
+                    gate_weights=aux_data["group_weights"],
+                    item_seq_len=item_seq_len,
+                )
+                self._accumulate_router_stats(
+                    group_weights=aux_data.get("group_weights", {}),
+                    intra_group_weights=aux_data.get("intra_group_weights", {}),
+                    item_seq_len=item_seq_len,
+                )
 
         return ce_loss + aux_loss
 
@@ -519,3 +641,28 @@ class FeaturedMoE_V2(SequentialRecommender):
         seq_output, _ = self.forward(item_seq, item_seq_len, feat)
 
         return seq_output @ self.item_embedding.weight.T
+
+    def get_epoch_log_summary(self) -> Dict:
+        summary = self.moe_logger.get_and_reset()
+        group_summary = self.group_logger.get_and_reset()
+        summary["group_stages"] = group_summary.get("stages", {})
+        summary["router"] = {}
+
+        all_stage_keys = set(self._router_group_entropy_sum) | set(self._router_active_clone_sum)
+        for stage_key in sorted(all_stage_keys):
+            base_stage = stage_key.split("@", 1)[0]
+            entropy_count = max(self._router_group_entropy_count.get(stage_key, 0), 1)
+            active_count = max(self._router_active_clone_count.get(stage_key, 0), 1)
+            active_sum = self._router_active_clone_sum.get(stage_key)
+            if active_sum is None:
+                active_list = []
+            else:
+                active_list = (active_sum / float(active_count)).tolist()
+            summary["router"][stage_key] = {
+                "group_names": list(self._stage_group_names.get(base_stage, [])),
+                "group_entropy": float(self._router_group_entropy_sum.get(stage_key, 0.0)) / float(entropy_count),
+                "active_clones_per_group": active_list,
+            }
+
+        self._reset_router_epoch_stats()
+        return summary

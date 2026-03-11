@@ -4,10 +4,11 @@
 from pathlib import Path
 import sys
 
-import torch
+import pytest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
+torch = pytest.importorskip("torch")
 
 from models.FeaturedMoE.feature_config import (  # noqa: E402
     ALL_FEATURE_COLUMNS,
@@ -97,6 +98,10 @@ def test_stage_executor_router_impl_by_stage_override():
         router_impl="learned",
         router_impl_by_stage={"mid": "rule_soft", "micro": "rule_soft"},
         rule_router_cfg={"n_bins": 5, "feature_per_expert": 4},
+        router_design="flat_legacy",
+        group_top_k=0,
+        expert_top_k=1,
+        router_distill_enable=False,
         router_use_hidden=True,
         router_use_feature=True,
         expert_use_hidden=True,

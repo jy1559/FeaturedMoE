@@ -32,6 +32,8 @@ EXPERT_SCALE="3"
 
 LR_SPACE_OVERRIDE=""
 WD_SPACE_OVERRIDE=""
+HIDDEN_DROPOUT_OVERRIDE=""
+BALANCE_LOSS_LAMBDA_OVERRIDE=""
 EXP_NAME=""
 EXP_DESC=""
 EXP_FOCUS=""
@@ -44,6 +46,7 @@ Usage: $0 --dataset <movielens1m|retail_rocket> [--ablation B0|B1|R0|R1]
           [--max-evals N] [--tune-epochs N] [--tune-patience N]
           [--search-profile p1_shallow|narrow_ml1|wide]
           [--lr-space csv] [--wd-space csv]
+          [--hidden-dropout X] [--balance-loss-lambda X]
 USAGE
 }
 
@@ -99,6 +102,8 @@ while [ "$#" -gt 0 ]; do
     --search-profile) SEARCH_PROFILE="$2"; shift 2 ;;
     --lr-space) LR_SPACE_OVERRIDE="$2"; shift 2 ;;
     --wd-space) WD_SPACE_OVERRIDE="$2"; shift 2 ;;
+    --hidden-dropout) HIDDEN_DROPOUT_OVERRIDE="$2"; shift 2 ;;
+    --balance-loss-lambda) BALANCE_LOSS_LAMBDA_OVERRIDE="$2"; shift 2 ;;
     --train-batch-size) TRAIN_BATCH_SIZE="$2"; shift 2 ;;
     --eval-batch-size) EVAL_BATCH_SIZE="$2"; shift 2 ;;
     --embedding-size) EMBEDDING_SIZE="$2"; shift 2 ;;
@@ -140,6 +145,8 @@ HEADS="${NUM_HEADS:-$HEADS}"
 SCALE="${EXPERT_SCALE:-$SCALE}"
 TRAIN_BS="${TRAIN_BATCH_SIZE:-$TRAIN_BS}"
 EVAL_BS="${EVAL_BATCH_SIZE:-$EVAL_BS}"
+DROP="${HIDDEN_DROPOUT_OVERRIDE:-$DROP}"
+BAL="${BALANCE_LOSS_LAMBDA_OVERRIDE:-$BAL}"
 
 case "$SEARCH_PROFILE" in
   p1_shallow)
@@ -255,16 +262,16 @@ cmd=(
   "++search.weight_decay=${WD_SPACE}"
   "++search.hidden_dropout_prob=[${DROP}]"
   "++search.balance_loss_lambda=[${BAL}]"
-  "+router_impl=${ROUTER_IMPL}"
+  "router_impl=${ROUTER_IMPL}"
   "++search.router_impl=[${ROUTER_IMPL}]"
-  "+router_impl_by_stage=${ROUTER_IMPL_BY_STAGE}"
+  "++router_impl_by_stage=${ROUTER_IMPL_BY_STAGE}"
   "++search.router_impl_by_stage=[${ROUTER_IMPL_BY_STAGE}]"
-  "+router_use_hidden=${ROUTER_USE_HIDDEN}"
+  "router_use_hidden=${ROUTER_USE_HIDDEN}"
   "++search.router_use_hidden=[${ROUTER_USE_HIDDEN}]"
-  "+router_use_feature=${ROUTER_USE_FEATURE}"
+  "router_use_feature=${ROUTER_USE_FEATURE}"
   "++search.router_use_feature=[${ROUTER_USE_FEATURE}]"
-  "+rule_router.n_bins=${RULE_N_BINS}"
-  "+rule_router.feature_per_expert=${RULE_FEATURES_PER_EXPERT}"
+  "rule_router.n_bins=${RULE_N_BINS}"
+  "rule_router.feature_per_expert=${RULE_FEATURES_PER_EXPERT}"
   "moe_top_k=0"
   "++search.moe_top_k=[0]"
   "fmoe_schedule_enable=${SCH_ENABLE}"

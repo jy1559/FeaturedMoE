@@ -281,6 +281,9 @@ routing_common:
   expert_use_feature: true
   router_impl: learned
   router_impl_by_stage: {}
+  router_design: group_factorized_interaction
+  group_top_k: 0
+  expert_top_k: 1
   rule_router:
     n_bins: 5
     feature_per_expert: 4
@@ -290,6 +293,10 @@ routing_common:
   moe_top_k_policy: auto
   moe_top_k_ratio: 0.5
   moe_top_k_min: 1
+  router_distill_enable: false
+  router_distill_lambda: 0.0
+  router_distill_temperature: 1.5
+  router_distill_until: 0.2
   macro_routing_scope: session
   macro_session_pooling: query
   mid_router_temperature: 1.3
@@ -316,13 +323,13 @@ schedule:
 
 loss_regularization:
   use_aux_loss: true
-  balance_loss_lambda: 0.01
+  balance_loss_lambda: 0.003
   fmoe_v2_stage_merge_aux_enable: false
   fmoe_v2_stage_merge_aux_lambda_scale: 1.0
-  fmoe_v2_feature_spec_aux_enable: false
-  fmoe_v2_feature_spec_aux_lambda: 0.0
-  fmoe_v2_feature_spec_stages: [mid, micro]
-  fmoe_v2_feature_spec_min_tokens: 16
+  fmoe_v2_feature_spec_aux_enable: true
+  fmoe_v2_feature_spec_aux_lambda: 3.0e-4
+  fmoe_v2_feature_spec_stages: [mid]
+  fmoe_v2_feature_spec_min_tokens: 8
 
 runtime:
   fmoe_debug_logging: false
@@ -335,6 +342,13 @@ learning_rate: 0.0005
 search:
   fmoe_v2_layout_id: [0]
   fmoe_stage_execution_mode: [serial]
+  router_design: [group_factorized_interaction]
+  group_top_k: [0]
+  expert_top_k: [1]
+  router_distill_enable: [false]
+  router_distill_lambda: [0.0]
+  router_distill_temperature: [1.5]
+  router_distill_until: [0.2]
   embedding_size: [128]
   num_heads: [8]
   d_feat_emb: [16]
@@ -347,11 +361,11 @@ search:
   rule_router.feature_per_expert: [4]
   learning_rate: [4e-4, 1.5e-2]
   weight_decay: [0.0, 1.0e-5]
-  hidden_dropout_prob: [0.05, 0.2]
-  balance_loss_lambda: [0.0005, 0.1]
+  hidden_dropout_prob: [0.08, 0.12]
+  balance_loss_lambda: [0.001, 0.003, 0.01]
   moe_top_k: [0]
   moe_top_k_policy: [auto]
   moe_top_k_ratio: [0.5]
   fmoe_schedule_enable: [false]
-  fmoe_v2_feature_spec_aux_enable: [false]
-  fmoe_v2_feature_spec_aux_lambda: [0.0]
+  fmoe_v2_feature_spec_aux_enable: [true]
+  fmoe_v2_feature_spec_aux_lambda: [1.0e-4, 3.0e-4, 7.0e-4]

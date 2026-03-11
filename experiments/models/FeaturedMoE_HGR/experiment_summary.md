@@ -1,10 +1,10 @@
 # FeaturedMoE_HGR Experiment Report
 
-- generated_at_utc: 2026-03-09T02:05:24.331944+00:00
+- generated_at_utc: 2026-03-10T01:14:11.242438+00:00
 - track: fmoe_hgr
 - include_rule: keep OOM runs, keep successful runs with valid MRR@20, exclude non-OOM failures and no-metric runs
-- matched_end_events: 26
-- included_runs: 26
+- matched_end_events: 58
+- included_runs: 58
 - excluded_non_oom_error_runs: 0
 - excluded_no_metric_runs: 0
 
@@ -12,12 +12,44 @@
 
 | dataset | best_mrr@20 | axis | phase | duration_min | ended_at_utc | run_id |
 |---|---:|---|---|---:|---|---|
-| movielens1m | 0.094600 | hparam | P1HGR_widewide_C64_serial_per_group | 108.37 | 2026-03-09T00:34:32.283442+00:00 | 20260308_224 |
+| movielens1m | 0.095800 | hparam | P3HGR_router16_C14_A1_M6_serial_hybrid | 211.71 | 2026-03-10T01:05:58.407968+00:00 | 20260309_213 |
 
 ## Included Runs
 
 | end_utc | dataset | axis | phase | status | oom | mrr@20 | duration_min | how | run_id |
 |---|---|---|---|---|---|---:|---:|---|---|
+| 2026-03-10T01:05:58.407968+00:00 | movielens1m | hparam | P3HGR_router16_C14_A1_M6_serial_hybrid | success | no | 0.095800 | 211.71 | hparam/P3HGR_router16_C14_A1_M6_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_213 |
+| 2026-03-10T00:29:26.550606+00:00 | movielens1m | hparam | P3HGR_router16_C02_A0_M2_serial_hybrid | success | no | 0.094800 | 195.25 | hparam/P3HGR_router16_C02_A0_M2_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_211 |
+| 2026-03-10T00:20:01.154806+00:00 | movielens1m | hparam | P3HGR_router16_C06_A0_M6_serial_hybrid | success | no | 0.095100 | 189.87 | hparam/P3HGR_router16_C06_A0_M6_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_211 |
+| 2026-03-09T21:59:18.351864+00:00 | movielens1m | hparam | P3HGR_router16_C09_A1_M1_serial_hybrid | success | no | 0.094600 | 202.66 | hparam/P3HGR_router16_C09_A1_M1_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_183 |
+| 2026-03-09T21:34:15.315031+00:00 | movielens1m | hparam | P3HGR_router16_C13_A1_M5_serial_hybrid | success | no | 0.095100 | 201.16 | hparam/P3HGR_router16_C13_A1_M5_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_181 |
+| 2026-03-09T21:14:11.226804+00:00 | movielens1m | hparam | P3HGR_router16_C01_A0_M1_serial_hybrid | success | no | 0.095000 | 178.06 | hparam/P3HGR_router16_C01_A0_M1_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_181 |
+| 2026-03-09T21:10:08.819154+00:00 | movielens1m | hparam | P3HGR_router16_C05_A0_M5_serial_hybrid | success | no | 0.094800 | 193.76 | hparam/P3HGR_router16_C05_A0_M5_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_175 |
+| 2026-03-09T18:36:38.345258+00:00 | movielens1m | hparam | P3HGR_router16_C08_A1_M0_serial_hybrid | success | no | 0.095600 | 212.04 | hparam/P3HGR_router16_C08_A1_M0_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_150 |
+| 2026-03-09T18:16:07.349376+00:00 | movielens1m | hparam | P3HGR_router16_C00_A0_M0_serial_hybrid | success | no | 0.095400 | 191.52 | hparam/P3HGR_router16_C00_A0_M0_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_150 |
+| 2026-03-09T18:13:05.180412+00:00 | movielens1m | hparam | P3HGR_router16_C12_A1_M4_serial_hybrid | success | no | 0.094700 | 188.48 | hparam/P3HGR_router16_C12_A1_M4_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_150 |
+| 2026-03-09T17:56:22.583634+00:00 | movielens1m | hparam | P3HGR_router16_C04_A0_M4_serial_hybrid | success | no | 0.095300 | 171.77 | hparam/P3HGR_router16_C04_A0_M4_serial_hybrid ; --max-evals=10, --tune-epochs=100, --tune-patience=15, dataset=movielens1m | 20260309_150 |
+| 2026-03-09T14:58:44.453750+00:00 | movielens1m | hparam | P2HGR_dim8_C00_L15H_D0_serial_hybrid | success | no | 0.095600 | 143.56 | hparam/P2HGR_dim8_C00_L15H_D0_serial_hybrid ; --max-evals=10, --tune-epochs=40, --tune-patience=8, dataset=movielens1m | 20260309_123 |
+| 2026-03-09T11:47:45.063815+00:00 | movielens1m | hparam | P15HGR_layout24_C09_L11A_R0_serial_per_group | success | no | 0.087500 | 72.98 | hparam/P15HGR_layout24_C09_L11A_R0_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_103 |
+| 2026-03-09T11:38:35.485832+00:00 | movielens1m | hparam | P15HGR_layout24_C02_L0A_R2_serial_hybrid | success | no | 0.089800 | 98.97 | hparam/P15HGR_layout24_C02_L0A_R2_serial_hybrid ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_095 |
+| 2026-03-09T11:35:17.522292+00:00 | movielens1m | hparam | P15HGR_layout24_C14_L15A_R2_serial_hybrid | success | no | 0.093700 | 95.28 | hparam/P15HGR_layout24_C14_L15A_R2_serial_hybrid ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_100 |
+| 2026-03-09T10:34:46.075154+00:00 | movielens1m | hparam | P15HGR_layout24_C08_L5A_R2_serial_hybrid | success | no | 0.089000 | 76.37 | hparam/P15HGR_layout24_C08_L5A_R2_serial_hybrid ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_091 |
+| 2026-03-09T10:25:36.853840+00:00 | movielens1m | hparam | P15HGR_layout24_C20_L10A_R2_serial_hybrid | success | no | 0.088800 | 73.51 | hparam/P15HGR_layout24_C20_L10A_R2_serial_hybrid ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_091 |
+| 2026-03-09T10:00:00.588325+00:00 | movielens1m | hparam | P15HGR_layout24_C13_L15A_R1_serial_per_group | success | no | 0.092300 | 94.72 | hparam/P15HGR_layout24_C13_L15A_R1_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_082 |
+| 2026-03-09T09:59:36.749370+00:00 | movielens1m | hparam | P15HGR_layout24_C01_L0A_R1_serial_per_group | success | no | 0.087700 | 94.70 | hparam/P15HGR_layout24_C01_L0A_R1_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_082 |
+| 2026-03-09T09:18:23.443119+00:00 | movielens1m | hparam | P15HGR_layout24_C07_L5A_R1_serial_per_group | success | no | 0.087800 | 73.71 | hparam/P15HGR_layout24_C07_L5A_R1_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_080 |
+| 2026-03-09T09:12:06.042619+00:00 | movielens1m | hparam | P15HGR_layout24_C19_L10A_R1_serial_per_group | success | no | 0.087900 | 70.97 | hparam/P15HGR_layout24_C19_L10A_R1_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_080 |
+| 2026-03-09T08:25:17.252062+00:00 | movielens1m | hparam | P15HGR_layout24_C12_L15A_R0_serial_per_group | success | no | 0.093300 | 94.60 | hparam/P15HGR_layout24_C12_L15A_R0_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_065 |
+| 2026-03-09T08:24:54.676124+00:00 | movielens1m | hparam | P15HGR_layout24_C00_L0A_R0_serial_per_group | success | no | 0.087800 | 94.23 | hparam/P15HGR_layout24_C00_L0A_R0_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_065 |
+| 2026-03-09T08:04:40.593280+00:00 | movielens1m | hparam | P15HGR_layout24_C06_L5A_R0_serial_per_group | success | no | 0.088100 | 73.99 | hparam/P15HGR_layout24_C06_L5A_R0_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_065 |
+| 2026-03-09T08:01:07.352794+00:00 | movielens1m | hparam | P15HGR_layout24_C18_L10A_R0_serial_per_group | success | no | 0.088400 | 70.44 | hparam/P15HGR_layout24_C18_L10A_R0_serial_per_group ; --max-evals=10, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_065 |
+| 2026-03-09T06:26:36.358156+00:00 | movielens1m | hparam | P1HGR_joint32_C09_A2_R1_serial_per_group | success | no | 0.087000 | 60.89 | hparam/P1HGR_joint32_C09_A2_R1_serial_per_group ; --max-evals=8, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_052 |
+| 2026-03-09T06:05:35.581143+00:00 | movielens1m | hparam | P1HGR_joint32_C24_A6_R0_serial_per_group | success | no | 0.091300 | 107.40 | hparam/P1HGR_joint32_C24_A6_R0_serial_per_group ; --max-evals=8, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_041 |
+| 2026-03-09T05:47:52.631485+00:00 | movielens1m | hparam | P1HGR_joint32_C16_A4_R0_serial_per_group | success | no | 0.092000 | 89.68 | hparam/P1HGR_joint32_C16_A4_R0_serial_per_group ; --max-evals=8, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_041 |
+| 2026-03-09T05:39:13.896182+00:00 | movielens1m | hparam | P1HGR_joint32_C00_A0_R0_serial_per_group | success | no | 0.087900 | 81.04 | hparam/P1HGR_joint32_C00_A0_R0_serial_per_group ; --max-evals=8, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_041 |
+| 2026-03-09T05:25:42.531665+00:00 | movielens1m | hparam | P1HGR_joint32_C08_A2_R0_serial_per_group | success | no | 0.085500 | 67.52 | hparam/P1HGR_joint32_C08_A2_R0_serial_per_group ; --max-evals=8, --tune-epochs=25, --tune-patience=5, dataset=movielens1m | 20260309_041 |
+| 2026-03-09T02:08:38.878201+00:00 | movielens1m | hparam | P1HGR_widewide_C46_parallel_per_group | success | no | 0.089600 | 70.31 | hparam/P1HGR_widewide_C46_parallel_per_group ; --max-evals=15, --tune-epochs=20, --tune-patience=5, dataset=movielens1m | 20260309_005 |
+| 2026-03-09T02:08:10.594856+00:00 | movielens1m | hparam | P1HGR_widewide_C26_serial_hybrid | success | no | 0.091800 | 73.21 | hparam/P1HGR_widewide_C26_serial_hybrid ; --max-evals=15, --tune-epochs=20, --tune-patience=5, dataset=movielens1m | 20260309_005 |
 | 2026-03-09T02:05:24.228201+00:00 | movielens1m | hparam | P1HGR_widewide_C65_serial_per_group | success | no | 0.093800 | 90.86 | hparam/P1HGR_widewide_C65_serial_per_group ; --max-evals=15, --tune-epochs=20, --tune-patience=5, dataset=movielens1m | 20260309_003 |
 | 2026-03-09T01:02:40.301427+00:00 | movielens1m | hparam | P1HGR_widewide_C03_parallel_hybrid | success | no | 0.090700 | 200.24 | hparam/P1HGR_widewide_C03_parallel_hybrid ; --max-evals=15, --tune-epochs=20, --tune-patience=5, dataset=movielens1m | 20260308_214 |
 | 2026-03-09T00:58:19.884274+00:00 | movielens1m | hparam | P1HGR_widewide_C45_serial_per_group | success | no | 0.094000 | 69.16 | hparam/P1HGR_widewide_C45_serial_per_group ; --max-evals=15, --tune-epochs=20, --tune-patience=5, dataset=movielens1m | 20260308_234 |

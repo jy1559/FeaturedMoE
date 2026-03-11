@@ -137,21 +137,21 @@ case "$SEARCH_PROFILE" in
   wide)
     LR_SPACE='[1e-4,5e-2]'
     WD_SPACE='[0.0,1e-6,1e-5,1e-4]'
-    DROP_SPACE='[0.05,0.2]'
-    BAL_SPACE='[0.0005,0.1]'
+    DROP_SPACE='[0.08,0.12]'
+    BAL_SPACE='[0.001,0.003,0.01]'
     ;;
   narrow_ml1)
     LR_SPACE='[5e-4,2.5e-2]'
     WD_SPACE='[0.0,5e-5]'
-    DROP_SPACE='[0.05,0.15]'
-    BAL_SPACE='[0.01,0.05]'
+    DROP_SPACE='[0.08,0.12]'
+    BAL_SPACE='[0.001,0.003,0.01]'
     ;;
   p1_shallow)
     # Broad & shallow probe: discrete LR/WD only, others fixed.
     LR_SPACE='[1e-2,5e-3,2.5e-3,1e-3,5e-4,2.5e-4,1e-4]'
     WD_SPACE='[0.0,1e-6,1e-5,1e-4,1e-3]'
     DROP_SPACE='[0.1]'
-    BAL_SPACE='[0.01]'
+    BAL_SPACE='[0.003]'
     ;;
   *)
     echo "Unsupported --search-profile=${SEARCH_PROFILE}" >&2
@@ -271,7 +271,7 @@ print(
     bp.get('learning_rate', 5e-4),
     bp.get('weight_decay', 0.0),
     bp.get('hidden_dropout_prob', 0.15),
-    bp.get('balance_loss_lambda', 0.01),
+    bp.get('balance_loss_lambda', 0.003),
     layout,
     exec_mode,
 )
@@ -283,14 +283,14 @@ else
   P_LR="0.001"
   P_WD="0.0"
   P_DROP="0.1"
-  P_BAL="0.01"
+  P_BAL="0.003"
 fi
 
 if [ -z "$EXP_NAME" ]; then
   EXP_NAME="fmoe_v2_${PHASE%%_*}_hparam"
 fi
 if [ -z "$EXP_DESC" ]; then
-  EXP_DESC="Hparam search (${SEARCH_PROFILE}) with fixed execution/layout; optimize LR/WD (+optional dropout/balance)."
+  EXP_DESC="Hparam search (${SEARCH_PROFILE}) with factorized interaction router; optimize LR/WD + compact regularization."
 fi
 if [ -z "$EXP_FOCUS" ]; then
   EXP_FOCUS="fmoe_stage_execution_mode,fmoe_v2_layout_id,learning_rate,weight_decay,hidden_dropout_prob,balance_loss_lambda"
@@ -336,6 +336,20 @@ cmd=(
   "++search.d_router_hidden=[${D_ROUTER_HIDDEN}]"
   "expert_scale=${EXPERT_SCALE}"
   "++search.expert_scale=[${EXPERT_SCALE}]"
+  "router_design=group_factorized_interaction"
+  "++search.router_design=[group_factorized_interaction]"
+  "group_top_k=0"
+  "++search.group_top_k=[0]"
+  "expert_top_k=1"
+  "++search.expert_top_k=[1]"
+  "router_distill_enable=false"
+  "++search.router_distill_enable=[false]"
+  "router_distill_lambda=0.0"
+  "++search.router_distill_lambda=[0.0]"
+  "router_distill_temperature=1.5"
+  "++search.router_distill_temperature=[1.5]"
+  "router_distill_until=0.2"
+  "++search.router_distill_until=[0.2]"
   "fmoe_v2_layout_id=${LAYOUT_ID}"
   "++search.fmoe_v2_layout_id=[${LAYOUT_ID}]"
   "fmoe_stage_execution_mode=${EXECUTION}"
@@ -348,6 +362,12 @@ cmd=(
   "++search.weight_decay=${WD_SPACE}"
   "++search.hidden_dropout_prob=${DROP_SPACE}"
   "++search.balance_loss_lambda=${BAL_SPACE}"
+  "fmoe_v2_feature_spec_aux_enable=true"
+  "++search.fmoe_v2_feature_spec_aux_enable=[true]"
+  "fmoe_v2_feature_spec_aux_lambda=3e-4"
+  "++search.fmoe_v2_feature_spec_aux_lambda=[1e-4,3e-4,7e-4]"
+  "fmoe_v2_feature_spec_stages=[mid]"
+  "fmoe_v2_feature_spec_min_tokens=8"
   "moe_top_k=${SCH_TOPK}"
   "++search.moe_top_k=[${SCH_TOPK}]"
   "moe_top_k_policy=${SCH_TOPK_POLICY}"

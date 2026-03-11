@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, Optional, Sequence, Tuple
 
@@ -14,14 +15,21 @@ from recbole.model.abstract_recommender import SequentialRecommender
 
 from ..FeaturedMoE.feature_config import (
     ALL_FEATURE_COLUMNS,
+    STAGE_ALL_FEATURES,
     feature_list_field,
     build_column_to_index,
 )
-from ..FeaturedMoE.routers import load_balance_loss
 from ..FeaturedMoE.transformer import TransformerEncoder
 from ..FeaturedMoE.logging_utils import MoELogger
 from ..FeaturedMoE.analysis_logger import ExpertAnalysisLogger
 from .hgr_moe_stages import HierarchicalMoEHGR
+from .losses import (
+    compute_expert_aux_loss,
+    compute_group_balance_aux_loss,
+    compute_group_feature_specialization_aux_loss,
+    compute_intra_balance_aux_loss,
+    compute_router_distill_aux_loss,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -181,15 +189,36 @@ class HGRStageBranchRunner(nn.Module):
         feat: torch.Tensor,
         item_seq_len: Optional[torch.Tensor],
         hierarchical_moe: HierarchicalMoEHGR,
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
+    ) -> Tuple[
+        torch.Tensor,
+        Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
+    ]:
         out = self._run_pass(hidden, item_seq)
         gate_weights: Dict[str, torch.Tensor] = {}
         gate_logits: Dict[str, torch.Tensor] = {}
         group_weights: Dict[str, torch.Tensor] = {}
         group_logits: Dict[str, torch.Tensor] = {}
+        intra_group_weights: Dict[str, torch.Tensor] = {}
+        intra_group_logits: Dict[str, torch.Tensor] = {}
+        teacher_group_logits: Dict[str, torch.Tensor] = {}
 
         if self.moe_blocks <= 0:
-            return out, gate_weights, gate_logits, group_weights, group_logits
+            return (
+                out,
+                gate_weights,
+                gate_logits,
+                group_weights,
+                group_logits,
+                intra_group_weights,
+                intra_group_logits,
+                teacher_group_logits,
+            )
 
         for idx, pre_block in enumerate(self.moe_pre_blocks, start=1):
             out, _ = pre_block(out, item_seq)
@@ -204,7 +233,23 @@ class HGRStageBranchRunner(nn.Module):
             gate_logits[key] = l
             group_weights[key] = gw
             group_logits[key] = gl
-        return out, gate_weights, gate_logits, group_weights, group_logits
+            router_aux = hierarchical_moe.get_stage_router_aux(self.stage_name)
+            if "intra_group_weights" in router_aux:
+                intra_group_weights[key] = router_aux["intra_group_weights"]
+            if "intra_group_logits" in router_aux:
+                intra_group_logits[key] = router_aux["intra_group_logits"]
+            if "teacher_group_logits" in router_aux:
+                teacher_group_logits[key] = router_aux["teacher_group_logits"]
+        return (
+            out,
+            gate_weights,
+            gate_logits,
+            group_weights,
+            group_logits,
+            intra_group_weights,
+            intra_group_logits,
+            teacher_group_logits,
+        )
 
     def run_parallel(
         self,
@@ -221,15 +266,31 @@ class HGRStageBranchRunner(nn.Module):
         Dict[str, torch.Tensor],
         Dict[str, torch.Tensor],
         Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
+        Dict[str, torch.Tensor],
     ]:
         out = self._run_pass(base_hidden, item_seq)
         gate_weights: Dict[str, torch.Tensor] = {}
         gate_logits: Dict[str, torch.Tensor] = {}
         group_weights: Dict[str, torch.Tensor] = {}
         group_logits: Dict[str, torch.Tensor] = {}
+        intra_group_weights: Dict[str, torch.Tensor] = {}
+        intra_group_logits: Dict[str, torch.Tensor] = {}
+        teacher_group_logits: Dict[str, torch.Tensor] = {}
 
         if self.moe_blocks <= 0:
-            return out, (out - base_hidden), gate_weights, gate_logits, group_weights, group_logits
+            return (
+                out,
+                (out - base_hidden),
+                gate_weights,
+                gate_logits,
+                group_weights,
+                group_logits,
+                intra_group_weights,
+                intra_group_logits,
+                teacher_group_logits,
+            )
 
         for idx, pre_block in enumerate(self.moe_pre_blocks, start=1):
             out, _ = pre_block(out, item_seq)
@@ -244,13 +305,45 @@ class HGRStageBranchRunner(nn.Module):
             gate_logits[key] = l
             group_weights[key] = gw
             group_logits[key] = gl
-        return out, (out - base_hidden), gate_weights, gate_logits, group_weights, group_logits
+            router_aux = hierarchical_moe.get_stage_router_aux(self.stage_name)
+            if "intra_group_weights" in router_aux:
+                intra_group_weights[key] = router_aux["intra_group_weights"]
+            if "intra_group_logits" in router_aux:
+                intra_group_logits[key] = router_aux["intra_group_logits"]
+            if "teacher_group_logits" in router_aux:
+                teacher_group_logits[key] = router_aux["teacher_group_logits"]
+        return (
+            out,
+            (out - base_hidden),
+            gate_weights,
+            gate_logits,
+            group_weights,
+            group_logits,
+            intra_group_weights,
+            intra_group_logits,
+            teacher_group_logits,
+        )
 
 
 class FeaturedMoE_HGR(SequentialRecommender):
     """Layout-based Transformer + Hierarchical Group Routing."""
 
     input_type = "point"
+
+    @staticmethod
+    def _parse_stage_list(raw_value, default: list[str]) -> list[str]:
+        if raw_value is None:
+            return list(default)
+        if isinstance(raw_value, (list, tuple)):
+            vals = [str(v).strip().lower() for v in raw_value if str(v).strip()]
+            return vals if vals else list(default)
+        if isinstance(raw_value, str):
+            txt = raw_value.strip()
+            if txt.startswith("[") and txt.endswith("]"):
+                txt = txt[1:-1]
+            vals = [tok.strip().lower() for tok in txt.split(",") if tok.strip()]
+            return vals if vals else list(default)
+        return list(default)
 
     def __init__(self, config, dataset):
         super().__init__(config, dataset)
@@ -352,8 +445,20 @@ class FeaturedMoE_HGR(SequentialRecommender):
         if not (self.expert_use_hidden or self.expert_use_feature):
             raise ValueError("expert_use_hidden and expert_use_feature cannot both be false.")
 
-        raw_top_k = _cfg("moe_top_k", 0)
-        self.moe_top_k = None if raw_top_k == 0 else int(raw_top_k)
+        self.router_design = str(_cfg("router_design", "group_factorized_interaction")).lower().strip()
+        if self.router_design not in {"legacy_concat", "group_factorized_interaction"}:
+            raise ValueError(
+                "router_design must be one of ['legacy_concat','group_factorized_interaction'], "
+                f"got {self.router_design}"
+            )
+        self.rule_router_cfg = _cfg("rule_router", {}) or {}
+        if not isinstance(self.rule_router_cfg, dict):
+            raise ValueError("rule_router must be a dict when provided.")
+
+        raw_legacy_top_k = _cfg("moe_top_k", 0)
+        self.moe_top_k = None if int(raw_legacy_top_k) <= 0 else int(raw_legacy_top_k)
+        raw_expert_top_k = _cfg("expert_top_k", raw_legacy_top_k if int(raw_legacy_top_k) > 0 else 1)
+        self.expert_top_k = None if int(raw_expert_top_k) <= 0 else int(raw_expert_top_k)
         raw_group_top_k = int(_cfg("group_top_k", 0))
         self.group_top_k = None if raw_group_top_k <= 0 else raw_group_top_k
         self.group_router_mode = str(_cfg("group_router_mode", "per_group")).lower().strip()
@@ -414,7 +519,20 @@ class FeaturedMoE_HGR(SequentialRecommender):
         self._last_logged_top_k: Optional[int] = None
 
         self.use_aux_loss = _cfg("use_aux_loss", True)
-        self.balance_loss_lambda = _cfg("balance_loss_lambda", 0.01)
+        self.balance_loss_lambda = float(_cfg("balance_loss_lambda", 0.003))
+        self.group_balance_lambda = float(_cfg("group_balance_lambda", 0.001))
+        self.intra_balance_lambda = float(_cfg("intra_balance_lambda", 0.001))
+        self.group_feature_spec_aux_enable = bool(_cfg("group_feature_spec_aux_enable", True))
+        self.group_feature_spec_aux_lambda = float(_cfg("group_feature_spec_aux_lambda", 3e-4))
+        self.group_feature_spec_stages = self._parse_stage_list(
+            _cfg("group_feature_spec_stages", ["mid"]),
+            default=["mid"],
+        )
+        self.group_feature_spec_min_tokens = float(_cfg("group_feature_spec_min_tokens", 8))
+        self.router_distill_enable = bool(_cfg("router_distill_enable", False))
+        self.router_distill_lambda = float(_cfg("router_distill_lambda", 5e-3))
+        self.router_distill_temperature = float(_cfg("router_distill_temperature", 1.5))
+        self.router_distill_until = float(_cfg("router_distill_until", 0.2))
 
         self.ffn_moe = _cfg("ffn_moe", False)
         self.n_ffn_experts = _cfg("n_ffn_experts", 4)
@@ -436,6 +554,11 @@ class FeaturedMoE_HGR(SequentialRecommender):
 
         self.feature_fields = [feature_list_field(col) for col in ALL_FEATURE_COLUMNS]
         self.n_features = len(ALL_FEATURE_COLUMNS)
+        col2idx = build_column_to_index(ALL_FEATURE_COLUMNS)
+        self.stage_feature_indices = {
+            stage_name: [int(col2idx[col]) for col in STAGE_ALL_FEATURES.get(stage_name, []) if col in col2idx]
+            for stage_name in _STAGE_NAMES
+        }
 
         self.item_embedding = nn.Embedding(self.n_items, self.d_model, padding_idx=0)
         self.position_embedding = nn.Embedding(self.max_seq_length, self.d_model)
@@ -476,9 +599,12 @@ class FeaturedMoE_HGR(SequentialRecommender):
                 d_expert_hidden=self.d_expert_hidden,
                 d_router_hidden=self.d_router_hidden,
                 expert_scale=self.expert_scale,
-                top_k=self.moe_top_k,
+                top_k=self.expert_top_k,
                 group_top_k=self.group_top_k,
                 group_router_mode=self.group_router_mode,
+                router_design=self.router_design,
+                rule_router_cfg=self.rule_router_cfg,
+                router_distill_enable=self.router_distill_enable,
                 parallel_stage_gate_top_k=self.parallel_stage_gate_top_k,
                 parallel_stage_gate_temperature=self.parallel_stage_gate_temperature,
                 dropout=self.dropout,
@@ -517,7 +643,11 @@ class FeaturedMoE_HGR(SequentialRecommender):
         )
 
         active_expert_names = self.hierarchical_moe.expert_names if self.hierarchical_moe is not None else {}
+        active_group_names = self.hierarchical_moe.group_names if self.hierarchical_moe is not None else {}
         self.moe_logger = MoELogger(active_expert_names)
+        self.group_logger = MoELogger(active_group_names)
+        self._stage_group_names = active_group_names
+        self._reset_router_epoch_stats()
 
         if self.log_expert_analysis and self.any_moe:
             col2idx = build_column_to_index(ALL_FEATURE_COLUMNS)
@@ -530,6 +660,23 @@ class FeaturedMoE_HGR(SequentialRecommender):
         else:
             self.analysis_logger = None
 
+        try:
+            config["router_design"] = self.router_design
+            config["group_top_k"] = 0 if self.group_top_k is None else int(self.group_top_k)
+            config["expert_top_k"] = 0 if self.expert_top_k is None else int(self.expert_top_k)
+            config["group_balance_lambda"] = float(self.group_balance_lambda)
+            config["intra_balance_lambda"] = float(self.intra_balance_lambda)
+            config["group_feature_spec_aux_enable"] = bool(self.group_feature_spec_aux_enable)
+            config["group_feature_spec_aux_lambda"] = float(self.group_feature_spec_aux_lambda)
+            config["group_feature_spec_stages"] = list(self.group_feature_spec_stages)
+            config["group_feature_spec_min_tokens"] = float(self.group_feature_spec_min_tokens)
+            config["router_distill_enable"] = bool(self.router_distill_enable)
+            config["router_distill_lambda"] = float(self.router_distill_lambda)
+            config["router_distill_temperature"] = float(self.router_distill_temperature)
+            config["router_distill_until"] = float(self.router_distill_until)
+        except Exception:
+            pass
+
         self.set_schedule_epoch(epoch_idx=0, max_epochs=self._schedule_total_epochs, log_now=True)
         self.apply(self._init_weights)
 
@@ -537,7 +684,11 @@ class FeaturedMoE_HGR(SequentialRecommender):
         logger.info(
             "FeaturedMoE_HGR: d_model=%s d_feat_emb=%s expert_scale=%s layout_id=%s layout=%s "
             "effective_num_layers=%s n_total_attn_layers=%s active_stages=%s merge_mode=%s "
-            "group_router_mode=%s group_top_k=%s moe_top_k=%s parallel_stage_gate_top_k=%s "
+            "router_design=%s group_router_mode=%s group_top_k=%s expert_top_k=%s moe_top_k=%s "
+            "group_balance_lambda=%s intra_balance_lambda=%s group_feature_spec_aux=%s "
+            "group_feature_spec_lambda=%s group_feature_spec_stages=%s router_distill_enable=%s "
+            "router_distill_lambda=%s router_distill_temperature=%s router_distill_until=%s "
+            "parallel_stage_gate_top_k=%s "
             "parallel_stage_gate_temperature=%s macro_scope=%s macro_pool=%s "
             "expert_use_hidden=%s expert_use_feature=%s stage_pass=%s stage_moe=%s "
             "mid_temp=%s micro_temp=%s mid_feat_drop=%s micro_feat_drop=%s use_aux_loss=%s "
@@ -552,9 +703,20 @@ class FeaturedMoE_HGR(SequentialRecommender):
             self.n_total_attn_layers,
             active_stages,
             self.stage_merge_mode,
+            self.router_design,
             self.group_router_mode,
             self.group_top_k,
+            self.expert_top_k,
             self.moe_top_k,
+            self.group_balance_lambda,
+            self.intra_balance_lambda,
+            self.group_feature_spec_aux_enable,
+            self.group_feature_spec_aux_lambda,
+            self.group_feature_spec_stages,
+            self.router_distill_enable,
+            self.router_distill_lambda,
+            self.router_distill_temperature,
+            self.router_distill_until,
             self.parallel_stage_gate_top_k,
             self.parallel_stage_gate_temperature,
             self.macro_routing_scope,
@@ -631,6 +793,8 @@ class FeaturedMoE_HGR(SequentialRecommender):
     def _resolve_top_k_target(self, n_experts: int) -> Optional[int]:
         if n_experts <= 0:
             return None
+        if self.router_design == "group_factorized_interaction":
+            return self._normalize_top_k(self.expert_top_k, n_experts=n_experts)
         if self.moe_top_k_policy == "dense":
             return None
         if self.moe_top_k_policy == "half":
@@ -757,6 +921,62 @@ class FeaturedMoE_HGR(SequentialRecommender):
                 logger.warning("Feature field '%s' not found - using zeros.", field)
         return torch.stack(feat_list, dim=-1)
 
+    def _reset_router_epoch_stats(self) -> None:
+        self._router_group_entropy_sum = defaultdict(float)
+        self._router_group_entropy_count = defaultdict(int)
+        self._router_active_clone_sum = {}
+        self._router_active_clone_count = defaultdict(int)
+        self._router_clone_weight_sum = {}
+        self._router_clone_weight_sq_sum = {}
+        self._router_clone_weight_count = defaultdict(int)
+
+    def _accumulate_router_stats(
+        self,
+        *,
+        group_weights: Dict[str, torch.Tensor],
+        intra_group_weights: Dict[str, torch.Tensor],
+        item_seq_len: Optional[torch.Tensor],
+    ) -> None:
+        for stage_key, group_w in group_weights.items():
+            _, tlen, _ = group_w.shape
+            if item_seq_len is not None:
+                lens = item_seq_len.to(device=group_w.device).long()
+                valid = torch.arange(tlen, device=group_w.device).unsqueeze(0) < lens.unsqueeze(1)
+                flat_group = group_w[valid]
+            else:
+                flat_group = group_w.reshape(-1, group_w.shape[-1])
+            if flat_group.numel() == 0:
+                continue
+            entropy = -(flat_group.clamp(min=1e-8) * flat_group.clamp(min=1e-8).log()).sum(dim=-1)
+            self._router_group_entropy_sum[stage_key] += float(entropy.sum().item())
+            self._router_group_entropy_count[stage_key] += int(entropy.numel())
+
+        for stage_key, intra_w in intra_group_weights.items():
+            _, tlen, _, _ = intra_w.shape
+            if item_seq_len is not None:
+                lens = item_seq_len.to(device=intra_w.device).long()
+                valid = torch.arange(tlen, device=intra_w.device).unsqueeze(0) < lens.unsqueeze(1)
+                flat_intra = intra_w[valid]
+            else:
+                flat_intra = intra_w.reshape(-1, intra_w.shape[-2], intra_w.shape[-1])
+            if flat_intra.numel() == 0:
+                continue
+            active = (flat_intra > 0).sum(dim=-1).float()
+            active_sum = active.sum(dim=0).detach().cpu()
+            if stage_key not in self._router_active_clone_sum:
+                self._router_active_clone_sum[stage_key] = torch.zeros_like(active_sum)
+            self._router_active_clone_sum[stage_key] += active_sum
+            self._router_active_clone_count[stage_key] += int(active.shape[0])
+
+            clone_sum = flat_intra.sum(dim=0).detach().cpu()
+            clone_sq_sum = flat_intra.pow(2).sum(dim=0).detach().cpu()
+            if stage_key not in self._router_clone_weight_sum:
+                self._router_clone_weight_sum[stage_key] = torch.zeros_like(clone_sum)
+                self._router_clone_weight_sq_sum[stage_key] = torch.zeros_like(clone_sq_sum)
+            self._router_clone_weight_sum[stage_key] += clone_sum
+            self._router_clone_weight_sq_sum[stage_key] += clone_sq_sum
+            self._router_clone_weight_count[stage_key] += int(flat_intra.shape[0])
+
     def forward(self, item_seq, item_seq_len, feat=None):
         bsz, tlen = item_seq.shape
 
@@ -770,6 +990,7 @@ class FeaturedMoE_HGR(SequentialRecommender):
             tokens, _ = self.pre_transformer(tokens, item_seq)
 
         gate_weights, gate_logits, group_weights, group_logits = {}, {}, {}, {}
+        intra_group_weights, intra_group_logits, teacher_group_logits = {}, {}, {}
         stage_weights = None
         stage_logits = None
 
@@ -780,7 +1001,7 @@ class FeaturedMoE_HGR(SequentialRecommender):
                     if stage_name not in self.stage_branches or not self.stage_active[stage_name]:
                         continue
 
-                    _, stage_delta, w, l, gw, gl = self.stage_branches[stage_name].run_parallel(
+                    _, stage_delta, w, l, gw, gl, igw, igl, tgl = self.stage_branches[stage_name].run_parallel(
                         base_hidden=tokens,
                         item_seq=item_seq,
                         feat=feat,
@@ -791,6 +1012,9 @@ class FeaturedMoE_HGR(SequentialRecommender):
                     gate_logits.update(l)
                     group_weights.update(gw)
                     group_logits.update(gl)
+                    intra_group_weights.update(igw)
+                    intra_group_logits.update(igl)
+                    teacher_group_logits.update(tgl)
                     stage_deltas[stage_name] = stage_delta
 
                 tokens, stage_weights, stage_logits = self.hierarchical_moe.parallel_merge(
@@ -803,7 +1027,7 @@ class FeaturedMoE_HGR(SequentialRecommender):
                     if stage_name not in self.stage_branches or not self.stage_active[stage_name]:
                         continue
 
-                    tokens, w, l, gw, gl = self.stage_branches[stage_name].run_serial(
+                    tokens, w, l, gw, gl, igw, igl, tgl = self.stage_branches[stage_name].run_serial(
                         hidden=tokens,
                         item_seq=item_seq,
                         feat=feat,
@@ -814,6 +1038,9 @@ class FeaturedMoE_HGR(SequentialRecommender):
                     gate_logits.update(l)
                     group_weights.update(gw)
                     group_logits.update(gl)
+                    intra_group_weights.update(igw)
+                    intra_group_logits.update(igl)
+                    teacher_group_logits.update(tgl)
 
         hidden, ffn_moe_weights = self.post_transformer(tokens, item_seq)
         gather_idx = (item_seq_len - 1).long().view(-1, 1, 1).expand(-1, 1, self.d_model)
@@ -824,6 +1051,11 @@ class FeaturedMoE_HGR(SequentialRecommender):
             "gate_logits": gate_logits,
             "group_weights": group_weights,
             "group_logits": group_logits,
+            "group_logits_raw": group_logits,
+            "intra_group_weights": intra_group_weights,
+            "intra_group_logits": intra_group_logits,
+            "intra_group_logits_raw": intra_group_logits,
+            "teacher_group_logits": teacher_group_logits,
             "stage_weights": stage_weights,
             "stage_logits": stage_logits,
             "ffn_moe_weights": ffn_moe_weights,
@@ -842,25 +1074,70 @@ class FeaturedMoE_HGR(SequentialRecommender):
         ce_loss = F.cross_entropy(logits, pos_items)
 
         aux_loss = torch.tensor(0.0, device=ce_loss.device)
-        if self.use_aux_loss and self.balance_loss_lambda > 0:
-            if aux_data["gate_weights"] and self.hierarchical_moe is not None:
-                aux_loss = self.hierarchical_moe.compute_aux_loss(
-                    weights=aux_data["gate_weights"],
+        if self.use_aux_loss:
+            aux_loss = aux_loss + compute_expert_aux_loss(
+                aux_data.get("gate_weights", {}),
+                item_seq_len=item_seq_len,
+                balance_lambda=self.balance_loss_lambda,
+                device=ce_loss.device,
+            )
+            aux_loss = aux_loss + compute_group_balance_aux_loss(
+                aux_data.get("group_weights", {}),
+                item_seq_len=item_seq_len,
+                aux_lambda=self.group_balance_lambda,
+                device=ce_loss.device,
+            )
+            aux_loss = aux_loss + compute_intra_balance_aux_loss(
+                aux_data.get("intra_group_weights", {}),
+                item_seq_len=item_seq_len,
+                aux_lambda=self.intra_balance_lambda,
+                device=ce_loss.device,
+            )
+            aux_loss = aux_loss + compute_group_feature_specialization_aux_loss(
+                weights=aux_data.get("group_weights", {}),
+                feat=feat,
+                stage_feature_indices=self.stage_feature_indices,
+                selected_stages=self.group_feature_spec_stages,
+                item_seq_len=item_seq_len,
+                min_tokens_per_group=self.group_feature_spec_min_tokens,
+                aux_lambda=self.group_feature_spec_aux_lambda,
+                enabled=self.group_feature_spec_aux_enable,
+                device=ce_loss.device,
+            )
+            aux_loss = aux_loss + compute_router_distill_aux_loss(
+                teacher_group_logits=aux_data.get("teacher_group_logits", {}),
+                student_group_logits=aux_data.get("group_logits_raw", {}),
+                item_seq_len=item_seq_len,
+                aux_lambda=self.router_distill_lambda,
+                distill_temperature=self.router_distill_temperature,
+                enabled=self.router_distill_enable,
+                progress=float(self._schedule_epoch) / float(max(self._schedule_total_epochs - 1, 1)),
+                until=self.router_distill_until,
+                device=ce_loss.device,
+            )
+            if self.ffn_moe and aux_data.get("ffn_moe_weights"):
+                aux_loss = aux_loss + compute_expert_aux_loss(
+                    aux_data.get("ffn_moe_weights", {}),
                     item_seq_len=item_seq_len,
                     balance_lambda=self.balance_loss_lambda,
+                    device=ce_loss.device,
                 )
-            if self.ffn_moe and aux_data["ffn_moe_weights"]:
-                for lw in aux_data["ffn_moe_weights"].values():
-                    aux_loss = aux_loss + self.balance_loss_lambda * load_balance_loss(
-                        lw,
-                        self.n_ffn_experts,
-                    )
 
         total_loss = ce_loss + aux_loss
 
         if self.log_expert_weights and self.training and aux_data["gate_weights"]:
             self.moe_logger.accumulate(
                 gate_weights=aux_data["gate_weights"],
+                item_seq_len=item_seq_len,
+            )
+        if self.fmoe_debug_logging and self.training and aux_data.get("group_weights"):
+            self.group_logger.accumulate(
+                gate_weights=aux_data["group_weights"],
+                item_seq_len=item_seq_len,
+            )
+            self._accumulate_router_stats(
+                group_weights=aux_data.get("group_weights", {}),
+                intra_group_weights=aux_data.get("intra_group_weights", {}),
                 item_seq_len=item_seq_len,
             )
 
@@ -895,6 +1172,41 @@ class FeaturedMoE_HGR(SequentialRecommender):
 
     def get_epoch_log_summary(self) -> Dict:
         summary = self.moe_logger.get_and_reset()
+        group_summary = self.group_logger.get_and_reset()
+        summary["group_stages"] = group_summary.get("stages", {})
+        summary["router"] = {}
+
+        all_stage_keys = (
+            set(self._router_group_entropy_sum)
+            | set(self._router_active_clone_sum)
+            | set(self._router_clone_weight_sum)
+        )
+        for stage_key in sorted(all_stage_keys):
+            base_stage = stage_key.split("@", 1)[0]
+            entropy_count = max(self._router_group_entropy_count.get(stage_key, 0), 1)
+            active_count = max(self._router_active_clone_count.get(stage_key, 0), 1)
+            active_sum = self._router_active_clone_sum.get(stage_key)
+            active_list = [] if active_sum is None else (active_sum / float(active_count)).tolist()
+            clone_count = max(self._router_clone_weight_count.get(stage_key, 0), 1)
+            clone_sum = self._router_clone_weight_sum.get(stage_key)
+            clone_sq_sum = self._router_clone_weight_sq_sum.get(stage_key)
+            if clone_sum is None or clone_sq_sum is None:
+                clone_mean = []
+                clone_std = []
+            else:
+                clone_mean_tensor = clone_sum / float(clone_count)
+                clone_var = (clone_sq_sum / float(clone_count) - clone_mean_tensor.pow(2)).clamp(min=0.0)
+                clone_mean = clone_mean_tensor.tolist()
+                clone_std = clone_var.sqrt().tolist()
+            summary["router"][stage_key] = {
+                "group_names": list(self._stage_group_names.get(base_stage, [])),
+                "group_entropy": float(self._router_group_entropy_sum.get(stage_key, 0.0)) / float(entropy_count),
+                "active_clones_per_group": active_list,
+                "clone_load": clone_mean,
+                "clone_load_std": clone_std,
+            }
+
+        self._reset_router_epoch_stats()
         if self.analysis_logger is not None:
             summary["analysis"] = self.analysis_logger.get_and_reset()
         return summary

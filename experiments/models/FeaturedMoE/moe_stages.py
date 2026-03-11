@@ -15,9 +15,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .experts import ExpertGroup
-from .routers import RouterBackend, load_balance_loss
+from .routers import RouterBackend, RuleSoftRouter, load_balance_loss
 from .feature_config import (
     STAGES,
     STAGE_ALL_FEATURES,
@@ -50,6 +51,27 @@ def _scaled_expert_names(base_names: List[str], expert_scale: int) -> List[str]:
             suffix = chr(ord("a") + i)
             out.append(f"{name}_{suffix}")
     return out
+
+
+def _normalize_top_k(top_k: Optional[int], n_experts: int) -> Optional[int]:
+    if top_k is None:
+        return None
+    k = int(top_k)
+    if k <= 0:
+        return None
+    k = min(k, int(n_experts))
+    return None if k >= int(n_experts) else k
+
+
+def _softmax_with_top_k(logits: torch.Tensor, top_k: Optional[int]) -> torch.Tensor:
+    active_top_k = _normalize_top_k(top_k, logits.shape[-1])
+    if active_top_k is None:
+        return F.softmax(logits, dim=-1)
+    topk_vals, topk_idx = logits.topk(active_top_k, dim=-1)
+    topk_weights = F.softmax(topk_vals, dim=-1)
+    weights = torch.zeros_like(logits)
+    weights.scatter_(-1, topk_idx, topk_weights)
+    return weights
 
 
 class MoEStage(nn.Module):
@@ -99,6 +121,10 @@ class MoEStage(nn.Module):
         expert_names: Optional[List[str]] = None,
         router_impl: str = "learned",
         rule_router_cfg: Optional[Dict[str, Any]] = None,
+        router_design: str = "flat_legacy",
+        group_top_k: int = 0,
+        expert_top_k: int = 1,
+        router_distill_enable: bool = False,
         router_mode: str = "token",
         session_pooling: str = "query",
         router_temperature: float = 1.0,
@@ -115,6 +141,12 @@ class MoEStage(nn.Module):
             raise ValueError(f"router_impl must be one of ['learned','rule_soft'], got {router_impl}")
         if router_impl_key == "learned" and not (router_use_hidden or router_use_feature):
             raise ValueError("Learned router must use at least one input source.")
+        requested_router_design = str(router_design).lower().strip()
+        if requested_router_design not in ("flat_legacy", "group_factorized_interaction"):
+            raise ValueError(
+                "router_design must be one of ['flat_legacy','group_factorized_interaction'], "
+                f"got {router_design}"
+            )
         if router_mode not in ("token", "session"):
             raise ValueError(f"router_mode must be one of ['token', 'session'], got {router_mode}")
         if session_pooling not in ("query", "mean", "last"):
@@ -133,11 +165,20 @@ class MoEStage(nn.Module):
         self.expert_use_hidden = bool(expert_use_hidden)
         self.expert_use_feature = bool(expert_use_feature)
         self.router_impl = router_impl_key
+        self.router_design = (
+            requested_router_design if self.router_impl == "learned" else "flat_legacy"
+        )
         self.rule_router_cfg: Dict[str, Any] = dict(rule_router_cfg or {})
         self.router_mode = router_mode
         self.session_pooling = session_pooling
         self.router_temperature = float(router_temperature)
         self.router_top_k = top_k
+        self.group_top_k = None if int(group_top_k) <= 0 else int(group_top_k)
+        if expert_top_k is None:
+            self.expert_top_k = None
+        else:
+            self.expert_top_k = None if int(expert_top_k) <= 0 else int(expert_top_k)
+        self.router_distill_enable = bool(router_distill_enable)
         self.stage_all_features = list(stage_all_features)
         self.reliability_feature_name = reliability_feature_name
         if reliability_feature_name is not None:
@@ -152,6 +193,7 @@ class MoEStage(nn.Module):
         # Expand base-4 experts by scale (same features, independent params).
         scaled_lists = _scaled_expert_lists(expert_feature_lists, expert_scale)
         self.n_experts = len(scaled_lists)
+        self.n_groups = len(expert_feature_lists)
 
         # Keep readable expert names for logging.
         if expert_names is not None:
@@ -163,6 +205,7 @@ class MoEStage(nn.Module):
             base_names = [str(name) for name in expert_names]
         else:
             base_names = [f"expert_{i}" for i in range(len(expert_feature_lists))]
+        self.group_names = list(base_names)
         self.expert_names = _scaled_expert_names(base_names, expert_scale)
 
         # ---- Index tensors (buffers) ----
@@ -189,14 +232,45 @@ class MoEStage(nn.Module):
 
         # ---- Submodules ----
         self.pre_ln = nn.LayerNorm(d_model)
-        if self.router_impl == "learned":
+        if self.router_impl == "learned" and self.router_design == "flat_legacy":
             self.stage_feat_proj = nn.Linear(self._n_stage_features, d_feat_emb)
             self.router_feat_drop = nn.Dropout(router_feature_dropout)
         else:
             self.stage_feat_proj = None
             self.router_feat_drop = None
 
-        if self.router_impl == "learned":
+        if self.router_impl == "learned" and self.router_design == "group_factorized_interaction":
+            self.router_hidden_encoder = nn.Sequential(
+                nn.LayerNorm(d_model),
+                nn.Linear(d_model, d_router_hidden),
+                nn.GELU(),
+                nn.Linear(d_router_hidden, d_router_hidden),
+            )
+            self.router_feature_encoder = nn.Sequential(
+                nn.LayerNorm(self._n_stage_features),
+                nn.Linear(self._n_stage_features, d_router_hidden),
+                nn.GELU(),
+                nn.Linear(d_router_hidden, d_router_hidden),
+            )
+            self.router_interaction = nn.Sequential(
+                nn.Linear(4 * d_router_hidden, d_router_hidden),
+                nn.SiLU(),
+                nn.Dropout(dropout),
+            )
+            self.group_router_head = nn.Linear(d_router_hidden, self.n_groups)
+            self.intra_group_router_heads = nn.ModuleList(
+                [nn.Linear(d_router_hidden, self.expert_scale) for _ in range(self.n_groups)]
+            )
+            self.factorized_router_feature_drop = nn.Dropout(router_feature_dropout)
+        else:
+            self.router_hidden_encoder = None
+            self.router_feature_encoder = None
+            self.router_interaction = None
+            self.group_router_head = None
+            self.intra_group_router_heads = None
+            self.factorized_router_feature_drop = None
+
+        if self.router_impl == "learned" and self.router_design == "flat_legacy":
             router_input_dim = 0
             if self.router_use_hidden:
                 router_input_dim += d_model
@@ -210,6 +284,8 @@ class MoEStage(nn.Module):
                 d_hidden=d_router_hidden,
                 dropout=dropout,
             )
+        elif self.router_impl == "learned":
+            self.router = None
         else:
             n_bins_raw = self.rule_router_cfg.get("n_bins", 5)
             if isinstance(n_bins_raw, (list, tuple)):
@@ -258,14 +334,58 @@ class MoEStage(nn.Module):
                 },
             )
 
+        if self.router_impl == "learned" and self.router_design == "group_factorized_interaction" and self.router_distill_enable:
+            n_bins_raw = self.rule_router_cfg.get("n_bins", 5)
+            if isinstance(n_bins_raw, (list, tuple)):
+                n_bins_raw = n_bins_raw[0] if len(n_bins_raw) > 0 else 5
+            n_bins = int(n_bins_raw)
+
+            feature_per_expert_raw = self.rule_router_cfg.get("feature_per_expert", 4)
+            if isinstance(feature_per_expert_raw, (list, tuple)):
+                feature_per_expert_raw = (
+                    feature_per_expert_raw[0] if len(feature_per_expert_raw) > 0 else 4
+                )
+            feature_per_expert = int(feature_per_expert_raw)
+
+            teacher_selected_indices, _teacher_selected_names = self._resolve_rule_feature_selection(
+                stage_name=stage_name,
+                base_names=base_names,
+                scaled_names=base_names,
+                scaled_feature_lists=expert_feature_lists,
+                expert_scale=1,
+                stage_col2local=stage_col2local,
+                feature_per_expert=feature_per_expert,
+                rule_router_cfg=self.rule_router_cfg,
+            )
+            teacher_bias = self._resolve_rule_expert_bias(
+                stage_name=stage_name,
+                base_names=base_names,
+                scaled_names=base_names,
+                expert_scale=1,
+                n_experts=self.n_groups,
+                rule_router_cfg=self.rule_router_cfg,
+            )
+            self.group_teacher_router = RuleSoftRouter(
+                n_experts=self.n_groups,
+                n_stage_features=self._n_stage_features,
+                selected_feature_indices=teacher_selected_indices,
+                feature_names=self.stage_all_features,
+                n_bins=n_bins,
+                expert_bias=teacher_bias,
+                top_k=None,
+            )
+        else:
+            self.group_teacher_router = None
+
         if (
             self.router_impl == "learned"
             and self.router_mode == "session"
             and self.session_pooling == "query"
             and self.router_use_hidden
         ):
+            query_dim = d_router_hidden if self.router_design == "group_factorized_interaction" else d_model
             self.session_query_hidden = nn.Parameter(
-                torch.randn(d_model) * (1.0 / math.sqrt(float(d_model)))
+                torch.randn(query_dim) * (1.0 / math.sqrt(float(query_dim)))
             )
         else:
             self.register_parameter("session_query_hidden", None)
@@ -276,8 +396,9 @@ class MoEStage(nn.Module):
             and self.session_pooling == "query"
             and self.router_use_feature
         ):
+            query_dim = d_router_hidden if self.router_design == "group_factorized_interaction" else d_feat_emb
             self.session_query_feature = nn.Parameter(
-                torch.randn(d_feat_emb) * (1.0 / math.sqrt(float(d_feat_emb)))
+                torch.randn(query_dim) * (1.0 / math.sqrt(float(query_dim)))
             )
         else:
             self.register_parameter("session_query_feature", None)
@@ -299,6 +420,9 @@ class MoEStage(nn.Module):
         self.alpha_scale = 1.0
         self.current_router_temperature = self.router_temperature
         self.current_top_k = self.router_top_k
+        self.current_group_top_k = self.group_top_k
+        self.current_expert_top_k = self.expert_top_k
+        self.last_router_aux: Dict[str, torch.Tensor] = {}
 
     def set_schedule_state(
         self,
@@ -317,7 +441,7 @@ class MoEStage(nn.Module):
             self.alpha_scale = float(alpha_scale)
         if router_temperature is not None:
             self.current_router_temperature = max(float(router_temperature), 1e-6)
-        if top_k is not None:
+        if top_k is not None and self.router_design == "flat_legacy":
             self.current_top_k = None if int(top_k) <= 0 else int(top_k)
 
     @staticmethod
@@ -458,6 +582,12 @@ class MoEStage(nn.Module):
             inputs.append(feat.index_select(-1, idx))
         return inputs
 
+    def _reliability_scale_stage_features(self, stage_feat: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
+        if self.reliability_feat_idx is None:
+            return stage_feat
+        rel = feat[..., self.reliability_feat_idx].clamp(0.0, 1.0).unsqueeze(-1)
+        return stage_feat * rel
+
     @staticmethod
     def _build_valid_mask(
         batch_size: int,
@@ -538,6 +668,143 @@ class MoEStage(nn.Module):
         denom = w.sum(dim=1).clamp(min=1.0)
         return (stage_feat * w).sum(dim=1) / denom
 
+    def _encode_factorized_router_inputs(
+        self,
+        h_norm: torch.Tensor,
+        stage_feat: torch.Tensor,
+        feat: torch.Tensor,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.router_hidden_encoder is None or self.router_feature_encoder is None:
+            raise RuntimeError("factorized router encoders are not initialized.")
+
+        stage_feat = self._reliability_scale_stage_features(stage_feat, feat)
+
+        if self.router_use_hidden:
+            hidden_enc = self.router_hidden_encoder(h_norm)
+        else:
+            hidden_enc = h_norm.new_zeros(h_norm.shape[0], h_norm.shape[1], self.router_hidden_encoder[-1].out_features)
+
+        if self.router_use_feature:
+            feat_enc = self.router_feature_encoder(stage_feat)
+            if self.factorized_router_feature_drop is not None:
+                feat_enc = self.factorized_router_feature_drop(feat_enc)
+        else:
+            feat_enc = stage_feat.new_zeros(stage_feat.shape[0], stage_feat.shape[1], self.router_feature_encoder[-1].out_features)
+
+        if self.router_mode == "session":
+            if self.router_use_hidden:
+                hidden_enc = self._pool_sequence(
+                    hidden_enc,
+                    valid_mask,
+                    item_seq_len,
+                    query=self.session_query_hidden,
+                )
+            else:
+                hidden_enc = hidden_enc[:, 0, :]
+            if self.router_use_feature:
+                feat_enc = self._pool_sequence(
+                    feat_enc,
+                    valid_mask,
+                    item_seq_len,
+                    query=self.session_query_feature,
+                )
+            else:
+                feat_enc = feat_enc[:, 0, :]
+
+        return hidden_enc, feat_enc
+
+    def _factorized_router_forward(
+        self,
+        h_norm: torch.Tensor,
+        stage_feat: torch.Tensor,
+        feat: torch.Tensor,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        hidden_ctx, feat_ctx = self._encode_factorized_router_inputs(
+            h_norm=h_norm,
+            stage_feat=stage_feat,
+            feat=feat,
+            valid_mask=valid_mask,
+            item_seq_len=item_seq_len,
+        )
+        interaction = torch.cat(
+            [
+                feat_ctx,
+                hidden_ctx,
+                feat_ctx * hidden_ctx,
+                (feat_ctx - hidden_ctx).abs(),
+            ],
+            dim=-1,
+        )
+        shared_hidden = self.router_interaction(interaction)
+
+        raw_group_logits = self.group_router_head(shared_hidden)
+        scale = max(float(self.current_router_temperature), 1e-6)
+        group_logits = raw_group_logits / scale
+        group_weights = _softmax_with_top_k(group_logits, self.current_group_top_k)
+
+        if self.expert_scale <= 1:
+            raw_intra_logits = raw_group_logits.new_zeros(*raw_group_logits.shape, 1)
+            intra_logits = raw_intra_logits
+            intra_weights = raw_group_logits.new_ones(*raw_group_logits.shape, 1)
+        else:
+            raw_intra_logits = torch.stack(
+                [head(shared_hidden) for head in self.intra_group_router_heads],
+                dim=-2,
+            )
+            intra_logits = raw_intra_logits / scale
+            intra_weights = _softmax_with_top_k(intra_logits, self.current_expert_top_k)
+
+        if self.router_mode == "session":
+            group_weights = group_weights.unsqueeze(1).expand(-1, h_norm.size(1), -1)
+            group_logits = group_logits.unsqueeze(1).expand(-1, h_norm.size(1), -1)
+            raw_group_logits = raw_group_logits.unsqueeze(1).expand(-1, h_norm.size(1), -1)
+            intra_weights = intra_weights.unsqueeze(1).expand(-1, h_norm.size(1), -1, -1)
+            intra_logits = intra_logits.unsqueeze(1).expand(-1, h_norm.size(1), -1, -1)
+            raw_intra_logits = raw_intra_logits.unsqueeze(1).expand(-1, h_norm.size(1), -1, -1)
+
+        final_weights = group_weights.unsqueeze(-1) * intra_weights
+        gate_weights = final_weights.reshape(h_norm.size(0), h_norm.size(1), self.n_experts)
+        gate_logits = (group_logits.unsqueeze(-1) + intra_logits).reshape(
+            h_norm.size(0),
+            h_norm.size(1),
+            self.n_experts,
+        )
+
+        teacher_group_logits = None
+        if self.group_teacher_router is not None:
+            teacher_feat = self._reliability_scale_stage_features(stage_feat, feat)
+            if self.router_mode == "session":
+                teacher_feat = self._pool_rule_session_features(
+                    teacher_feat,
+                    valid_mask=valid_mask,
+                    item_seq_len=item_seq_len,
+                    session_pooling=self.session_pooling,
+                )
+            _, teacher_group_logits = self.group_teacher_router(
+                rule_features=teacher_feat,
+                temperature=1.0,
+                top_k=None,
+            )
+            if self.router_mode == "session":
+                teacher_group_logits = teacher_group_logits.unsqueeze(1).expand(-1, h_norm.size(1), -1)
+
+        self.last_router_aux = {
+            "group_weights": group_weights,
+            "group_logits": group_logits,
+            "group_logits_raw": raw_group_logits,
+            "intra_group_weights": intra_weights,
+            "intra_group_logits": intra_logits,
+            "intra_group_logits_raw": raw_intra_logits,
+        }
+        if teacher_group_logits is not None:
+            self.last_router_aux["teacher_group_logits"] = teacher_group_logits
+
+        return gate_weights, gate_logits
+
     def forward(
         self,
         hidden: torch.Tensor,
@@ -560,7 +827,15 @@ class MoEStage(nn.Module):
 
         stage_feat = feat.index_select(-1, self.stage_feat_idx)  # [B, T, F_stage]
 
-        if self.router_impl == "learned":
+        if self.router_impl == "learned" and self.router_design == "group_factorized_interaction":
+            gate_weights, gate_logits = self._factorized_router_forward(
+                h_norm=h_norm,
+                stage_feat=stage_feat,
+                feat=feat,
+                valid_mask=valid_mask,
+                item_seq_len=item_seq_len,
+            )
+        elif self.router_impl == "learned":
             assert self.stage_feat_proj is not None
             assert self.router_feat_drop is not None
 
@@ -602,11 +877,9 @@ class MoEStage(nn.Module):
                     temperature=self.current_router_temperature,
                     top_k=self.current_top_k,
                 )  # [B, T, K]
+            self.last_router_aux = {}
         else:
-            rule_feat = stage_feat
-            if self.reliability_feat_idx is not None:
-                rel = feat[..., self.reliability_feat_idx].clamp(0.0, 1.0).unsqueeze(-1)
-                rule_feat = rule_feat * rel
+            rule_feat = self._reliability_scale_stage_features(stage_feat, feat)
 
             if self.router_mode == "session":
                 rule_sess = self._pool_rule_session_features(
@@ -628,6 +901,7 @@ class MoEStage(nn.Module):
                     temperature=self.current_router_temperature,
                     top_k=self.current_top_k,
                 )  # [B, T, K]
+            self.last_router_aux = {}
 
         expert_inputs = self._gather_expert_inputs(feat)
         expert_out = self.expert_group(h_norm, expert_inputs)              # [B, T, K, d_model]

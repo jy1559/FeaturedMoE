@@ -1,10 +1,10 @@
 # FeaturedMoE_v4_Distillation Experiment Report
 
-- generated_at_utc: 2026-03-11T01:32:41.163040+00:00
+- generated_at_utc: 2026-03-11T05:32:47.032981+00:00
 - track: fmoe_v4_distillation
 - include_rule: keep OOM runs, keep successful runs with valid MRR@20, exclude non-OOM failures and no-metric runs
-- matched_end_events: 24
-- included_runs: 24
+- matched_end_events: 40
+- included_runs: 40
 - excluded_non_oom_error_runs: 0
 - excluded_no_metric_runs: 0
 
@@ -18,6 +18,22 @@
 
 | end_utc | dataset | axis | phase | status | oom | mrr@20 | duration_min | how | run_id |
 |---|---|---|---|---|---|---:|---:|---|---|
+| 2026-03-11T05:32:46.899137+00:00 | movielens1m | hparam | P2CMP16_C15_L29_MM | success | no | 0.091700 | 95.09 | hparam/P2CMP16_C15_L29_MM ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=29, fmoe_stage_execution_mode=parallel | 20260311_035 |
+| 2026-03-11T05:27:24.740339+00:00 | movielens1m | hparam | P2CMP16_C11_ALL_L7 | success | no | 0.093400 | 91.95 | hparam/P2CMP16_C11_ALL_L7 ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_035 |
+| 2026-03-11T05:22:12.045994+00:00 | movielens1m | hparam | P2CMP16_C14_L16_MM | success | no | 0.095200 | 85.04 | hparam/P2CMP16_C14_L16_MM ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=16, fmoe_stage_execution_mode=serial | 20260311_035 |
+| 2026-03-11T05:19:26.321582+00:00 | movielens1m | hparam | P2CMP16_C10_RULE_FULL_SOFT_NB10 | success | no | 0.071700 | 85.41 | hparam/P2CMP16_C10_RULE_FULL_SOFT_NB10 ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_035 |
+| 2026-03-11T05:16:48.460132+00:00 | movielens1m | hparam | P2CMP16_C09_RULE_FULL_SOFT | success | no | 0.071800 | 85.32 | hparam/P2CMP16_C09_RULE_FULL_SOFT ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_035 |
+| 2026-03-11T05:12:31.381443+00:00 | movielens1m | hparam | P2CMP16_C13_L9_MM | success | no | 0.092700 | 75.78 | hparam/P2CMP16_C13_L9_MM ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=9, fmoe_stage_execution_mode=serial | 20260311_035 |
+| 2026-03-11T05:12:00.409379+00:00 | movielens1m | hparam | P2CMP16_C08_RULE_HYBRID_SOFT | success | no | 0.096300 | 83.83 | hparam/P2CMP16_C08_RULE_HYBRID_SOFT ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_034 |
+| 2026-03-11T04:55:54.163822+00:00 | movielens1m | hparam | P2CMP16_C12_L24_MACRO_ONLY | success | no | 0.090500 | 60.06 | hparam/P2CMP16_C12_L24_MACRO_ONLY ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=24, fmoe_stage_execution_mode=parallel | 20260311_035 |
+| 2026-03-11T03:57:41.132385+00:00 | movielens1m | hparam | P2CMP16_C05_WEAK | success | no | 0.094000 | 93.19 | hparam/P2CMP16_C05_WEAK ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_022 |
+| 2026-03-11T03:57:09.174084+00:00 | movielens1m | hparam | P2CMP16_C00_BASE_DB | success | no | 0.094000 | 92.66 | hparam/P2CMP16_C00_BASE_DB ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_022 |
+| 2026-03-11T03:56:44.470147+00:00 | movielens1m | hparam | P2CMP16_C04_GCS_SWAP | success | no | 0.094400 | 92.25 | hparam/P2CMP16_C04_GCS_SWAP ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_022 |
+| 2026-03-11T03:55:50.392342+00:00 | movielens1m | hparam | P2CMP16_C01_GLS_BIAS | success | no | 0.094000 | 91.34 | hparam/P2CMP16_C01_GLS_BIAS ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_022 |
+| 2026-03-11T03:55:27.232809+00:00 | movielens1m | hparam | P2CMP16_C06_GLS_DKL | success | no | 0.094700 | 90.96 | hparam/P2CMP16_C06_GLS_DKL ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_022 |
+| 2026-03-11T03:54:01.279925+00:00 | movielens1m | hparam | P2CMP16_C02_RULESOFT_TEACHER | success | no | 0.094300 | 89.53 | hparam/P2CMP16_C02_RULESOFT_TEACHER ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_022 |
+| 2026-03-11T03:51:28.894658+00:00 | movielens1m | hparam | P2CMP16_C07_PLAIN | success | no | 0.095900 | 86.99 | hparam/P2CMP16_C07_PLAIN ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_022 |
+| 2026-03-11T03:48:09.975134+00:00 | movielens1m | hparam | P2CMP16_C03_GLS_RULE_HYBRID | success | no | 0.093900 | 83.67 | hparam/P2CMP16_C03_GLS_RULE_HYBRID ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_022 |
 | 2026-03-11T01:29:00.659651+00:00 | movielens1m | hparam | PFULLV4D_C23_GSH_BIAS_MM_MAIN | success | no | 0.094900 | 163.65 | hparam/PFULLV4D_C23_GSH_BIAS_MM_MAIN ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260310_224 |
 | 2026-03-11T00:39:49.079203+00:00 | movielens1m | hparam | PFULLV4D_C19_GCS_DB_ALL_STRONG | success | no | 0.091800 | 213.56 | hparam/PFULLV4D_C19_GCS_DB_ALL_STRONG ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260310_210 |
 | 2026-03-11T00:25:58.430967+00:00 | movielens1m | hparam | PFULLV4D_C21_GSH_DKL_ALL_MAIN | success | no | 0.095900 | 149.43 | hparam/PFULLV4D_C21_GSH_DKL_ALL_MAIN ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260310_215 |

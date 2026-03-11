@@ -26,6 +26,13 @@ PAR_GATE_TOP_K="0"
 PAR_GATE_TEMP="1.0"
 MERGE_AUX_ENABLE="false"
 MERGE_AUX_SCALE="1.0"
+ROUTER_DESIGN="group_factorized_interaction"
+GROUP_TOP_K="0"
+EXPERT_TOP_K="1"
+ROUTER_DISTILL_ENABLE="false"
+ROUTER_DISTILL_LAMBDA="0.0"
+ROUTER_DISTILL_TEMP="1.5"
+ROUTER_DISTILL_UNTIL="0.2"
 
 usage() {
   cat <<USAGE
@@ -39,11 +46,11 @@ load_defaults() {
   case "$DATASET" in
     movielens1m)
       MAX_LEN="10"; EMB="128"; D_FEAT="16"; D_EXP="128"; D_ROUT="64"; SCALE="3"; HEADS="8"
-      LR="0.0005507387"; WD="9.862213949e-05"; DROP="0.1804033874"; BAL="0.0073076253"
+      LR="0.0005507387"; WD="9.862213949e-05"; DROP="0.1804033874"; BAL="0.003"
       TRAIN_BS="8192"; EVAL_BS="16384";;
     retail_rocket)
       MAX_LEN="10"; EMB="128"; D_FEAT="16"; D_EXP="128"; D_ROUT="64"; SCALE="3"; HEADS="8"
-      LR="0.0001594032"; WD="9.862213949e-05"; DROP="0.1586694895"; BAL="0.0073076253"
+      LR="0.0001594032"; WD="9.862213949e-05"; DROP="0.1586694895"; BAL="0.003"
       TRAIN_BS="4096"; EVAL_BS="8192";;
     *)
       echo "Unsupported DATASET=$DATASET (use movielens1m|retail_rocket)"; exit 1 ;;
@@ -129,6 +136,17 @@ cmd=(
   "+weight_decay=${WD}"
   "hidden_dropout_prob=${DROP}"
   "balance_loss_lambda=${BAL}"
+  "router_design=${ROUTER_DESIGN}"
+  "group_top_k=${GROUP_TOP_K}"
+  "expert_top_k=${EXPERT_TOP_K}"
+  "router_distill_enable=${ROUTER_DISTILL_ENABLE}"
+  "router_distill_lambda=${ROUTER_DISTILL_LAMBDA}"
+  "router_distill_temperature=${ROUTER_DISTILL_TEMP}"
+  "router_distill_until=${ROUTER_DISTILL_UNTIL}"
+  "fmoe_v2_feature_spec_aux_enable=true"
+  "fmoe_v2_feature_spec_aux_lambda=3e-4"
+  "fmoe_v2_feature_spec_stages=[mid]"
+  "fmoe_v2_feature_spec_min_tokens=8"
   "fmoe_v2_parallel_stage_gate_top_k=${PAR_GATE_TOP_K}"
   "fmoe_v2_parallel_stage_gate_temperature=${PAR_GATE_TEMP}"
   "fmoe_v2_stage_merge_aux_enable=${MERGE_AUX_ENABLE}"

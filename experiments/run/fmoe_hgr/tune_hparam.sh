@@ -12,6 +12,7 @@ STAGE_MERGE_MODE=""
 GROUP_ROUTER_MODE=""
 GROUP_TOP_K=""
 MOE_TOP_K=""
+EXPERT_TOP_K=""
 GPU_ID="0"
 MAX_EVALS="24"
 TUNE_EPOCHS="100"
@@ -52,6 +53,17 @@ EXPERT_USE_FEATURE=""
 MACRO_ROUTING_SCOPE=""
 MACRO_SESSION_POOLING=""
 PARALLEL_STAGE_GATE_TEMPERATURE=""
+ROUTER_DESIGN=""
+GROUP_BAL=""
+INTRA_BAL=""
+GROUP_SPEC_ENABLE=""
+GROUP_SPEC_LAMBDA=""
+GROUP_SPEC_STAGES=""
+GROUP_SPEC_MIN_TOKENS=""
+ROUTER_DISTILL_ENABLE=""
+ROUTER_DISTILL_LAMBDA=""
+ROUTER_DISTILL_TEMPERATURE=""
+ROUTER_DISTILL_UNTIL=""
 
 usage() {
   cat <<USAGE
@@ -99,17 +111,29 @@ load_defaults() {
       : "${BASE_LR:=0.0007}"
       : "${BASE_WD:=1e-5}"
       : "${BASE_DROP:=0.12}"
-      : "${BASE_BAL:=0.01}"
+      : "${BASE_BAL:=0.003}"
       : "${LAYOUT_ID:=0}"
       : "${STAGE_MERGE_MODE:=serial}"
       : "${GROUP_ROUTER_MODE:=per_group}"
       : "${GROUP_TOP_K:=0}"
       : "${MOE_TOP_K:=0}"
+      : "${EXPERT_TOP_K:=1}"
       : "${MID_ROUTER_TEMPERATURE:=1.3}"
       : "${MICRO_ROUTER_TEMPERATURE:=1.3}"
       : "${MID_ROUTER_FEATURE_DROPOUT:=0.1}"
       : "${MICRO_ROUTER_FEATURE_DROPOUT:=0.1}"
       : "${EXPERT_USE_FEATURE:=false}"
+      : "${ROUTER_DESIGN:=group_factorized_interaction}"
+      : "${GROUP_BAL:=0.001}"
+      : "${INTRA_BAL:=0.001}"
+      : "${GROUP_SPEC_ENABLE:=true}"
+      : "${GROUP_SPEC_LAMBDA:=3e-4}"
+      : "${GROUP_SPEC_STAGES:=[mid]}"
+      : "${GROUP_SPEC_MIN_TOKENS:=8}"
+      : "${ROUTER_DISTILL_ENABLE:=false}"
+      : "${ROUTER_DISTILL_LAMBDA:=5e-3}"
+      : "${ROUTER_DISTILL_TEMPERATURE:=1.5}"
+      : "${ROUTER_DISTILL_UNTIL:=0.2}"
       : "${MACRO_ROUTING_SCOPE:=session}"
       : "${MACRO_SESSION_POOLING:=query}"
       : "${PARALLEL_STAGE_GATE_TEMPERATURE:=1.0}"
@@ -126,17 +150,29 @@ load_defaults() {
       : "${BASE_LR:=0.0004}"
       : "${BASE_WD:=1e-5}"
       : "${BASE_DROP:=0.15}"
-      : "${BASE_BAL:=0.01}"
+      : "${BASE_BAL:=0.003}"
       : "${LAYOUT_ID:=0}"
       : "${STAGE_MERGE_MODE:=serial}"
       : "${GROUP_ROUTER_MODE:=per_group}"
       : "${GROUP_TOP_K:=0}"
       : "${MOE_TOP_K:=0}"
+      : "${EXPERT_TOP_K:=1}"
       : "${MID_ROUTER_TEMPERATURE:=1.3}"
       : "${MICRO_ROUTER_TEMPERATURE:=1.3}"
       : "${MID_ROUTER_FEATURE_DROPOUT:=0.1}"
       : "${MICRO_ROUTER_FEATURE_DROPOUT:=0.1}"
       : "${EXPERT_USE_FEATURE:=false}"
+      : "${ROUTER_DESIGN:=group_factorized_interaction}"
+      : "${GROUP_BAL:=0.001}"
+      : "${INTRA_BAL:=0.001}"
+      : "${GROUP_SPEC_ENABLE:=true}"
+      : "${GROUP_SPEC_LAMBDA:=3e-4}"
+      : "${GROUP_SPEC_STAGES:=[mid]}"
+      : "${GROUP_SPEC_MIN_TOKENS:=8}"
+      : "${ROUTER_DISTILL_ENABLE:=false}"
+      : "${ROUTER_DISTILL_LAMBDA:=5e-3}"
+      : "${ROUTER_DISTILL_TEMPERATURE:=1.5}"
+      : "${ROUTER_DISTILL_UNTIL:=0.2}"
       : "${MACRO_ROUTING_SCOPE:=session}"
       : "${MACRO_SESSION_POOLING:=query}"
       : "${PARALLEL_STAGE_GATE_TEMPERATURE:=1.0}"
@@ -156,6 +192,7 @@ while [ "$#" -gt 0 ]; do
     --group-router-mode) GROUP_ROUTER_MODE="$2"; shift 2 ;;
     --group-top-k) GROUP_TOP_K="$2"; shift 2 ;;
     --moe-top-k) MOE_TOP_K="$2"; shift 2 ;;
+    --expert-top-k) EXPERT_TOP_K="$2"; shift 2 ;;
     --gpu|--gpu-id) GPU_ID="$2"; shift 2 ;;
     --max-evals) MAX_EVALS="$2"; shift 2 ;;
     --tune-epochs) TUNE_EPOCHS="$2"; shift 2 ;;
@@ -193,6 +230,17 @@ while [ "$#" -gt 0 ]; do
     --mid-router-feature-dropout) MID_ROUTER_FEATURE_DROPOUT="$2"; shift 2 ;;
     --micro-router-feature-dropout) MICRO_ROUTER_FEATURE_DROPOUT="$2"; shift 2 ;;
     --expert-use-feature) EXPERT_USE_FEATURE="$2"; shift 2 ;;
+    --router-design) ROUTER_DESIGN="$2"; shift 2 ;;
+    --group-balance-lambda) GROUP_BAL="$2"; shift 2 ;;
+    --intra-balance-lambda) INTRA_BAL="$2"; shift 2 ;;
+    --group-feature-spec-aux-enable) GROUP_SPEC_ENABLE="$2"; shift 2 ;;
+    --group-feature-spec-aux-lambda) GROUP_SPEC_LAMBDA="$2"; shift 2 ;;
+    --group-feature-spec-stages) GROUP_SPEC_STAGES="$2"; shift 2 ;;
+    --group-feature-spec-min-tokens) GROUP_SPEC_MIN_TOKENS="$2"; shift 2 ;;
+    --router-distill-enable) ROUTER_DISTILL_ENABLE="$2"; shift 2 ;;
+    --router-distill-lambda) ROUTER_DISTILL_LAMBDA="$2"; shift 2 ;;
+    --router-distill-temperature) ROUTER_DISTILL_TEMPERATURE="$2"; shift 2 ;;
+    --router-distill-until) ROUTER_DISTILL_UNTIL="$2"; shift 2 ;;
     --macro-routing-scope) MACRO_ROUTING_SCOPE="$2"; shift 2 ;;
     --macro-session-pooling) MACRO_SESSION_POOLING="$2"; shift 2 ;;
     --parallel-stage-gate-temperature) PARALLEL_STAGE_GATE_TEMPERATURE="$2"; shift 2 ;;
@@ -237,28 +285,28 @@ esac
 
 case "$SEARCH_PROFILE" in
   wide)
-    LR_SPACE='[5e-5,3e-2]'
-    WD_SPACE='[0.0,1e-6,1e-5,1e-4,1e-3]'
-    DROP_SPACE='[0.05,0.2]'
-    BAL_SPACE='[0.001,0.05]'
+    LR_SPACE='[8e-4,2.5e-3]'
+    WD_SPACE='[0.0,1e-6,3e-6,1e-5,3e-5]'
+    DROP_SPACE='[0.1,0.17]'
+    BAL_SPACE='[0.001,0.003,0.01]'
     ;;
   p1_shallow)
-    LR_SPACE='[7.5e-5,2.5e-2]'
-    WD_SPACE='[0.0,1e-6,1e-5,1e-4,5e-4]'
-    DROP_SPACE='[0.08,0.18]'
-    BAL_SPACE='[0.001,0.05]'
+    LR_SPACE='[8e-4,2.5e-3]'
+    WD_SPACE='[0.0,1e-6,3e-6,1e-5,3e-5]'
+    DROP_SPACE='[0.1,0.17]'
+    BAL_SPACE='[0.001,0.003,0.01]'
     ;;
   confirm_narrow)
-    LR_SPACE='[1.5e-4,3e-3]'
-    WD_SPACE='[0.0,1e-6,1e-5,5e-5,1e-4]'
-    DROP_SPACE='[0.08,0.12,0.16]'
-    BAL_SPACE='[0.001,0.003,0.01,0.03]'
+    LR_SPACE='[8e-4,2.5e-3]'
+    WD_SPACE='[0.0,1e-6,3e-6,1e-5,3e-5]'
+    DROP_SPACE='[0.1,0.13,0.17]'
+    BAL_SPACE='[0.001,0.003,0.01]'
     ;;
   structure_refine)
-    LR_SPACE='[1e-4,1e-2]'
-    WD_SPACE='[0.0,1e-6,1e-5,1e-4,1e-3]'
-    DROP_SPACE='[0.08,0.12,0.16]'
-    BAL_SPACE='[0.001,0.003,0.01,0.03]'
+    LR_SPACE='[8e-4,2.5e-3]'
+    WD_SPACE='[0.0,1e-6,3e-6,1e-5,3e-5]'
+    DROP_SPACE='[0.1,0.13,0.17]'
+    BAL_SPACE='[0.001,0.003,0.01]'
     ;;
   *)
     echo "Unsupported --search-profile=${SEARCH_PROFILE}" >&2
@@ -370,11 +418,15 @@ PY_BIN="$(run_python_bin)"
 
 if [ -n "$PARENT_RESULT" ]; then
   [ ! -f "$PARENT_RESULT" ] && { echo "parent result not found: $PARENT_RESULT" >&2; exit 1; }
-  read -r P_LR P_WD P_DROP P_BAL P_LAYOUT P_MERGE P_GROUP_MODE P_GROUP_TOPK \
+  read -r P_LR P_WD P_DROP P_BAL P_LAYOUT P_MERGE P_ROUTER_DESIGN P_GROUP_MODE P_GROUP_TOPK P_EXPERT_TOPK \
+    P_GROUP_BAL P_INTRA_BAL P_GROUP_SPEC_ENABLE P_GROUP_SPEC_LAMBDA P_GROUP_SPEC_STAGES P_GROUP_SPEC_MINTOK \
+    P_ROUTER_DISTILL_ENABLE P_ROUTER_DISTILL_LAMBDA P_ROUTER_DISTILL_TEMPERATURE P_ROUTER_DISTILL_UNTIL \
     P_EMB P_DFEAT P_DEXP P_DROUT P_SCALE P_TRAIN_BS P_EVAL_BS P_MOE_TOPK \
     P_MID_TEMP P_MICRO_TEMP P_MID_FDROP P_MICRO_FDROP P_EXPERT_FEAT \
     P_MACRO_SCOPE P_MACRO_POOL P_PAR_TEMP <<< "$("$PY_BIN" - \
-      "$PARENT_RESULT" "$LAYOUT_ID" "$STAGE_MERGE_MODE" "$GROUP_ROUTER_MODE" "$GROUP_TOP_K" \
+      "$PARENT_RESULT" "$LAYOUT_ID" "$STAGE_MERGE_MODE" "$ROUTER_DESIGN" "$GROUP_ROUTER_MODE" "$GROUP_TOP_K" "$EXPERT_TOP_K" \
+      "$GROUP_BAL" "$INTRA_BAL" "$GROUP_SPEC_ENABLE" "$GROUP_SPEC_LAMBDA" "$GROUP_SPEC_STAGES" "$GROUP_SPEC_MIN_TOKENS" \
+      "$ROUTER_DISTILL_ENABLE" "$ROUTER_DISTILL_LAMBDA" "$ROUTER_DISTILL_TEMPERATURE" "$ROUTER_DISTILL_UNTIL" \
       "$EMBEDDING_SIZE" "$D_FEAT_EMB" "$D_EXPERT_HIDDEN" "$D_ROUTER_HIDDEN" "$EXPERT_SCALE" \
       "$TRAIN_BATCH_SIZE" "$EVAL_BATCH_SIZE" "$MOE_TOP_K" "$MID_ROUTER_TEMPERATURE" \
       "$MICRO_ROUTER_TEMPERATURE" "$MID_ROUTER_FEATURE_DROPOUT" "$MICRO_ROUTER_FEATURE_DROPOUT" \
@@ -387,24 +439,36 @@ path = sys.argv[1]
 defaults = {
     "arch_layout_id": sys.argv[2],
     "stage_merge_mode": sys.argv[3],
-    "group_router_mode": sys.argv[4],
-    "group_top_k": sys.argv[5],
-    "embedding_size": sys.argv[6],
-    "d_feat_emb": sys.argv[7],
-    "d_expert_hidden": sys.argv[8],
-    "d_router_hidden": sys.argv[9],
-    "expert_scale": sys.argv[10],
-    "train_batch_size": sys.argv[11],
-    "eval_batch_size": sys.argv[12],
-    "moe_top_k": sys.argv[13],
-    "mid_router_temperature": sys.argv[14],
-    "micro_router_temperature": sys.argv[15],
-    "mid_router_feature_dropout": sys.argv[16],
-    "micro_router_feature_dropout": sys.argv[17],
-    "expert_use_feature": sys.argv[18],
-    "macro_routing_scope": sys.argv[19],
-    "macro_session_pooling": sys.argv[20],
-    "parallel_stage_gate_temperature": sys.argv[21],
+    "router_design": sys.argv[4],
+    "group_router_mode": sys.argv[5],
+    "group_top_k": sys.argv[6],
+    "expert_top_k": sys.argv[7],
+    "group_balance_lambda": sys.argv[8],
+    "intra_balance_lambda": sys.argv[9],
+    "group_feature_spec_aux_enable": sys.argv[10],
+    "group_feature_spec_aux_lambda": sys.argv[11],
+    "group_feature_spec_stages": sys.argv[12],
+    "group_feature_spec_min_tokens": sys.argv[13],
+    "router_distill_enable": sys.argv[14],
+    "router_distill_lambda": sys.argv[15],
+    "router_distill_temperature": sys.argv[16],
+    "router_distill_until": sys.argv[17],
+    "embedding_size": sys.argv[18],
+    "d_feat_emb": sys.argv[19],
+    "d_expert_hidden": sys.argv[20],
+    "d_router_hidden": sys.argv[21],
+    "expert_scale": sys.argv[22],
+    "train_batch_size": sys.argv[23],
+    "eval_batch_size": sys.argv[24],
+    "moe_top_k": sys.argv[25],
+    "mid_router_temperature": sys.argv[26],
+    "micro_router_temperature": sys.argv[27],
+    "mid_router_feature_dropout": sys.argv[28],
+    "micro_router_feature_dropout": sys.argv[29],
+    "expert_use_feature": sys.argv[30],
+    "macro_routing_scope": sys.argv[31],
+    "macro_session_pooling": sys.argv[32],
+    "parallel_stage_gate_temperature": sys.argv[33],
 }
 
 d = json.load(open(path, "r", encoding="utf-8"))
@@ -424,31 +488,50 @@ def pick(key, default):
         return fixed[key]
     return default
 
+def emit(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return "[" + ",".join(str(v) for v in value) + "]"
+    return value
+
 print(
-    pick("learning_rate", 7e-4),
-    pick("weight_decay", 1e-5),
-    pick("hidden_dropout_prob", 0.12),
-    pick("balance_loss_lambda", 0.01),
-    pick("arch_layout_id", defaults["arch_layout_id"]),
-    pick("stage_merge_mode", defaults["stage_merge_mode"]),
-    pick("group_router_mode", defaults["group_router_mode"]),
-    pick("group_top_k", defaults["group_top_k"]),
-    pick("embedding_size", defaults["embedding_size"]),
-    pick("d_feat_emb", defaults["d_feat_emb"]),
-    pick("d_expert_hidden", defaults["d_expert_hidden"]),
-    pick("d_router_hidden", defaults["d_router_hidden"]),
-    pick("expert_scale", defaults["expert_scale"]),
-    pick("train_batch_size", defaults["train_batch_size"]),
-    pick("eval_batch_size", defaults["eval_batch_size"]),
-    pick("moe_top_k", defaults["moe_top_k"]),
-    pick("mid_router_temperature", defaults["mid_router_temperature"]),
-    pick("micro_router_temperature", defaults["micro_router_temperature"]),
-    pick("mid_router_feature_dropout", defaults["mid_router_feature_dropout"]),
-    pick("micro_router_feature_dropout", defaults["micro_router_feature_dropout"]),
-    pick("expert_use_feature", defaults["expert_use_feature"]),
-    pick("macro_routing_scope", defaults["macro_routing_scope"]),
-    pick("macro_session_pooling", defaults["macro_session_pooling"]),
-    pick("parallel_stage_gate_temperature", defaults["parallel_stage_gate_temperature"]),
+    emit(pick("learning_rate", 7e-4)),
+    emit(pick("weight_decay", 1e-5)),
+    emit(pick("hidden_dropout_prob", 0.12)),
+    emit(pick("balance_loss_lambda", 0.003)),
+    emit(pick("arch_layout_id", defaults["arch_layout_id"])),
+    emit(pick("stage_merge_mode", defaults["stage_merge_mode"])),
+    emit(pick("router_design", defaults["router_design"])),
+    emit(pick("group_router_mode", defaults["group_router_mode"])),
+    emit(pick("group_top_k", defaults["group_top_k"])),
+    emit(pick("expert_top_k", defaults["expert_top_k"])),
+    emit(pick("group_balance_lambda", defaults["group_balance_lambda"])),
+    emit(pick("intra_balance_lambda", defaults["intra_balance_lambda"])),
+    emit(pick("group_feature_spec_aux_enable", defaults["group_feature_spec_aux_enable"])),
+    emit(pick("group_feature_spec_aux_lambda", defaults["group_feature_spec_aux_lambda"])),
+    emit(pick("group_feature_spec_stages", defaults["group_feature_spec_stages"])),
+    emit(pick("group_feature_spec_min_tokens", defaults["group_feature_spec_min_tokens"])),
+    emit(pick("router_distill_enable", defaults["router_distill_enable"])),
+    emit(pick("router_distill_lambda", defaults["router_distill_lambda"])),
+    emit(pick("router_distill_temperature", defaults["router_distill_temperature"])),
+    emit(pick("router_distill_until", defaults["router_distill_until"])),
+    emit(pick("embedding_size", defaults["embedding_size"])),
+    emit(pick("d_feat_emb", defaults["d_feat_emb"])),
+    emit(pick("d_expert_hidden", defaults["d_expert_hidden"])),
+    emit(pick("d_router_hidden", defaults["d_router_hidden"])),
+    emit(pick("expert_scale", defaults["expert_scale"])),
+    emit(pick("train_batch_size", defaults["train_batch_size"])),
+    emit(pick("eval_batch_size", defaults["eval_batch_size"])),
+    emit(pick("moe_top_k", defaults["moe_top_k"])),
+    emit(pick("mid_router_temperature", defaults["mid_router_temperature"])),
+    emit(pick("micro_router_temperature", defaults["micro_router_temperature"])),
+    emit(pick("mid_router_feature_dropout", defaults["mid_router_feature_dropout"])),
+    emit(pick("micro_router_feature_dropout", defaults["micro_router_feature_dropout"])),
+    emit(pick("expert_use_feature", defaults["expert_use_feature"])),
+    emit(pick("macro_routing_scope", defaults["macro_routing_scope"])),
+    emit(pick("macro_session_pooling", defaults["macro_session_pooling"])),
+    emit(pick("parallel_stage_gate_temperature", defaults["parallel_stage_gate_temperature"])),
 )
 PY
 )"
@@ -458,8 +541,20 @@ PY
   BASE_BAL="${P_BAL}"
   LAYOUT_ID="${P_LAYOUT}"
   STAGE_MERGE_MODE="${P_MERGE}"
+  ROUTER_DESIGN="${P_ROUTER_DESIGN}"
   GROUP_ROUTER_MODE="${P_GROUP_MODE}"
   GROUP_TOP_K="${P_GROUP_TOPK}"
+  EXPERT_TOP_K="${P_EXPERT_TOPK}"
+  GROUP_BAL="${P_GROUP_BAL}"
+  INTRA_BAL="${P_INTRA_BAL}"
+  GROUP_SPEC_ENABLE="${P_GROUP_SPEC_ENABLE}"
+  GROUP_SPEC_LAMBDA="${P_GROUP_SPEC_LAMBDA}"
+  GROUP_SPEC_STAGES="${P_GROUP_SPEC_STAGES}"
+  GROUP_SPEC_MIN_TOKENS="${P_GROUP_SPEC_MINTOK}"
+  ROUTER_DISTILL_ENABLE="${P_ROUTER_DISTILL_ENABLE}"
+  ROUTER_DISTILL_LAMBDA="${P_ROUTER_DISTILL_LAMBDA}"
+  ROUTER_DISTILL_TEMPERATURE="${P_ROUTER_DISTILL_TEMPERATURE}"
+  ROUTER_DISTILL_UNTIL="${P_ROUTER_DISTILL_UNTIL}"
   EMBEDDING_SIZE="${P_EMB}"
   D_FEAT_EMB="${P_DFEAT}"
   D_EXPERT_HIDDEN="${P_DEXP}"
@@ -489,7 +584,7 @@ if [ -z "$EXP_DESC" ]; then
   EXP_DESC="HGR hparam search (${SEARCH_PROFILE}) with fixed routing/layout combo; optimize LR/WD (+optional dropout/balance)."
 fi
 if [ -z "$EXP_FOCUS" ]; then
-  EXP_FOCUS="stage_merge_mode,group_router_mode,arch_layout_id,group_top_k,moe_top_k,expert_use_feature,macro_routing_scope,parallel_stage_gate_temperature,learning_rate,weight_decay,hidden_dropout_prob,balance_loss_lambda"
+  EXP_FOCUS="router_design,stage_merge_mode,group_router_mode,arch_layout_id,group_top_k,expert_top_k,group_balance_lambda,intra_balance_lambda,group_feature_spec_aux_lambda,router_distill_enable,learning_rate,weight_decay,hidden_dropout_prob,balance_loss_lambda"
 fi
 
 LOG_FILE_PATH="$(run_make_log_path fmoe_hgr hparam "$DATASET" "FeaturedMoE_HGR_${STAGE_MERGE_MODE}_${GROUP_ROUTER_MODE}" "$GPU_ID" "$PHASE")"
@@ -538,14 +633,38 @@ cmd=(
   "++search.arch_layout_id=[${LAYOUT_ID}]"
   "stage_merge_mode=${STAGE_MERGE_MODE}"
   "++search.stage_merge_mode=[${STAGE_MERGE_MODE}]"
+  "router_design=${ROUTER_DESIGN}"
+  "++search.router_design=[${ROUTER_DESIGN}]"
   "group_router_mode=${GROUP_ROUTER_MODE}"
   "++search.group_router_mode=[${GROUP_ROUTER_MODE}]"
   "group_top_k=${GROUP_TOP_K}"
   "++search.group_top_k=[${GROUP_TOP_K}]"
   "moe_top_k=${MOE_TOP_K}"
   "++search.moe_top_k=[${MOE_TOP_K}]"
+  "expert_top_k=${EXPERT_TOP_K}"
+  "++search.expert_top_k=[${EXPERT_TOP_K}]"
   "expert_use_feature=${EXPERT_USE_FEATURE}"
   "++search.expert_use_feature=[${EXPERT_USE_FEATURE}]"
+  "group_balance_lambda=${GROUP_BAL}"
+  "++search.group_balance_lambda=[0.0,0.001,0.003]"
+  "intra_balance_lambda=${INTRA_BAL}"
+  "++search.intra_balance_lambda=[0.0,0.001,0.003]"
+  "group_feature_spec_aux_enable=${GROUP_SPEC_ENABLE}"
+  "++search.group_feature_spec_aux_enable=[${GROUP_SPEC_ENABLE}]"
+  "group_feature_spec_aux_lambda=${GROUP_SPEC_LAMBDA}"
+  "++search.group_feature_spec_aux_lambda=[1e-4,3e-4,7e-4]"
+  "group_feature_spec_stages=${GROUP_SPEC_STAGES}"
+  "++search.group_feature_spec_stages=[${GROUP_SPEC_STAGES}]"
+  "group_feature_spec_min_tokens=${GROUP_SPEC_MIN_TOKENS}"
+  "++search.group_feature_spec_min_tokens=[${GROUP_SPEC_MIN_TOKENS}]"
+  "router_distill_enable=${ROUTER_DISTILL_ENABLE}"
+  "++search.router_distill_enable=[${ROUTER_DISTILL_ENABLE}]"
+  "router_distill_lambda=${ROUTER_DISTILL_LAMBDA}"
+  "++search.router_distill_lambda=[${ROUTER_DISTILL_LAMBDA}]"
+  "router_distill_temperature=${ROUTER_DISTILL_TEMPERATURE}"
+  "++search.router_distill_temperature=[${ROUTER_DISTILL_TEMPERATURE}]"
+  "router_distill_until=${ROUTER_DISTILL_UNTIL}"
+  "++search.router_distill_until=[${ROUTER_DISTILL_UNTIL}]"
   "macro_routing_scope=${MACRO_ROUTING_SCOPE}"
   "++search.macro_routing_scope=[${MACRO_ROUTING_SCOPE}]"
   "macro_session_pooling=${MACRO_SESSION_POOLING}"

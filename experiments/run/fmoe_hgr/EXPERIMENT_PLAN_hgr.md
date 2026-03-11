@@ -2,6 +2,23 @@
 
 실행은 별도 세션에서 진행하고, 이 문서는 phase 설계와 기본값의 근거를 고정합니다.
 
+## Post-P15 현재 기준
+- `P15HGR` readout에서는 `layout 15`가 main, `layout 16`이 안정 control, `layout 21`이 heavy control입니다.
+- route는 현재까지 `serial + hybrid`가 가장 강하고, `serial + per_group`은 control로 유지합니다.
+- `alpha_cold`는 현재 채택 신호가 약해서 post-P15 main path에서 제외합니다.
+- 그래서 현재 phase는 아래처럼 재정렬합니다.
+  - `P2`: `p2_dim_focus.sh`
+  - `P3`: `p3_router_teach.sh`
+  - Final: `P3` best 기준 optimizer squeeze
+
+## Post-P2 현재 기준
+- `P2HGR` 부분 결과 기준 best는 `L15 + serial + hybrid + D0(128/16/160/64)`의 `0.0948`입니다.
+- 다음 후보는 같은 layout/route의 `D2(160/16/256/112)`로 `0.0945`인데, early-stop 상태라 추가 성장 여지가 있습니다.
+- 반면 `P2`는 early stop 비율이 높아서, 다음 phase는 layout/dim 탐색보다 `epochs`와 `patience`를 늘리고 router teaching을 보는 쪽이 우선입니다.
+- 그래서 current best anchor는 아래 두 개로 고정합니다.
+  - `A0 = L15 + serial + hybrid + 128/16/160/64 + scale3 + bs4096`
+  - `A1 = L15 + serial + hybrid + 160/16/256/112 + scale3 + bs2048`
+
 ## 왜 HGR는 routing-first인가
 HGR의 새로움은 `4-group outer router + group-internal expert router`입니다.
 그래서 초반 탐색 우선순위는 다음 순서가 맞습니다.
@@ -124,51 +141,42 @@ layout 쪽 휴리스틱:
 - trial 분산이 과도하지 않은지
 - OOM / 실패율이 낮은지
 
-## Phase 3: Capacity / batch refinement
-목표: best routing combo 위에서 구조적 capacity를 맞춤
+## Phase 3: Router teaching
+목표: outer group router가 rule-like intent를 더 안정적으로 배우게 함
 
 원칙:
-- `stage_merge_mode`, `group_router_mode`, `group_top_k`, `layout_id`는 parent result에서 고정
-- combo간 차이는 `embedding_size`, `d_feat_emb`, `d_expert_hidden`, `d_router_hidden`, `expert_scale`, `batch`
-- combo 내부에서 optimizer를 다시 튜닝
+- 구조는 `L15 + serial + hybrid`로 고정
+- anchor는 `A0`, `A1` 두 개만 사용
+- combo 차이는 distill/spec/group-top-k teaching profile뿐
+- `epochs=100`, `patience=15`, `max_evals=10`으로 early-stop bias를 줄임
 
-권장 combo family:
-- `128,16,160,64,3,4096`
-- `128,16,192,64,3,4096`
-- `128,24,192,80,3,3072`
-- `160,16,192,80,3,3072`
-- `160,24,224,96,3,3072`
-- `128,16,160,64,4,2048`
+권장 teaching profiles:
+- `M0 baseline`: distill off, `group_feature_spec_stages=[mid]`, `group_feature_spec_aux_lambda=1e-4`
+- `M1 weak distill`: `lambda=2e-3, tau=1.5, until=0.2`
+- `M2 main distill`: `lambda=5e-3, tau=1.5, until=0.2`
+- `M3 strong distill`: `lambda=1e-2, tau=1.5, until=0.2`
+- `M4 long distill`: `lambda=5e-3, tau=1.5, until=0.3`
+- `M5 sharp distill`: `lambda=5e-3, tau=1.2, until=0.2`
+- `M6 distill + macro/mid spec`: `group_feature_spec_stages=[macro,mid]`, `group_feature_spec_aux_lambda=3e-4`
+- `M7 distill + group_top_k=2`
 
-이 순서로 가는 이유:
-- HGR는 outer/intra router 둘 다 있어서 `d_router_hidden`이 너무 작으면 표현력이 부족할 수 있음
-- 반대로 `expert_scale=4`는 성능 이득보다 variance/OOM을 먼저 올릴 가능성이 있어 late phase로 미룸
-- batch는 capacity와 같이 조절해야 LR sweet spot이 같이 바뀜
+권장 optimizer bucket:
+- `A0 (bs4096)`: `lr=[9e-4,1.3e-3,1.8e-3,2.3e-3,2.8e-3]`, `wd=[1e-6,3e-6,1e-5,2e-5]`
+- `A1 (bs2048)`: `lr=[3.5e-4,5e-4,6.5e-4,8e-4,1.0e-3]`, `wd=[5e-6,1.5e-5,3e-5,5e-5]`
+- 공통: `dropout=[0.09,0.10,0.11]`, `balance=[0.0025,0.0032,0.0042]`
 
-## Phase 4: Routing stabilization / optional schedule
-목표: top-k / temperature / feature dropout / warmup을 마지막에만 분리 탐색
+채택 기준:
+- 1순위: `0.0948` 초과
+- 2순위: anchor 두 개 평균이 baseline보다 상승
+- 3순위: score가 비슷하면 `group load`, `group entropy`, `active clones/group`이 더 안정적인 profile 채택
 
-권장 routing search:
-- `group_top_k=[0,2]`
-- `moe_top_k=[0,2]`
-- `mid_router_temperature=[1.0,1.15,1.3,1.5]`
-- `micro_router_temperature=[1.0,1.15,1.3,1.5]`
-- `mid_router_feature_dropout=[0.05,0.1,0.15]`
-- `micro_router_feature_dropout=[0.05,0.1,0.15]`
-- `parallel_stage_gate_top_k=[0,2]` only if parallel
+## Final: Optimizer squeeze / optional sparse-routing refinement
+목표: `P3` best 하나를 parent로 두고 재현성과 마지막 regularization을 좁힘
 
-권장 schedule search:
-- `alpha_warmup_until=[0.1,0.2,0.3]`
-- `alpha_warmup_start=[0.0,0.1,0.2]`
-- `temperature_warmup_until=[0.1,0.2,0.3]`
-- `mid_router_temperature_start=[1.3,1.6,1.9]`
-- `micro_router_temperature_start=[1.3,1.6,1.9]`
-- `moe_top_k_warmup_until=[0.1,0.2,0.3]`
-
-권장 원칙:
-- `routing` 먼저
-- 정체가 있을 때만 `schedule`
-- `combined`는 마지막
+원칙:
+- main search는 optimizer-only로 둠
+- routing 축은 single-control 정도만 붙임
+- `expert_use_feature=true`, `schedule on`, `expert_top_k=2`는 이 단계에서만 가볍게 확인
 
 ## num_layers / layout 해석
 - HGR는 이제 `num_layers=-1`로 두고, 실제 attention budget은 선택한 `arch_layout_id`가 직접 결정합니다.

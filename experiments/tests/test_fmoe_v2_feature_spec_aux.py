@@ -106,3 +106,28 @@ def test_feature_spec_aux_zero_when_disabled_or_empty():
 
     assert torch.allclose(loss_disabled, torch.tensor(0.0, device=feat.device))
     assert torch.allclose(loss_empty, torch.tensor(0.0, device=feat.device))
+
+
+def test_feature_spec_aux_supports_factorized_clone_weights():
+    torch.manual_seed(13)
+    bsz, tlen, n_feat = 2, 5, len(ALL_FEATURE_COLUMNS)
+    feat = torch.randn(bsz, tlen, n_feat)
+    w = torch.zeros(bsz, tlen, 12)
+    for group_idx in range(4):
+        w[..., group_idx * 3] = 0.25
+
+    loss = compute_feature_specialization_aux_loss(
+        weights={"mid@1": w},
+        feat=feat,
+        stage_feature_indices=_stage_feature_indices(),
+        selected_stages=["mid"],
+        item_seq_len=torch.tensor([5, 4], dtype=torch.long),
+        min_tokens_per_expert=1.0,
+        aux_lambda=3e-4,
+        enabled=True,
+        device=feat.device,
+    )
+
+    assert loss.ndim == 0
+    assert torch.isfinite(loss)
+    assert float(loss.item()) >= 0.0

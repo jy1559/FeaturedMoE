@@ -196,9 +196,9 @@ if router_map:
 else:
     map_str = "{}"
 
-print(f"+router_impl={router_impl}")
+print(f"router_impl={router_impl}")
 print(f"++search.router_impl=[{router_impl}]")
-print(f"+router_impl_by_stage={map_str}")
+print(f"++router_impl_by_stage={map_str}")
 print(f"++search.router_impl_by_stage=[{map_str}]")
 print(f"fmoe_v2_feature_spec_aux_enable={'true' if aux_enable else 'false'}")
 print(f"++search.fmoe_v2_feature_spec_aux_enable=[{'true' if aux_enable else 'false'}]")
@@ -290,9 +290,9 @@ if dataset_has "movielens1m"; then
   fi
 
   r1_ctrl_overrides=(
-    "+router_impl=learned"
+    "router_impl=learned"
     "++search.router_impl=[learned]"
-    "+router_impl_by_stage={mid:rule_soft,micro:rule_soft}"
+    "++router_impl_by_stage={mid:rule_soft,micro:rule_soft}"
     "++search.router_impl_by_stage=[{mid:rule_soft,micro:rule_soft}]"
     "fmoe_v2_feature_spec_aux_enable=false"
     "++search.fmoe_v2_feature_spec_aux_enable=[false]"
@@ -300,9 +300,9 @@ if dataset_has "movielens1m"; then
     "++search.fmoe_v2_feature_spec_aux_lambda=[0.0]"
   )
   r1_spec_overrides=(
-    "+router_impl=learned"
+    "router_impl=learned"
     "++search.router_impl=[learned]"
-    "+router_impl_by_stage={mid:rule_soft,micro:rule_soft}"
+    "++router_impl_by_stage={mid:rule_soft,micro:rule_soft}"
     "++search.router_impl_by_stage=[{mid:rule_soft,micro:rule_soft}]"
     "fmoe_v2_feature_spec_aux_enable=true"
     "++search.fmoe_v2_feature_spec_aux_enable=[true]"
@@ -312,9 +312,9 @@ if dataset_has "movielens1m"; then
     "fmoe_v2_feature_spec_min_tokens=16"
   )
   b0_spec_overrides=(
-    "+router_impl=learned"
+    "router_impl=learned"
     "++search.router_impl=[learned]"
-    "+router_impl_by_stage={}"
+    "++router_impl_by_stage={}"
     "++search.router_impl_by_stage=[{}]"
     "fmoe_v2_feature_spec_aux_enable=true"
     "++search.fmoe_v2_feature_spec_aux_enable=[true]"
@@ -413,9 +413,9 @@ fi
 if [ "${#transfer_parents[@]}" -eq 0 ]; then
   echo "[FINAL_V2] parent result not found; using fallback transfer templates."
   transfer_overrides_1=(
-    "+router_impl=learned"
+    "router_impl=learned"
     "++search.router_impl=[learned]"
-    "+router_impl_by_stage={mid:rule_soft,micro:rule_soft}"
+    "++router_impl_by_stage={mid:rule_soft,micro:rule_soft}"
     "++search.router_impl_by_stage=[{mid:rule_soft,micro:rule_soft}]"
     "fmoe_v2_feature_spec_aux_enable=true"
     "++search.fmoe_v2_feature_spec_aux_enable=[true]"
@@ -437,9 +437,9 @@ if [ "${#transfer_parents[@]}" -eq 0 ]; then
     "++search.expert_scale=[3]"
   )
   transfer_overrides_2=(
-    "+router_impl=learned"
+    "router_impl=learned"
     "++search.router_impl=[learned]"
-    "+router_impl_by_stage={}"
+    "++router_impl_by_stage={}"
     "++search.router_impl_by_stage=[{}]"
     "fmoe_v2_feature_spec_aux_enable=true"
     "++search.fmoe_v2_feature_spec_aux_enable=[true]"

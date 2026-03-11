@@ -177,4 +177,42 @@ class MoELogger:
             lines.append(f"  [{stage_name}] balance={s['balance_score']:.4f}")
             for name, m, sd in zip(names, means, stds):
                 lines.append(f"    {name:20s}: mean={m:.4f}  std={sd:.4f}")
+
+        group_stages = summary.get("group_stages", {})
+        if group_stages:
+            lines.append("  [group-routing]")
+            for stage_name, s in group_stages.items():
+                names = s.get("expert_names", [])
+                means = s.get("mean_weights", [])
+                stds = s.get("std_weights", [])
+                lines.append(f"    {stage_name}: balance={s.get('balance_score', 0.0):.4f}")
+                for name, m, sd in zip(names, means, stds):
+                    lines.append(f"      {name:18s}: mean={m:.4f}  std={sd:.4f}")
+
+        router_stats = summary.get("router", {})
+        if router_stats:
+            lines.append("  [router-shape]")
+            for stage_name, s in router_stats.items():
+                active = s.get("active_clones_per_group", [])
+                active_txt = ",".join(f"{float(v):.2f}" for v in active) if active else "-"
+                lines.append(
+                    f"    {stage_name}: group_entropy={float(s.get('group_entropy', 0.0)):.4f} "
+                    f"active_clones/group={active_txt}"
+                )
+                if "teacher_guided_clone_entropy" in s:
+                    lines.append(
+                        f"      teacher_guided_clone_entropy={float(s.get('teacher_guided_clone_entropy', 0.0)):.4f}"
+                    )
+                clone_load = s.get("clone_load", [])
+                clone_std = s.get("clone_load_std", [])
+                group_names = s.get("group_names", [])
+                if clone_load:
+                    for idx, load_vec in enumerate(clone_load):
+                        gname = group_names[idx] if idx < len(group_names) else f"group_{idx}"
+                        std_vec = clone_std[idx] if idx < len(clone_std) else []
+                        load_txt = ",".join(f"{float(v):.3f}" for v in load_vec)
+                        std_txt = ",".join(f"{float(v):.3f}" for v in std_vec) if std_vec else "-"
+                        lines.append(
+                            f"      {gname:18s}: clone_load=[{load_txt}] clone_std=[{std_txt}]"
+                        )
         return "\n".join(lines)
