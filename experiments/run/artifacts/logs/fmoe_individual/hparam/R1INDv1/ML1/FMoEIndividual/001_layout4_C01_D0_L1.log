@@ -1,0 +1,92 @@
+===============================================================================
+FeaturedMoE_Individual Hyperopt Run
+phase: R1INDv1_layout4_C01_D0_L1
+what: FeaturedMoE_Individual layout/dim hyperopt sweep with strict round-robin GPU assignment. layout=1 dims=128/16/160/64 bs=4096/8192
+focus: arch_layout_id,embedding_size,d_feat_emb,d_expert_hidden,d_router_hidden,learning_rate,weight_decay,hidden_dropout_prob
+
+core_setup:
+  layout=1 | dims=128/16/160/64
+  batch(train/eval)=4096/8192
+  feature_top_k=4 | inner_expert_top_k=0 | expert_scale=4
+  outer_router=hidden+feature | inner_router=hidden+feature | expert_use_feature=false
+
+search_space:
+  lr=1e-4,2e-4,3.5e-4,6e-4,9e-4,1.3e-3,1.8e-3,2.6e-3,4.0e-3,8e-3
+  wd=1e-6
+  dropout=0.1
+===============================================================================
+
+[RUN_STATUS] START pid=619291 ts=2026-03-10T08:41:55
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_Individual x movielens1m
+  max_evals=8  epochs=50  patience=10  wandb=off
+  batch_size(train/valid/test)=4096/8192/8192
+  track=fmoe_individual  axis=hparam  phase=R1INDv1_layout4_C01_D0_L1
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.0001, 0.0002, 0.00035, 0.0006, 0.0009, 0.0013, 0.0018, 0.0026, 0.004, 0.008]  -> loguniform
+Fixed params(singleton/non-list): 26
+Fixed groups: 26
+  [optimization]
+    balance_loss_lambda             0.0                                     
+    hidden_dropout_prob             0.1                                     
+    weight_decay                    1e-06                                   
+  [model_core]
+    d_expert_hidden                 160                                     
+    d_feat_emb                      16                                      
+    d_router_hidden                 64                                      
+    embedding_size                  128                                     
+    expert_scale                    4                                       
+    hidden_size                     128                                     
+    num_heads                       8                                       
+    num_layers                      -1                                      
+  [layout]
+    arch_layout_id                  1                                       
+  [routing_moe]
+    inner_router_use_feature        True                                    
+    inner_router_use_hidden         True                                    
+    outer_router_use_feature        True                                    
+    outer_router_use_hidden         True                                    
+  [merge_hir]
+    stage_merge_mode                serial                                  
+  [other]
+    MAX_ITEM_LIST_LENGTH            10                                      
+    eval_every                      1                                       
+    expert_use_feature              False                                   
+    feature_top_k                   4                                       
+    ffn_moe                         False                                   
+    group_balance_lambda            0.0                                     
+    inner_expert_top_k              0                                       
+    intra_balance_lambda            0.0                                     
+    use_aux_loss                    False                                   
+Layout details:
+  execution(fixed)=serial
+  id=1 raw=[0, 1, 1, 0, 1, 0, 0, 0]
+
+[Wandb] disabled for this hyperopt run
+
+[1/8] learning_rate=0.0005594
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=disk_or_build, create_dataset=0.11s, data_preparation=0.55s, n_items=3534
+[FeaturedMoE_Individual Layout] arch_layout_id=1 selected_layout=[0, 1, 1, 0, 1, 0, 0, 0] global_pre=0 stage_pass={'macro': 1, 'mid': 0, 'micro': 0} stage_moe={'macro': 1, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0614  best=0.0614  (early_stop@22, trial=16.6min, avg=16.6min/trial, total=16.6min, ETA=1.94h)
+
+[2/8] learning_rate=0.004898
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_Individual Layout] arch_layout_id=1 selected_layout=[0, 1, 1, 0, 1, 0, 0, 0] global_pre=0 stage_pass={'macro': 1, 'mid': 0, 'micro': 0} stage_moe={'macro': 1, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0545  best=0.0614  (early_stop@25, trial=18.9min, avg=17.8min/trial, total=35.5min, ETA=1.78h)
+
+[3/8] learning_rate=0.003166
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_Individual Layout] arch_layout_id=1 selected_layout=[0, 1, 1, 0, 1, 0, 0, 0] global_pre=0 stage_pass={'macro': 1, 'mid': 0, 'micro': 0} stage_moe={'macro': 1, 'mid': 1, 'micro': 0} global_post=0
+[RUN_STATUS] TERMINATED signal=SIGINT(2) pid=619291 ts=2026-03-10T09:20:28
+[RUN_STATUS] END status=terminated signal=SIGINT(2) pid=619291 start=2026-03-10T08:41:55 end=2026-03-10T09:20:28

@@ -4,7 +4,7 @@ Router / Gating modules for the MoE stages.
 Supports:
   - Dense softmax gating (all K experts contribute)
   - Top-k sparse gating (only top-k experts contribute; rest zeroed)
-  - Rule-soft feature-bin routing (no learnable feature embedding path)
+  - Rule-soft routing with ratio-bin or GLS-style fixed semantics
   - Unified backend wrapper for learned/rule-based routing
   - Load-balance regularisation loss for collapse prevention
   - Entropy regularisation (optional)
@@ -13,7 +13,7 @@ Supports:
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -68,6 +68,138 @@ def _to_ratio(values: torch.Tensor) -> torch.Tensor:
     ratio = ratio.clamp(0.0, 1.0)
     ratio[~finite] = 0.5
     return ratio
+
+
+def _clone_centers(expert_scale: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    vals = [(2 * i + 1) / float(2 * expert_scale) for i in range(expert_scale)]
+    return torch.tensor(vals, device=device, dtype=dtype)
+
+
+def _gaussian_clone_logits(
+    score: torch.Tensor,
+    *,
+    expert_scale: int,
+    sigma: float = 0.20,
+) -> torch.Tensor:
+    centers = _clone_centers(expert_scale, device=score.device, dtype=score.dtype)
+    score_exp = score.unsqueeze(-1)
+    return -((score_exp - centers) ** 2) / (2.0 * sigma * sigma)
+
+
+def _compute_ratio_stats(values: torch.Tensor) -> Dict[str, torch.Tensor]:
+    ratio = _to_ratio(values)
+    mean = ratio.mean(dim=-1, keepdim=True)
+    std = ratio.std(dim=-1, unbiased=False, keepdim=True)
+    vmax = ratio.max(dim=-1, keepdim=True).values
+    vmin = ratio.min(dim=-1, keepdim=True).values
+    vrange = vmax - vmin
+    peak = vmax - mean
+    zero_frac = (ratio <= 0.10).float().mean(dim=-1, keepdim=True)
+    low_frac = (ratio <= 0.25).float().mean(dim=-1, keepdim=True)
+    mid_frac = ((ratio >= 0.30) & (ratio <= 0.70)).float().mean(dim=-1, keepdim=True)
+    high_frac = (ratio >= 0.75).float().mean(dim=-1, keepdim=True)
+    spike_frac = (ratio >= 0.90).float().mean(dim=-1, keepdim=True)
+    mean_abs_dev = (ratio - mean).abs().mean(dim=-1, keepdim=True)
+    return {
+        "ratio": ratio,
+        "mean": mean,
+        "std": std,
+        "vmax": vmax,
+        "vmin": vmin,
+        "vrange": vrange,
+        "peak": peak,
+        "zero_frac": zero_frac,
+        "low_frac": low_frac,
+        "mid_frac": mid_frac,
+        "high_frac": high_frac,
+        "spike_frac": spike_frac,
+        "mean_abs_dev": mean_abs_dev,
+    }
+
+
+def _group_local_stat_clone_logits(stats: Dict[str, torch.Tensor], sharpness: float) -> torch.Tensor:
+    mean = stats["mean"]
+    std = stats["std"]
+    vrange = stats["vrange"]
+    peak = stats["peak"]
+    zero_frac = stats["zero_frac"]
+    low_frac = stats["low_frac"]
+    mid_frac = stats["mid_frac"]
+    high_frac = stats["high_frac"]
+    spike_frac = stats["spike_frac"]
+    sharp = float(sharpness)
+    low = (
+        1.1 * zero_frac
+        + 0.7 * low_frac
+        - sharp * (mean - 0.18).pow(2)
+        - 1.1 * std
+        - 0.4 * peak
+        - 0.3 * high_frac
+    )
+    mid = (
+        0.8 * mid_frac
+        - sharp * (mean - 0.50).pow(2)
+        - 0.5 * std
+        - 0.2 * vrange
+        - 0.2 * peak
+    )
+    high = (
+        1.2 * high_frac
+        + 0.9 * spike_frac
+        + 0.7 * peak
+        + 0.5 * std
+        + 0.3 * vrange
+        - sharp * (mean - 0.78).pow(2)
+        - 0.3 * zero_frac
+    )
+    return torch.cat([low, mid, high], dim=-1)
+
+
+def _group_local_activity_logit(stats: Dict[str, torch.Tensor]) -> torch.Tensor:
+    mean = stats["mean"]
+    std = stats["std"]
+    vrange = stats["vrange"]
+    peak = stats["peak"]
+    zero_frac = stats["zero_frac"]
+    high_frac = stats["high_frac"]
+    spike_frac = stats["spike_frac"]
+    return (
+        0.9 * mean
+        + 0.7 * high_frac
+        + 0.4 * spike_frac
+        + 0.5 * peak
+        + 0.35 * std
+        + 0.20 * vrange
+        - 0.80 * zero_frac
+    )
+
+
+def build_group_local_stat_logits_12way(
+    rule_features: torch.Tensor,
+    *,
+    feature_groups: Sequence[Sequence[int]],
+    expert_scale: int,
+    stat_sharpness: float = 16.0,
+) -> torch.Tensor:
+    if rule_features.size(-1) <= 0:
+        raise ValueError("rule_features last dimension must be > 0 for GLS rule routing.")
+    if int(expert_scale) <= 0:
+        raise ValueError(f"expert_scale must be > 0, got {expert_scale}")
+
+    per_group_logits = []
+    for feat_idx in feature_groups:
+        idx_list = [int(i) for i in feat_idx if 0 <= int(i) < rule_features.size(-1)]
+        if not idx_list:
+            idx_list = [0]
+        idx = torch.tensor(idx_list, device=rule_features.device, dtype=torch.long)
+        group_feat = rule_features.index_select(-1, idx)
+        stats = _compute_ratio_stats(group_feat)
+        if int(expert_scale) == 3:
+            clone_logits = _group_local_stat_clone_logits(stats, sharpness=stat_sharpness)
+        else:
+            clone_logits = _gaussian_clone_logits(stats["mean"], expert_scale=int(expert_scale))
+        per_group_logits.append(_group_local_activity_logit(stats) + clone_logits)
+    return torch.cat(per_group_logits, dim=-1)
 
 
 class Router(nn.Module):
@@ -137,17 +269,21 @@ class Router(nn.Module):
 
 
 class RuleSoftRouter(nn.Module):
-    """Rule-based soft router using ratio-bin feature scores."""
+    """Rule-based soft router using fixed feature semantics."""
 
     def __init__(
         self,
         n_experts: int,
         n_stage_features: int,
-        selected_feature_indices: List[List[int]],
+        selected_feature_indices: Optional[List[List[int]]],
         feature_names: List[str],
         n_bins: int = 5,
         expert_bias: Optional[List[float]] = None,
         top_k: Optional[int] = None,
+        variant: str = "ratio_bins",
+        group_feature_indices: Optional[List[List[int]]] = None,
+        expert_scale: Optional[int] = None,
+        stat_sharpness: float = 16.0,
     ):
         super().__init__()
         if n_experts <= 0:
@@ -156,11 +292,6 @@ class RuleSoftRouter(nn.Module):
             raise ValueError(f"n_stage_features must be > 0, got {n_stage_features}")
         if int(n_bins) < 2:
             raise ValueError(f"rule_router.n_bins must be >= 2, got {n_bins}")
-        if len(selected_feature_indices) != int(n_experts):
-            raise ValueError(
-                "selected_feature_indices length must match n_experts, "
-                f"got {len(selected_feature_indices)} vs {n_experts}"
-            )
         if len(feature_names) != int(n_stage_features):
             raise ValueError(
                 f"feature_names length must match n_stage_features, got {len(feature_names)} vs {n_stage_features}"
@@ -171,41 +302,87 @@ class RuleSoftRouter(nn.Module):
         self.n_bins = int(n_bins)
         self.top_k = top_k
         self.feature_names = list(feature_names)
+        self.variant = str(variant).lower().strip()
+        self.stat_sharpness = float(stat_sharpness)
+        self.expert_scale = int(expert_scale) if expert_scale is not None else 0
+        if self.variant not in {"ratio_bins", "teacher_gls"}:
+            raise ValueError(
+                f"rule_router.variant must be one of ['ratio_bins','teacher_gls'], got {variant}"
+            )
 
-        max_sel = 1
-        for idxs in selected_feature_indices:
-            if idxs:
-                max_sel = max(max_sel, len(idxs))
+        self.group_feature_indices: List[List[int]] = []
+        if self.variant == "teacher_gls":
+            if self.expert_scale <= 0:
+                raise ValueError("teacher_gls router requires expert_scale > 0.")
+            cleaned_groups: List[List[int]] = []
+            for idxs in list(group_feature_indices or []):
+                valid = [int(i) for i in idxs if 0 <= int(i) < self.n_stage_features]
+                cleaned_groups.append(valid or [0])
+            if len(cleaned_groups) * self.expert_scale != self.n_experts:
+                raise ValueError(
+                    "teacher_gls router expects len(group_feature_indices) * expert_scale == n_experts, "
+                    f"got {len(cleaned_groups)} * {self.expert_scale} vs {self.n_experts}"
+                )
+            self.group_feature_indices = cleaned_groups
 
-        padded_idx = []
-        mask = []
-        for idxs in selected_feature_indices:
-            valid = [int(i) for i in idxs if 0 <= int(i) < self.n_stage_features]
-            if not valid:
-                valid = [0]
-            row_idx = list(valid)
-            row_mask = [1.0] * len(valid)
-            while len(row_idx) < max_sel:
-                row_idx.append(row_idx[-1])
-                row_mask.append(0.0)
-            padded_idx.append(row_idx)
-            mask.append(row_mask)
+        if self.variant == "ratio_bins":
+            feature_rows = list(selected_feature_indices or [])
+            if len(feature_rows) != int(n_experts):
+                raise ValueError(
+                    "selected_feature_indices length must match n_experts, "
+                    f"got {len(feature_rows)} vs {n_experts}"
+                )
 
-        self.register_buffer(
-            "selected_idx",
-            torch.tensor(padded_idx, dtype=torch.long),
-            persistent=False,
-        )
-        self.register_buffer(
-            "selected_mask",
-            torch.tensor(mask, dtype=torch.float32),
-            persistent=False,
-        )
-        self.register_buffer(
-            "selected_count",
-            self.selected_mask.sum(dim=-1).clamp(min=1.0),
-            persistent=False,
-        )
+            max_sel = 1
+            for idxs in feature_rows:
+                if idxs:
+                    max_sel = max(max_sel, len(idxs))
+
+            padded_idx = []
+            mask = []
+            for idxs in feature_rows:
+                valid = [int(i) for i in idxs if 0 <= int(i) < self.n_stage_features]
+                if not valid:
+                    valid = [0]
+                row_idx = list(valid)
+                row_mask = [1.0] * len(valid)
+                while len(row_idx) < max_sel:
+                    row_idx.append(row_idx[-1])
+                    row_mask.append(0.0)
+                padded_idx.append(row_idx)
+                mask.append(row_mask)
+
+            self.register_buffer(
+                "selected_idx",
+                torch.tensor(padded_idx, dtype=torch.long),
+                persistent=False,
+            )
+            self.register_buffer(
+                "selected_mask",
+                torch.tensor(mask, dtype=torch.float32),
+                persistent=False,
+            )
+            self.register_buffer(
+                "selected_count",
+                self.selected_mask.sum(dim=-1).clamp(min=1.0),
+                persistent=False,
+            )
+        else:
+            self.register_buffer(
+                "selected_idx",
+                torch.zeros((1, 1), dtype=torch.long),
+                persistent=False,
+            )
+            self.register_buffer(
+                "selected_mask",
+                torch.zeros((1, 1), dtype=torch.float32),
+                persistent=False,
+            )
+            self.register_buffer(
+                "selected_count",
+                torch.ones(1, dtype=torch.float32),
+                persistent=False,
+            )
 
         if expert_bias is None:
             bias = torch.zeros(self.n_experts, dtype=torch.float32)
@@ -223,6 +400,14 @@ class RuleSoftRouter(nn.Module):
         if rule_features.size(-1) != self.n_stage_features:
             raise ValueError(
                 f"RuleSoftRouter expected last dim {self.n_stage_features}, got {rule_features.size(-1)}"
+            )
+
+        if self.variant == "teacher_gls":
+            return build_group_local_stat_logits_12way(
+                rule_features,
+                feature_groups=self.group_feature_indices,
+                expert_scale=self.expert_scale,
+                stat_sharpness=self.stat_sharpness,
             )
 
         original_shape = rule_features.shape[:-1]
@@ -243,13 +428,16 @@ class RuleSoftRouter(nn.Module):
         logits = mean_score + self.expert_bias.unsqueeze(0)
         return logits.reshape(*original_shape, self.n_experts)
 
+    def compute_logits(self, rule_features: torch.Tensor) -> torch.Tensor:
+        return self._compute_logits(rule_features)
+
     def forward(
         self,
         rule_features: torch.Tensor,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        logits = self._compute_logits(rule_features)
+        logits = self.compute_logits(rule_features)
         scale = max(float(temperature), 1e-6)
         scaled_logits = logits / scale
         active_top_k = self.top_k if top_k is None else top_k

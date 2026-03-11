@@ -1,0 +1,161 @@
+[RUN_STATUS] START pid=527625 ts=2026-03-09T17:56:25
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_HGR x movielens1m
+  max_evals=10  epochs=100  patience=15  wandb=off
+  batch_size(train/valid/test)=4096/8192/8192
+  track=fmoe_hgr  axis=hparam  phase=P3HGR_router16_C05_A0_M5_serial_hybrid
+=================================================================
+Changed knobs: balance_loss_lambda, hidden_dropout_prob, learning_rate, weight_decay
+Tuned params(len>1): 4  (~1 discrete combos)
+Tuned groups: 4
+  [optimization]
+    balance_loss_lambda             [0.0025, 0.0032, 0.0042]                  -> loguniform
+    hidden_dropout_prob             [0.09, 0.1, 0.11]                         -> uniform
+    learning_rate                   [0.0009, 0.0013, 0.0018, 0.0023, 0.0028]  -> loguniform
+    weight_decay                    [1e-06, 3e-06, 1e-05, 2e-05]              -> loguniform_zero
+Fixed params(singleton/non-list): 48
+Fixed groups: 48
+  [model_core]
+    d_expert_hidden                 160                                     
+    d_feat_emb                      16                                      
+    d_router_hidden                 64                                      
+    embedding_size                  128                                     
+    expert_scale                    3                                       
+    hidden_size                     128                                     
+    micro_router_feature_dropout    0.1                                     
+    mid_router_feature_dropout      0.1                                     
+    num_heads                       8                                       
+    num_layers                      -1                                      
+  [layout]
+    arch_layout_id                  15                                      
+  [routing_moe]
+    group_router_mode               hybrid                                  
+    macro_routing_scope             session                                 
+    macro_session_pooling           query                                   
+    micro_router_temperature        1.3                                     
+    micro_router_temperature_start  1.3                                     
+    mid_router_temperature          1.3                                     
+    mid_router_temperature_start    1.3                                     
+    moe_top_k                       0                                       
+    moe_top_k_policy                auto                                    
+    moe_top_k_ratio                 0.5                                     
+    moe_top_k_start                 0                                       
+    moe_top_k_warmup_until          0                                       
+    router_design                   group_factorized_interaction            
+    router_distill_enable           True                                    
+    router_distill_lambda           0.005                                   
+    router_distill_temperature      1.2                                     
+    router_distill_until            0.2                                     
+  [schedule]
+    alpha_warmup_end                1.0                                     
+    alpha_warmup_start              0.0                                     
+    alpha_warmup_until              0                                       
+    fmoe_schedule_enable            False                                   
+    temperature_warmup_until        0                                       
+  [merge_hir]
+    parallel_stage_gate_temperature  1.0                                     
+    parallel_stage_gate_top_k       0                                       
+    stage_merge_mode                serial                                  
+  [other]
+    MAX_ITEM_LIST_LENGTH            10                                      
+    eval_every                      1                                       
+    expert_top_k                    1                                       
+    expert_use_feature              False                                   
+    group_balance_lambda            0.001                                   
+    group_feature_spec_aux_enable   True                                    
+    group_feature_spec_aux_lambda   0.0001                                  
+    group_feature_spec_min_tokens   8                                       
+    group_feature_spec_stages       ['mid']                                 
+    group_top_k                     0                                       
+    intra_balance_lambda            0.001                                   
+    use_valid_ratio_gating          True                                    
+Layout details:
+  execution(fixed)=serial
+  id=15 raw=[1, 0, 2, 0, 1, 0, 0, 0]
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] balance_loss_lambda=0.004064, hidden_dropout_prob=0.09005, learning_rate=0.001923, weight_decay=3.073e-06
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=disk_or_build, create_dataset=0.09s, data_preparation=0.54s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0943  best=0.0943  (early_stop@43, trial=16.9min, avg=16.9min/trial, total=16.9min, ETA=2.54h)
+
+[2/10] balance_loss_lambda=0.003143, hidden_dropout_prob=0.09054, learning_rate=0.0009998, weight_decay=1.623e-06
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0944  best=0.0944  (early_stop@48, trial=19.0min, avg=18.0min/trial, total=35.9min, ETA=2.39h)
+
+[3/10] balance_loss_lambda=0.003861, hidden_dropout_prob=0.1059, learning_rate=0.001631, weight_decay=4.173e-06
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0948  best=0.0948  (early_stop@50, trial=19.4min, avg=18.4min/trial, total=55.3min, ETA=2.15h)
+
+[4/10] balance_loss_lambda=0.003977, hidden_dropout_prob=0.09124, learning_rate=0.001363, weight_decay=4.287e-06
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0944  best=0.0948  (early_stop@39, trial=15.1min, avg=17.6min/trial, total=1.17h, ETA=1.76h)
+
+[5/10] balance_loss_lambda=0.002936, hidden_dropout_prob=0.1013, learning_rate=0.002284, weight_decay=2.543e-06
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0940  best=0.0948  (early_stop@50, trial=19.5min, avg=18.0min/trial, total=1.50h, ETA=1.50h)
+
+[6/10] balance_loss_lambda=0.002785, hidden_dropout_prob=0.09606, learning_rate=0.001992, weight_decay=7.289e-06
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0940  best=0.0948  (early_stop@48, trial=18.5min, avg=18.1min/trial, total=1.81h, ETA=1.21h)
+
+[7/10] balance_loss_lambda=0.003782, hidden_dropout_prob=0.0962, learning_rate=0.001795, weight_decay=4.225e-06
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0938  best=0.0948  (early_stop@41, trial=15.9min, avg=17.8min/trial, total=2.07h, ETA=53.3min)
+
+[8/10] balance_loss_lambda=0.002637, hidden_dropout_prob=0.1093, learning_rate=0.001983, weight_decay=1.073e-05
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0947  best=0.0948  (early_stop@62, trial=24.1min, avg=18.6min/trial, total=2.47h, ETA=37.1min)
+
+[9/10] balance_loss_lambda=0.003, hidden_dropout_prob=0.1037, learning_rate=0.002433, weight_decay=1.374e-05
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0946  best=0.0948  (early_stop@66, trial=25.5min, avg=19.3min/trial, total=2.90h, ETA=19.3min)
+
+[10/10] balance_loss_lambda=0.002595, hidden_dropout_prob=0.1, learning_rate=0.001089, weight_decay=9.036e-06
+    [Device] CUDA_VISIBLE_DEVICES=1 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+[FeaturedMoE_HGR Layout] arch_layout_id=15 selected_layout=[1, 0, 2, 0, 1, 0, 0, 0] global_pre=1 stage_pass={'macro': 0, 'mid': 0, 'micro': 0} stage_moe={'macro': 2, 'mid': 1, 'micro': 0} global_post=0
+  -> MRR@20=0.0942  best=0.0948  (early_stop@51, trial=19.8min, avg=19.4min/trial, total=3.23h, ETA=0s)
+
+=================================================================
+  DONE  |  FeaturedMoE_HGR x movielens1m
+  Best MRR@20 = 0.0948  |  10/10 trials OK
+  Total time: 193.7 min
+  Best params:
+    balance_loss_lambda: 0.00386094
+    hidden_dropout_prob: 0.105859
+    learning_rate: 0.00163061
+    weight_decay: 4.17272e-06
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_hgr/movielens1m_FeaturedMoE_HGR_p3hgr_router16_c05_a0_m5_serial_hybrid_20260309_175625_606028_pid527625.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=527625 start=2026-03-09T17:56:25 end=2026-03-09T21:10:07

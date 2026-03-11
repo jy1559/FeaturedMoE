@@ -1,0 +1,60 @@
+# Next Experiment Plan
+
+- generated_at: 2026-03-08T14:59:32.688721
+- mode: fmoe-first
+- topn: 5
+
+## Priority 1: 1차 데이터셋 FMoE 메인트랙 보강
+
+- dataset: movielens1m
+- track: fmoe-main
+- hypothesis: ML1M/RetailRocket anchor가 채워지면 이후 전이 튜닝의 분산을 줄일 수 있다.
+- reason: 핵심 데이터셋의 FMoE 결과가 비어 있거나 부족하다.
+- command:
+```bash
+bash /workspace/jy1559/FMoE/.codex/skills/fmoe/scripts/launch_track.sh --track fmoe-main --datasets movielens1m --gpus 0,1 --seed-base 42
+```
+
+## Priority 2: retail_rocket HiR 비교 트랙 실행
+
+- dataset: retail_rocket
+- track: hir-compare
+- hypothesis: 계층 라우팅이 해당 데이터셋에서 routing collapse를 줄일 수 있다.
+- reason: FMoE 기준선은 있으나 HiR 비교 결과가 없다.
+- command:
+```bash
+bash /workspace/jy1559/FMoE/.codex/skills/fmoe/scripts/launch_track.sh --track hir-compare --datasets retail_rocket --gpus 0 --seed-base 42 --dry-run
+```
+
+## Priority 3: amazon_beauty로 FMoE 확장
+
+- dataset: amazon_beauty
+- track: fmoe-hparam-bootstrap
+- hypothesis: ML1M/RetailRocket에서 얻은 layout/schedule priors가 중간 규모 데이터셋으로 전이될 수 있다.
+- reason: 확장 순서에 있는 데이터셋인데 FMoE 결과가 아직 없다.
+- command:
+```bash
+bash /workspace/jy1559/FMoE/experiments/run/fmoe/tune_hparam.sh --dataset amazon_beauty --gpu 0 --layout-id 0 --schedule-preset off --max-evals 20 --phase P1EXT --dry-run
+```
+
+## Priority 4: foursquare로 FMoE 확장
+
+- dataset: foursquare
+- track: fmoe-hparam-bootstrap
+- hypothesis: ML1M/RetailRocket에서 얻은 layout/schedule priors가 중간 규모 데이터셋으로 전이될 수 있다.
+- reason: 확장 순서에 있는 데이터셋인데 FMoE 결과가 아직 없다.
+- command:
+```bash
+bash /workspace/jy1559/FMoE/experiments/run/fmoe/tune_hparam.sh --dataset foursquare --gpu 0 --layout-id 0 --schedule-preset off --max-evals 20 --phase P1EXT --dry-run
+```
+
+## Priority 5: kuairec0.3로 FMoE 확장
+
+- dataset: kuairec0.3
+- track: fmoe-hparam-bootstrap
+- hypothesis: ML1M/RetailRocket에서 얻은 layout/schedule priors가 중간 규모 데이터셋으로 전이될 수 있다.
+- reason: 확장 순서에 있는 데이터셋인데 FMoE 결과가 아직 없다.
+- command:
+```bash
+bash /workspace/jy1559/FMoE/experiments/run/fmoe/tune_hparam.sh --dataset kuairec0.3 --gpu 0 --layout-id 0 --schedule-preset off --max-evals 20 --phase P1EXT --dry-run
+```

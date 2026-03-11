@@ -1,0 +1,105 @@
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_v2 x movielens1m
+  max_evals=5  epochs=80  patience=8  wandb=ON
+  batch_size(train/valid/test)=4096/4096/4096
+  track=fmoe_v2  axis=hparam  phase=P1S_G4_C2_parallel_L24
+=================================================================
+Changed knobs: learning_rate, weight_decay
+Tuned params(len>1): 2  (~1 discrete combos)
+Tuned groups: 2
+  [optimization]
+    learning_rate                   [0.01, 0.005, 0.0025, 0.001, 0.0005, 0.00025, 0.0001]  -> loguniform
+    weight_decay                    [0, 1e-06, 1e-05, 0.0001, 0.001]          -> loguniform_zero
+Fixed params(singleton/non-list): 27
+Fixed groups: 27
+  [optimization]
+    balance_loss_lambda             0.01                                    
+    hidden_dropout_prob             0.1                                     
+  [model_core]
+    d_expert_hidden                 128                                     
+    d_feat_emb                      16                                      
+    d_router_hidden                 64                                      
+    embedding_size                  128                                     
+    expert_scale                    3                                       
+    num_heads                       8                                       
+  [layout]
+    fmoe_v2_layout_id               24                                      
+  [routing_moe]
+    micro_router_temperature_start  1.3                                     
+    mid_router_temperature_start    1.3                                     
+    moe_top_k                       0                                       
+    moe_top_k_policy                auto                                    
+    moe_top_k_ratio                 0.5                                     
+    moe_top_k_start                 0                                       
+    moe_top_k_warmup_until          0                                       
+  [schedule]
+    alpha_warmup_end                1.0                                     
+    alpha_warmup_start              0.0                                     
+    alpha_warmup_until              0                                       
+    fmoe_schedule_enable            False                                   
+    temperature_warmup_until        0                                       
+  [merge_hir]
+    fmoe_v2_parallel_stage_gate_temperature  1.0                                     
+    fmoe_v2_parallel_stage_gate_top_k  0                                       
+    fmoe_v2_stage_merge_aux_enable  False                                   
+    fmoe_v2_stage_merge_aux_lambda_scale  1.0                                     
+  [other]
+    MAX_ITEM_LIST_LENGTH            10                                      
+    fmoe_stage_execution_mode       parallel                                
+Layout details:
+  execution(fixed)=parallel
+  id=24 exec=parallel pre=0 post=0 total_layers=2 total_moe=1 | macro(pass=1,moe=1) | mid(pass=0,moe=0) | micro(pass=0,moe=0)
+
+[Wandb] per-trial mode enabled project=2026_FMoE_hyperopt
+
+[1/5] learning_rate=0.002412, weight_decay=0
+[Wandb] trial 1 started project=2026_FMoE_hyperopt name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T001_20260305_132157
+    [Device] CUDA_VISIBLE_DEVICES=4 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=disk_or_build, create_dataset=0.10s, data_preparation=0.49s, n_items=3534
+  -> MRR@20=0.0907  best=0.0907  (early_stop@29, trial=5.8min, avg=5.9min/trial, total=5.9min, ETA=23.7min)
+[Wandb] trial finished name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T001_20260305_132157
+
+[2/5] learning_rate=0.0002572, weight_decay=0
+[Wandb] trial 2 started project=2026_FMoE_hyperopt name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T002_20260305_132752
+    [Device] CUDA_VISIBLE_DEVICES=4 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+  -> MRR@20=0.0915  best=0.0915  (early_stop@76, trial=15.5min, avg=10.7min/trial, total=21.4min, ETA=32.1min)
+[Wandb] trial finished name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T002_20260305_132752
+
+[3/5] learning_rate=0.005579, weight_decay=0
+[Wandb] trial 3 started project=2026_FMoE_hyperopt name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T003_20260305_134333
+    [Device] CUDA_VISIBLE_DEVICES=4 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+  -> MRR@20=0.0902  best=0.0915  (early_stop@32, trial=6.4min, avg=9.4min/trial, total=28.3min, ETA=18.8min)
+[Wandb] trial finished name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T003_20260305_134333
+
+[4/5] learning_rate=0.001857, weight_decay=0
+[Wandb] trial 4 started project=2026_FMoE_hyperopt name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T004_20260305_135013
+    [Device] CUDA_VISIBLE_DEVICES=4 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+  -> MRR@20=0.0905  best=0.0915  (early_stop@31, trial=6.3min, avg=8.6min/trial, total=34.6min, ETA=8.6min)
+[Wandb] trial finished name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T004_20260305_135013
+
+[5/5] learning_rate=0.002808, weight_decay=0
+[Wandb] trial 5 started project=2026_FMoE_hyperopt name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T005_20260305_135633
+    [Device] CUDA_VISIBLE_DEVICES=4 | torch_device=cuda:0 (NVIDIA RTX A5000)
+    [DataCache] save_dataset=True save_dataloaders=False | checkpoint_dir=saved/recbole_cache/movielens1m_feature_added_session_len10 | dataloaders_save_path=saved/recbole_cache/movielens1m_feature_added_session_len10/movielens1m-for-dataloader.pth
+    [DataPrep] cache_hit=memory, create_dataset=0.00s, data_preparation=0.00s, n_items=3534
+  -> MRR@20=0.0893  best=0.0915  (early_stop@29, trial=5.9min, avg=8.1min/trial, total=40.5min, ETA=0s)
+[Wandb] trial finished name=tune_movielens1m_FeaturedMoE_v2_hparam_P1S_G4_C2_parallel_L24_T005_20260305_135633
+
+=================================================================
+  DONE  |  FeaturedMoE_v2 x movielens1m
+  Best MRR@20 = 0.0915  |  5/5 trials OK
+  Total time: 40.5 min
+  Best params:
+    learning_rate: 0.000257211
+    weight_decay: 0
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_v2/movielens1m_FeaturedMoE_v2_20260305_132156.json
+=================================================================
+

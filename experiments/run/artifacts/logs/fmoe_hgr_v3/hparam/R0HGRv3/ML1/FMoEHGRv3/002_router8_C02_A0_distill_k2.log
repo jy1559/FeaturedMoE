@@ -1,0 +1,24 @@
+===============================================================================
+HGRv3 Hyperopt Run
+phase: R0HGRv3_router8_C02_A0_distill_k2
+what: HGRv3 R0 quick probe for weak inner distill and expert_top_k under hidden-only outer routing. anchor=A0 mode=distill_k2 k=2 dims=128/16/160/64 scale=4 bs=4096/8192
+focus: arch_layout_id,embedding_size,d_expert_hidden,d_router_hidden,expert_scale,expert_top_k,inner_rule_mode,inner_rule_lambda,learning_rate,weight_decay
+
+core_setup:
+  layout=15 | merge=serial | outer=hidden-only stage_wide | inner=hidden+group_feature
+  dims=128/16/160/64 | expert_scale=4
+  batch(train/eval)=4096/8192
+  group_top_k=0 | expert_top_k=2
+
+teacher_setup:
+  inner_rule_mode=distill
+  lambda=2e-3 | temperature=1.5 | until=0.2
+  bias_scale=0.0 | bin_sharpness=16.0
+
+search_space:
+  lr=8e-4,1.2e-3,1.6e-3,2.1e-3,2.8e-3,3.6e-3
+  wd=0,1e-6,1e-4
+  dropout=0.10
+  balance=0.003
+===============================================================================
+
