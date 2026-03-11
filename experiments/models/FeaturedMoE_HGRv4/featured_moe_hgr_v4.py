@@ -7,7 +7,7 @@ import logging
 from ..FeaturedMoE.analysis_logger import ExpertAnalysisLogger
 from ..FeaturedMoE.feature_config import ALL_FEATURE_COLUMNS, build_column_to_index
 from ..FeaturedMoE.logging_utils import MoELogger
-from ..FeaturedMoE_HGRv3.featured_moe_hgr_v3 import FeaturedMoE_HGRv3
+from .hgr_v3_compat import FeaturedMoE_HGRv3
 from .hgr_v4_moe_stages import HierarchicalMoEHGRv4
 
 logger = logging.getLogger(__name__)

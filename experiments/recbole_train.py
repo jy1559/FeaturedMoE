@@ -88,47 +88,35 @@ import re
 _FEATURE_AWARE_MOE_MODELS = {
     "featured_moe",
     "featuredmoe",
-    "featured_moe_hir",
-    "featuredmoe_hir",
     "featured_moe_hgr",
-    "featured_moe_hgr_v3",
     "featured_moe_hgr_v4",
     "featuredmoe_hgr",
-    "featuredmoe_hgr_v3",
     "featuredmoe_hgr_v4",
     "featuredmoe_hgrv4",
-    "featuredmoe_hgrv3",
-    "featured_moe_hir2",
-    "featuredmoe_hir2",
     "featured_moe_v2",
     "featuredmoe_v2",
-    "featured_moe_v2_hir",
-    "featuredmoe_v2_hir",
     "featured_moe_v3",
     "featuredmoe_v3",
     "featured_moe_v4_distillation",
     "featuredmoe_v4_distillation",
+    "featured_moe_n",
+    "featuredmoe_n",
 }
 
 _FEATURED_MOE_V2_MODELS = {
     "featured_moe_hgr",
-    "featured_moe_hgr_v3",
     "featured_moe_hgr_v4",
     "featuredmoe_hgr",
-    "featuredmoe_hgr_v3",
     "featuredmoe_hgr_v4",
     "featuredmoe_hgrv4",
-    "featuredmoe_hgrv3",
     "featured_moe_v2",
     "featuredmoe_v2",
-    "featured_moe_hir2",
-    "featuredmoe_hir2",
-    "featured_moe_v2_hir",
-    "featuredmoe_v2_hir",
     "featured_moe_v3",
     "featuredmoe_v3",
     "featured_moe_v4_distillation",
     "featuredmoe_v4_distillation",
+    "featured_moe_n",
+    "featuredmoe_n",
 }
 _WANDB_MODULE = None
 _WANDB_IMPORT_ERROR = ""
@@ -558,6 +546,10 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     """Custom training loop with explicit wandb logging (RecBole wandb disabled)."""
     cfg_local = cfg_i.copy()
     cfg_local['log_wandb'] = False  # disable RecBole's internal wandb
+    model_name_local = str(cfg_local.get("model", "")).lower()
+    if model_name_local in _FEATURE_AWARE_MOE_MODELS and "fmoe_special_logging" not in cfg_local:
+        cfg_local["fmoe_special_logging"] = True
+        cfg_i["fmoe_special_logging"] = True
     
     # Use gpu_id directly (no CUDA_VISIBLE_DEVICES manipulation)
     # RecBole will use torch.device(f'cuda:{gpu_id}')
@@ -702,6 +694,13 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     trainer_cls = get_trainer(config['MODEL_TYPE'], config['model'])
     trainer = trainer_cls(config, model)
     setattr(trainer, '_disable_patch_logging', True)  # bypass patched valid/train hooks
+    special_logging_enabled = (
+        model_name_l in _FEATURE_AWARE_MOE_MODELS
+        and bool(config.get("fmoe_special_logging", cfg_i.get("fmoe_special_logging", True)))
+    )
+    best_valid_special_metrics = None
+    last_valid_special_metrics = None
+    test_special_metrics = None
 
     # Setup sampled evaluation if n_items > threshold
     eval_sampling = cfg_i.get('eval_sampling', {})
@@ -792,8 +791,14 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
         do_eval = ((epoch + 1) % eval_every == 0) or (epoch + 1 == max_epochs)
         valid_result = best_valid_result.copy() if isinstance(best_valid_result, dict) else {}
         if do_eval:
+            if special_logging_enabled:
+                from recbole_patch import begin_special_eval
+                begin_special_eval(trainer, valid_data, split_name="valid")
             # Validation phase with progress
             valid_result = trainer._valid_epoch(valid_data, show_progress=eval_show)
+            if special_logging_enabled:
+                from recbole_patch import end_special_eval
+                last_valid_special_metrics = end_special_eval(trainer)
             if isinstance(valid_result, tuple):
                 # RecBole may return (loss, metrics) or (metrics, extra)
                 valid_result = next((x for x in valid_result if isinstance(x, dict)), valid_result[0])
@@ -803,6 +808,7 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
                 best_metric = current
                 best_valid_result = valid_result.copy()
                 best_model_state = {k: v.detach().cpu() for k, v in trainer.model.state_dict().items()}
+                best_valid_special_metrics = last_valid_special_metrics
                 no_improve = 0
             else:
                 no_improve += 1
@@ -926,12 +932,20 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
             'mrr@10': best_by_metric['mrr@10'] if best_by_metric['mrr@10'] > -1e8 else 0.0,
             'mrr@20': best_by_metric['mrr@20'] if best_by_metric['mrr@20'] > -1e8 else 0.0,
         }
+    if best_valid_special_metrics is None:
+        best_valid_special_metrics = last_valid_special_metrics
 
     # Load best model for test evaluation
     if best_model_state is not None:
         trainer.model.load_state_dict(best_model_state)
 
+    if special_logging_enabled:
+        from recbole_patch import begin_special_eval
+        begin_special_eval(trainer, test_data, split_name="test")
     test_result = trainer._valid_epoch(test_data, show_progress=eval_show)
+    if special_logging_enabled:
+        from recbole_patch import end_special_eval
+        test_special_metrics = end_special_eval(trainer)
     if isinstance(test_result, tuple):
         test_result = next((x for x in test_result if isinstance(x, dict)), test_result[0])
     elapsed_time = time.time() - start_time
@@ -946,6 +960,10 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     # RunLogger: save final summary
     if run_logger is not None:
         try:
+            run_logger.log_special_metrics(
+                valid_special_metrics=best_valid_special_metrics,
+                test_special_metrics=test_special_metrics,
+            )
             run_logger.log_final(
                 best_valid_result=best_valid_result or {},
                 test_result=test_result,
@@ -1037,22 +1055,17 @@ def main():
             'srgnn': 'GNN',
             'featuredmoe': 'FME',
             'featured_moe': 'FME',
-            'featuredmoe_hir': 'FHR',
-            'featured_moe_hir': 'FHR',
             'featuredmoe_hgr': 'FHG',
             'featured_moe_hgr': 'FHG',
-            'featuredmoe_hgr_v3': 'FH3',
-            'featuredmoe_hgrv3': 'FH3',
-            'featured_moe_hgr_v3': 'FH3',
             'featured_moe_hgr_v4': 'FH4',
             'featuredmoe_v2': 'FM2',
             'featured_moe_v2': 'FM2',
-            'featuredmoe_v2_hir': 'F2H',
-            'featured_moe_v2_hir': 'F2H',
             'featuredmoe_v3': 'FM3',
             'featured_moe_v3': 'FM3',
             'featuredmoe_v4_distillation': 'F4D',
             'featured_moe_v4_distillation': 'F4D',
+            'featuredmoe_n': 'FMN',
+            'featured_moe_n': 'FMN',
         }.get(model.lower(), model[:3].upper())
         code = f"{dataset_abbrev}_{model_abbrev}"
 
@@ -1090,6 +1103,8 @@ def main():
         if stage_total is not None:
             label = f"[S{stage_idx+1}/{stage_total}] {label}"
         print(f"\n{label} {run_name}")
+        if model and model.lower() in _FEATURE_AWARE_MOE_MODELS:
+            cfg_i.setdefault("fmoe_special_logging", True)
 
         if cfg_i.get("log_wandb", False):
             try:

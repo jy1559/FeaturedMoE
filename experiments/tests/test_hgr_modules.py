@@ -29,7 +29,6 @@ from models.FeaturedMoE_HGR.losses import (  # noqa: E402
     compute_intra_balance_aux_loss,
     compute_router_distill_aux_loss,
 )
-from models.FeaturedMoE_HiR.hir_moe_stages import HierarchicalStageMoE  # noqa: E402
 
 
 def _build_stage(
@@ -142,7 +141,7 @@ def test_hgr_factorized_router_handles_expert_scale_one():
     assert torch.allclose(gate_w, group_w, atol=1e-6)
 
 
-def test_hgr_stage_wide_matches_hir_shape_contract():
+def test_hgr_stage_wide_keeps_expected_shape_contract():
     torch.manual_seed(124)
     col2idx = build_column_to_index(ALL_FEATURE_COLUMNS)
     hidden = torch.randn(2, 4, 16)
@@ -173,33 +172,11 @@ def test_hgr_stage_wide_matches_hir_shape_contract():
         router_feature_dropout=0.1,
         reliability_feature_name=None,
     )
-    hir_stage = HierarchicalStageMoE(
-        stage_name="mid",
-        bundle_names=list(MID_EXPERTS.keys()),
-        bundle_feature_lists=list(MID_EXPERTS.values()),
-        stage_all_features=MID_ALL_FEATURES,
-        col2idx=col2idx,
-        d_model=16,
-        d_feat_emb=8,
-        d_expert_hidden=32,
-        d_router_hidden=16,
-        expert_scale=2,
-        expert_top_k=2,
-        bundle_top_k=0,
-        dropout=0.1,
-        router_use_hidden=True,
-        router_use_feature=True,
-        router_temperature=1.0,
-        router_feature_dropout=0.1,
-        reliability_feature_name=None,
-    )
-
     hgr_out = hgr_stage(hidden, feat)
-    hir_out = hir_stage(hidden, feat)
 
-    assert hgr_out[0].shape == hir_out[0].shape == hidden.shape
-    assert hgr_out[1].shape == hir_out[1].shape == (2, 4, 8)
-    assert hgr_out[3].shape == hir_out[3].shape == (2, 4, 4)
+    assert hgr_out[0].shape == hidden.shape
+    assert hgr_out[1].shape == (2, 4, 8)
+    assert hgr_out[3].shape == (2, 4, 4)
     assert all(isinstance(expert, HiddenExpertMLP) for expert in hgr_stage.experts)
 
 

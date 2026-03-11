@@ -1,10 +1,10 @@
 # FeaturedMoE_v4_Distillation Experiment Report
 
-- generated_at_utc: 2026-03-11T05:32:47.032981+00:00
+- generated_at_utc: 2026-03-11T13:38:39.270432+00:00
 - track: fmoe_v4_distillation
 - include_rule: keep OOM runs, keep successful runs with valid MRR@20, exclude non-OOM failures and no-metric runs
-- matched_end_events: 40
-- included_runs: 40
+- matched_end_events: 50
+- included_runs: 50
 - excluded_non_oom_error_runs: 0
 - excluded_no_metric_runs: 0
 
@@ -12,12 +12,22 @@
 
 | dataset | best_mrr@20 | axis | phase | duration_min | ended_at_utc | run_id |
 |---|---:|---|---|---:|---|---|
-| movielens1m | 0.097500 | hparam | PFULLV4D_C01_LEGACY_HYBRID | 146.18 | 2026-03-10T19:08:33.078044+00:00 | 20260310_164 |
+| movielens1m | 0.098000 | hparam | P2CMP16_C08_RULE_HYBRID_SOFT | 152.20 | 2026-03-11T13:32:07.340460+00:00 | 20260311_105 |
 
 ## Included Runs
 
 | end_utc | dataset | axis | phase | status | oom | mrr@20 | duration_min | how | run_id |
 |---|---|---|---|---|---|---:|---:|---|---|
+| 2026-03-11T13:38:39.132086+00:00 | movielens1m | hparam | P2CMP16_C09_RULE_FULL_SOFT | success | no | 0.074300 | 143.02 | hparam/P2CMP16_C09_RULE_FULL_SOFT ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_111 |
+| 2026-03-11T13:32:07.340460+00:00 | movielens1m | hparam | P2CMP16_C08_RULE_HYBRID_SOFT | success | no | 0.098000 | 152.20 | hparam/P2CMP16_C08_RULE_HYBRID_SOFT ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_105 |
+| 2026-03-11T11:58:24.616288+00:00 | movielens1m | hparam | P2CMP16_C06_GLS_DKL | success | no | 0.095500 | 188.68 | hparam/P2CMP16_C06_GLS_DKL ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_084 |
+| 2026-03-11T11:57:06.348978+00:00 | movielens1m | hparam | P2CMP16_C00_BASE_DB | success | no | 0.096100 | 187.37 | hparam/P2CMP16_C00_BASE_DB ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_084 |
+| 2026-03-11T11:55:49.842285+00:00 | movielens1m | hparam | P2CMP16_C01_GLS_BIAS | success | no | 0.095800 | 186.10 | hparam/P2CMP16_C01_GLS_BIAS ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_084 |
+| 2026-03-11T11:55:21.914840+00:00 | movielens1m | hparam | P2CMP16_C05_WEAK | success | no | 0.095700 | 185.63 | hparam/P2CMP16_C05_WEAK ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_084 |
+| 2026-03-11T11:47:03.661834+00:00 | movielens1m | hparam | P2CMP16_C04_GCS_SWAP | success | no | 0.096000 | 177.33 | hparam/P2CMP16_C04_GCS_SWAP ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_084 |
+| 2026-03-11T11:39:24.549011+00:00 | movielens1m | hparam | P2CMP16_C02_RULESOFT_TEACHER | success | no | 0.095600 | 169.67 | hparam/P2CMP16_C02_RULESOFT_TEACHER ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_084 |
+| 2026-03-11T11:15:37.596870+00:00 | movielens1m | hparam | P2CMP16_C07_PLAIN | success | no | 0.097300 | 145.89 | hparam/P2CMP16_C07_PLAIN ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_084 |
+| 2026-03-11T10:59:54.987532+00:00 | movielens1m | hparam | P2CMP16_C03_GLS_RULE_HYBRID | success | no | 0.095500 | 130.18 | hparam/P2CMP16_C03_GLS_RULE_HYBRID ; --max-evals=10, --tune-epochs=100, --tune-patience=10, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_084 |
 | 2026-03-11T05:32:46.899137+00:00 | movielens1m | hparam | P2CMP16_C15_L29_MM | success | no | 0.091700 | 95.09 | hparam/P2CMP16_C15_L29_MM ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=29, fmoe_stage_execution_mode=parallel | 20260311_035 |
 | 2026-03-11T05:27:24.740339+00:00 | movielens1m | hparam | P2CMP16_C11_ALL_L7 | success | no | 0.093400 | 91.95 | hparam/P2CMP16_C11_ALL_L7 ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=7, fmoe_stage_execution_mode=serial | 20260311_035 |
 | 2026-03-11T05:22:12.045994+00:00 | movielens1m | hparam | P2CMP16_C14_L16_MM | success | no | 0.095200 | 85.04 | hparam/P2CMP16_C14_L16_MM ; --max-evals=10, --tune-epochs=30, --tune-patience=5, dataset=movielens1m, fmoe_v2_layout_id=16, fmoe_stage_execution_mode=serial | 20260311_035 |

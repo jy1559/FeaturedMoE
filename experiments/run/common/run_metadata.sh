@@ -47,7 +47,9 @@ run_dataset_tag() {
     retail_rocket|retailrocket) echo "ReR" ;;
     foursquare) echo "FSQ" ;;
     lastfm0.3) echo "LF3" ;;
+    lastfm0.03) echo "LF03" ;;
     kuairec0.3) echo "KU3" ;;
+    kuairecsmall0.1) echo "KU01" ;;
     amazon_beauty|amazonbeauty) echo "AMA" ;;
     *)
       key="$(printf '%s' "$raw" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')"

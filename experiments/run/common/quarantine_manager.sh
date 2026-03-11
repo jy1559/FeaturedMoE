@@ -24,7 +24,7 @@ date_tag() {
 }
 
 json_escape() {
-  python - <<'PY' "$1"
+  python3 - <<'PY' "$1"
 import json,sys
 print(json.dumps(sys.argv[1], ensure_ascii=True))
 PY
@@ -102,7 +102,7 @@ do_move() {
     fi
 
     local abs_src rel dst dst_parent sz
-    abs_src="$(python - <<'PY' "$src"
+    abs_src="$(python3 - <<'PY' "$src"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).resolve())

@@ -29,6 +29,8 @@ python3 .codex/skills/fmoe/scripts/recommend_next.py --summary /workspace/jy1559
 ## Environment / Override Notes
 - 테스트나 Hydra compose 검증은 먼저 `conda activate FMoE` 환경에서 실행한다.
 - FMoE config는 root alias와 grouped config가 섞여 있으므로 Hydra override를 조심한다.
+- standalone `tune_*.yaml`처럼 `config.yaml`을 상속하지 않는 config는 root `seed`가 없을 수 있다. 이 경우 `seed=42` 대신 `++seed=42`를 쓴다.
+- `config.yaml` 기반 트랙은 root `seed`가 이미 있으므로 `seed=42`도 가능하지만, 공용 스크립트는 `++seed=42`를 우선한다.
 - runtime `rule_router.variant` 같은 root alias는 `rule_router.variant=teacher_gls`처럼 직접 override한다.
 - search space의 flat dotted key는 `++search.rule_router.variant=[...]`로 넣지 말고 `++search={rule_router.variant:[teacher_gls]}`처럼 dict merge로 넣는다.
 

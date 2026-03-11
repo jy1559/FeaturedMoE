@@ -31,6 +31,8 @@ dataset_to_config() {
     retail_rocket) echo tune_rr ;;
     kuairec0.3|KuaiRec0.3) echo tune_kuai ;;
     lastfm0.3) echo tune_lfm ;;
+    kuairecsmall0.1|KuaiRecSmall0.1) echo tune_kuai_small ;;
+    lastfm0.03) echo tune_lfm_small ;;
     *) echo config ;;
   esac
 }
@@ -70,7 +72,7 @@ cmd=(
   "dataset=${DATASET}"
   "gpu_id=${GPU_ID}"
   "log_wandb=${LOG_WANDB}"
-  "seed=${SEED}"
+  "++seed=${SEED}"
 )
 
 if [ -n "$EPOCHS" ]; then

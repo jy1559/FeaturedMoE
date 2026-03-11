@@ -50,17 +50,12 @@ def _get_custom_model(model_name):
             PAtt,
             FENRec,
             FeaturedMoE,
-            FeaturedMoE_HiR,
             FeaturedMoE_HGR,
-            FeaturedMoE_HGRv3,
             FeaturedMoE_HGRv4,
-            FeaturedMoE_Individual,
-            FeaturedMoE_HiR2,
-            FeaturedMoE_ProtoX,
             FeaturedMoE_V2,
-            FeaturedMoE_V2_HiR,
             FeaturedMoE_V3,
             FeaturedMoE_V4_Distillation,
+            FeaturedMoE_N,
         )
         custom_models = {
             'BiLSTM': BiLSTM, 
@@ -73,35 +68,17 @@ def _get_custom_model(model_name):
             'PAtt': PAtt,
             'FENRec': FENRec,
             'FeaturedMoE': FeaturedMoE,
-            'FeaturedMoE_HiR': FeaturedMoE_HiR,
             'FeaturedMoE_HGR': FeaturedMoE_HGR,
             'featured_moe_hgr': FeaturedMoE_HGR,
             'featuredmoe_hgr': FeaturedMoE_HGR,
-            'FeaturedMoE_HGRv3': FeaturedMoE_HGRv3,
-            'featured_moe_hgr_v3': FeaturedMoE_HGRv3,
-            'featuredmoe_hgr_v3': FeaturedMoE_HGRv3,
-            'featuredmoe_hgrv3': FeaturedMoE_HGRv3,
             'FeaturedMoE_HGRv4': FeaturedMoE_HGRv4,
             'featured_moe_hgr_v4': FeaturedMoE_HGRv4,
             'featuredmoe_hgr_v4': FeaturedMoE_HGRv4,
             'featuredmoe_hgrv4': FeaturedMoE_HGRv4,
-            'FeaturedMoE_Individual': FeaturedMoE_Individual,
-            'featured_moe_individual': FeaturedMoE_Individual,
-            'featuredmoe_individual': FeaturedMoE_Individual,
-            'FeaturedMoE_HiR2': FeaturedMoE_HiR2,
-            'featured_moe_hir2': FeaturedMoE_HiR2,
-            'featuredmoe_hir2': FeaturedMoE_HiR2,
-            'FeaturedMoE_ProtoX': FeaturedMoE_ProtoX,
-            'featured_moe_protox': FeaturedMoE_ProtoX,
-            'featuredmoe_protox': FeaturedMoE_ProtoX,
             'FeaturedMoE_v2': FeaturedMoE_V2,
             'FeaturedMoE_V2': FeaturedMoE_V2,
             'featured_moe_v2': FeaturedMoE_V2,
             'featuredmoe_v2': FeaturedMoE_V2,
-            'FeaturedMoE_v2_HiR': FeaturedMoE_V2_HiR,
-            'FeaturedMoE_V2_HiR': FeaturedMoE_V2_HiR,
-            'featured_moe_v2_hir': FeaturedMoE_V2_HiR,
-            'featuredmoe_v2_hir': FeaturedMoE_V2_HiR,
             'FeaturedMoE_v3': FeaturedMoE_V3,
             'FeaturedMoE_V3': FeaturedMoE_V3,
             'featured_moe_v3': FeaturedMoE_V3,
@@ -110,6 +87,9 @@ def _get_custom_model(model_name):
             'FeaturedMoE_V4_Distillation': FeaturedMoE_V4_Distillation,
             'featured_moe_v4_distillation': FeaturedMoE_V4_Distillation,
             'featuredmoe_v4_distillation': FeaturedMoE_V4_Distillation,
+            'FeaturedMoE_N': FeaturedMoE_N,
+            'featured_moe_n': FeaturedMoE_N,
+            'featuredmoe_n': FeaturedMoE_N,
         }
         return custom_models.get(model_name)
     except:
@@ -201,21 +181,16 @@ def _convert_inter_to_sequence(dataset, inter_feat, for_training=True):
     default_fp16 = model_name in {
         "featured_moe",
         "featuredmoe",
-        "featured_moe_hir",
-        "featuredmoe_hir",
         "featured_moe_hgr",
         "featuredmoe_hgr",
-        "featured_moe_hgr_v3",
-        "featuredmoe_hgr_v3",
-        "featuredmoe_hgrv3",
-        "featured_moe_individual",
-        "featuredmoe_individual",
-        "featured_moe_hir2",
-        "featuredmoe_hir2",
-        "featured_moe_protox",
-        "featuredmoe_protox",
         "featured_moe_v2",
         "featuredmoe_v2",
+        "featured_moe_v3",
+        "featuredmoe_v3",
+        "featured_moe_v4_distillation",
+        "featuredmoe_v4_distillation",
+        "featured_moe_n",
+        "featuredmoe_n",
     }
     use_fp16 = bool(dataset.config["fmoe_feature_fp16"]) if "fmoe_feature_fp16" in dataset.config else default_fp16
 
@@ -245,21 +220,16 @@ def _convert_inter_to_sequence(dataset, inter_feat, for_training=True):
     if model_name in {
         "featured_moe",
         "featuredmoe",
-        "featured_moe_hir",
-        "featuredmoe_hir",
         "featured_moe_hgr",
         "featuredmoe_hgr",
-        "featured_moe_hgr_v3",
-        "featuredmoe_hgr_v3",
-        "featuredmoe_hgrv3",
-        "featured_moe_individual",
-        "featuredmoe_individual",
-        "featured_moe_hir2",
-        "featuredmoe_hir2",
-        "featured_moe_protox",
-        "featuredmoe_protox",
         "featured_moe_v2",
         "featuredmoe_v2",
+        "featured_moe_v3",
+        "featuredmoe_v3",
+        "featured_moe_v4_distillation",
+        "featuredmoe_v4_distillation",
+        "featured_moe_n",
+        "featuredmoe_n",
     }:
         history_fields = [
             f for f in history_fields
@@ -419,21 +389,16 @@ def _patched_data_augmentation(self):
     default_fp16 = model_name in {
         "featured_moe",
         "featuredmoe",
-        "featured_moe_hir",
-        "featuredmoe_hir",
         "featured_moe_hgr",
         "featuredmoe_hgr",
-        "featured_moe_hgr_v3",
-        "featuredmoe_hgr_v3",
-        "featuredmoe_hgrv3",
-        "featured_moe_individual",
-        "featuredmoe_individual",
-        "featured_moe_hir2",
-        "featuredmoe_hir2",
-        "featured_moe_protox",
-        "featuredmoe_protox",
         "featured_moe_v2",
         "featuredmoe_v2",
+        "featured_moe_v3",
+        "featuredmoe_v3",
+        "featured_moe_v4_distillation",
+        "featuredmoe_v4_distillation",
+        "featured_moe_n",
+        "featuredmoe_n",
     }
     use_fp16 = bool(self.config["fmoe_feature_fp16"]) if "fmoe_feature_fp16" in self.config else default_fp16
 
@@ -795,6 +760,73 @@ Trainer._valid_epoch = _patched_valid_epoch
 
 _original_full_sort_batch_eval = Trainer._full_sort_batch_eval
 
+
+def _build_special_metric_item_counts(data_loader):
+    dataset = getattr(data_loader, "dataset", None)
+    if dataset is None:
+        return None
+    inter_feat = getattr(dataset, "inter_feat", None)
+    iid_field = getattr(dataset, "iid_field", None)
+    n_items = int(getattr(dataset, "item_num", 0))
+    if inter_feat is None or iid_field is None or n_items <= 0:
+        return None
+    item_ids = inter_feat[iid_field]
+    if not torch.is_tensor(item_ids):
+        item_ids = torch.as_tensor(item_ids)
+    item_ids = item_ids.long().clamp(min=0)
+    return torch.bincount(item_ids, minlength=n_items)[:n_items].cpu()
+
+
+def begin_special_eval(trainer, data_loader, *, split_name: str):
+    model_name = str(trainer.config.get("model", "")).lower()
+    if not (model_name.startswith("featured_moe") or model_name.startswith("featuredmoe")):
+        return
+    if not bool(trainer.config.get("fmoe_special_logging", True)):
+        return
+
+    from models.FeaturedMoE.special_metrics import (
+        SpecialMetricCollector,
+        build_special_metric_config_snapshot,
+        default_new_user_field,
+    )
+
+    item_counts = getattr(trainer, "_fmoe_special_item_counts", None)
+    if item_counts is None:
+        item_counts = _build_special_metric_item_counts(data_loader)
+        trainer._fmoe_special_item_counts = item_counts
+    if item_counts is None:
+        return
+
+    item_seq_len_field = getattr(getattr(trainer, "model", None), "ITEM_SEQ_LEN", None)
+    if item_seq_len_field is None:
+        item_seq_len_field = trainer.config.get("ITEM_LIST_LENGTH_FIELD", "item_length")
+    new_user_field = default_new_user_field()
+    snapshot = build_special_metric_config_snapshot(
+        feature_available=True,
+        new_user_available=True,
+    )
+    snapshot["split"] = str(split_name)
+    snapshot["item_seq_len_field"] = str(item_seq_len_field)
+    snapshot["new_user_field"] = str(new_user_field)
+
+    trainer._fmoe_special_metric_collector = SpecialMetricCollector(
+        split_name=split_name,
+        item_counts=item_counts,
+        item_seq_len_field=item_seq_len_field,
+        new_user_field=new_user_field,
+        config_snapshot=snapshot,
+    )
+
+
+def end_special_eval(trainer):
+    collector = getattr(trainer, "_fmoe_special_metric_collector", None)
+    if collector is None:
+        return None
+    summary = collector.finalize()
+    trainer._fmoe_special_metric_collector = None
+    return summary
+
+
 def _patched_full_sort_batch_eval(self, batched_data):
     """
     Patched _full_sort_batch_eval that supports sampled evaluation.
@@ -804,27 +836,39 @@ def _patched_full_sort_batch_eval(self, batched_data):
     sampled evaluation while keeping the same batch structure.
     """
     result = _original_full_sort_batch_eval(self, batched_data)
-    
+
     # Check if sampled evaluation mask is set
     sampled_mask = getattr(self, '_sampled_eval_mask', None)
+    interaction, scores, positive_u, positive_i = result
     if sampled_mask is not None:
-        interaction, scores, positive_u, positive_i = result
-        
         # Expand mask to batch size
         # scores shape: (batch_size, n_items)
         # sampled_mask shape: (n_items,) boolean
-        
+
         # Set scores for non-candidate items to -inf
         # But keep positive items (they should always be evaluated)
         mask = sampled_mask.clone()
         mask[positive_i] = True  # Always include positive items
-        
+
         # Apply mask: non-candidate items get -inf
         scores[:, ~mask] = float('-inf')
-        
-        return (interaction, scores, positive_u, positive_i)
-    
-    return result
+
+    collector = getattr(self, "_fmoe_special_metric_collector", None)
+    if collector is not None:
+        try:
+            collector.update(
+                interaction=interaction,
+                scores=scores,
+                positive_u=positive_u,
+                positive_i=positive_i,
+            )
+        except Exception as e:
+            try:
+                self.logger.warning(f"special metric collection skipped for one batch: {e}")
+            except Exception:
+                pass
+
+    return (interaction, scores, positive_u, positive_i)
 
 Trainer._full_sort_batch_eval = _patched_full_sort_batch_eval
 

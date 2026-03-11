@@ -73,6 +73,7 @@ class RunLogger:
         self._perf_csv = self.run_dir / "expert_performance.csv"
         self._bias_csv = self.run_dir / "feature_bias.csv"
         self._summary_path = self.run_dir / "summary.json"
+        self._special_metrics_path = self.run_dir / "special_metrics.json"
 
         # Write config
         if config is not None:
@@ -349,6 +350,41 @@ class RunLogger:
             json.dump(summary, f, indent=2, ensure_ascii=False)
 
         logger.info(f"RunLogger: summary saved to {self._summary_path}")
+
+    def log_special_metrics(
+        self,
+        *,
+        valid_special_metrics: Optional[Dict[str, Any]],
+        test_special_metrics: Optional[Dict[str, Any]],
+    ):
+        """Write aggregated special slice metrics to one run-level JSON file."""
+        if valid_special_metrics is None and test_special_metrics is None:
+            return
+
+        config_snapshot = {}
+        if isinstance(valid_special_metrics, dict):
+            config_snapshot = dict(valid_special_metrics.get("config_snapshot", {}))
+        if not config_snapshot and isinstance(test_special_metrics, dict):
+            config_snapshot = dict(test_special_metrics.get("config_snapshot", {}))
+
+        payload = {
+            "valid": (valid_special_metrics or {}).get("overall", {}),
+            "test": (test_special_metrics or {}).get("overall", {}),
+            "slice_metrics": {
+                "valid": (valid_special_metrics or {}).get("slices", {}),
+                "test": (test_special_metrics or {}).get("slices", {}),
+            },
+            "counts": {
+                "valid": (valid_special_metrics or {}).get("counts", {}),
+                "test": (test_special_metrics or {}).get("counts", {}),
+            },
+            "config_snapshot": _make_serializable(config_snapshot),
+        }
+
+        with open(self._special_metrics_path, "w") as f:
+            json.dump(_make_serializable(payload), f, indent=2, ensure_ascii=False)
+
+        logger.info(f"RunLogger: special metrics saved to {self._special_metrics_path}")
 
     # ------------------------------------------------------------------
     # Utility

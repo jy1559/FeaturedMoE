@@ -17,7 +17,7 @@ import torch.nn as nn
 from ..FeaturedMoE.feature_config import ALL_FEATURE_COLUMNS, STAGES, STAGE_ALL_FEATURES, build_column_to_index
 from ..FeaturedMoE.routers import Router
 from ..FeaturedMoE_HGR.hgr_moe_stages import ScalarRouter
-from ..FeaturedMoE_HGRv3.hgr_v3_moe_stages import (
+from .hgr_v3_compat_stages import (
     HiddenExpertMLP,
     HierarchicalGroupStageMoEv3,
     HierarchicalMoEHGRv3,

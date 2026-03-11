@@ -60,6 +60,7 @@ from __future__ import annotations
 #  Pre-import: CPU thread limits (must precede torch)
 # ═══════════════════════════════════════════════════════════════════
 import os
+import subprocess
 import sys
 
 # Parse gpu_id from CLI before torch import and pin visible CUDA device.
@@ -116,51 +117,35 @@ from omegaconf import OmegaConf
 _FEATURE_AWARE_MOE_MODELS = {
     "featured_moe",
     "featuredmoe",
-    "featured_moe_hir",
-    "featuredmoe_hir",
     "featured_moe_hgr",
-    "featured_moe_hgr_v3",
     "featured_moe_hgr_v4",
     "featuredmoe_hgr",
-    "featuredmoe_hgr_v3",
     "featuredmoe_hgr_v4",
     "featuredmoe_hgrv4",
-    "featuredmoe_hgrv3",
-    "featured_moe_hir2",
-    "featuredmoe_hir2",
-    "featured_moe_protox",
-    "featuredmoe_protox",
     "featured_moe_v2",
     "featuredmoe_v2",
-    "featured_moe_v2_hir",
-    "featuredmoe_v2_hir",
     "featured_moe_v3",
     "featuredmoe_v3",
     "featured_moe_v4_distillation",
     "featuredmoe_v4_distillation",
+    "featured_moe_n",
+    "featuredmoe_n",
 }
 
 _FEATURED_MOE_V2_MODELS = {
     "featured_moe_hgr",
-    "featured_moe_hgr_v3",
     "featured_moe_hgr_v4",
     "featuredmoe_hgr",
-    "featuredmoe_hgr_v3",
     "featuredmoe_hgr_v4",
     "featuredmoe_hgrv4",
-    "featuredmoe_hgrv3",
     "featured_moe_v2",
     "featuredmoe_v2",
-    "featured_moe_hir2",
-    "featuredmoe_hir2",
-    "featured_moe_protox",
-    "featuredmoe_protox",
-    "featured_moe_v2_hir",
-    "featuredmoe_v2_hir",
     "featured_moe_v3",
     "featuredmoe_v3",
     "featured_moe_v4_distillation",
     "featuredmoe_v4_distillation",
+    "featured_moe_n",
+    "featuredmoe_n",
 }
 
 
@@ -247,6 +232,7 @@ tqdm_module.tqdm = TqdmWithoutLeave
 tqdm_module.std.tqdm = TqdmWithoutLeave
 
 _DATA_BUNDLE_CACHE = OrderedDict()
+_TEMP_PATHS_TO_CLEAN: set[str] = set()
 
 _TERMINATION_SIGNAL = None
 _RUN_START_TS = datetime.now().isoformat(timespec="seconds")
@@ -283,11 +269,38 @@ def _on_process_exit():
         )
 
 
+def _register_temp_path(path: Path | str) -> None:
+    try:
+        _TEMP_PATHS_TO_CLEAN.add(str(Path(path).resolve()))
+    except Exception:
+        _TEMP_PATHS_TO_CLEAN.add(str(path))
+
+
+def _cleanup_temp_path(path: Path | str) -> None:
+    target = str(path)
+    try:
+        Path(target).unlink(missing_ok=True)
+    except Exception:
+        pass
+    _TEMP_PATHS_TO_CLEAN.discard(target)
+
+
+def _cleanup_registered_temp_paths() -> None:
+    for path in list(_TEMP_PATHS_TO_CLEAN):
+        try:
+            Path(path).unlink(missing_ok=True)
+        except Exception:
+            pass
+        finally:
+            _TEMP_PATHS_TO_CLEAN.discard(path)
+
+
 for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
     try:
         signal.signal(_sig, _on_termination_signal)
     except Exception:
         pass
+atexit.register(_cleanup_registered_temp_paths)
 atexit.register(_on_process_exit)
 print(f"[RUN_STATUS] START pid={os.getpid()} ts={_RUN_START_TS}")
 
@@ -856,6 +869,49 @@ def _set_nested_value(cfg: dict, dotted_key: str, value):
     cur[parts[-1]] = value
 
 
+def _dropout_target_keys(model_name: str) -> list[str]:
+    model_key = str(model_name or "").strip().lower()
+    targets = ["hidden_dropout_prob"]
+    if model_key in {"sasrec", "bsarec", "fenrec", "patt"}:
+        targets.append("attn_dropout_prob")
+    return targets
+
+
+def _apply_runtime_param(cfg: dict, key: str, value):
+    key_str = str(key).strip()
+    if not key_str:
+        return
+
+    if key_str.lower() == "dropout_ratio":
+        for target_key in _dropout_target_keys(cfg.get("model", "")):
+            _set_nested_value(cfg, target_key, float(value))
+        return
+
+    _set_nested_value(cfg, key_str, value)
+
+
+def _safe_slug(raw: str) -> str:
+    text = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(raw or "").strip())
+    text = text.strip("._-")
+    return text or "na"
+
+
+def _best_stage_temp_path(cfg_dict: dict) -> Path:
+    tmp_dir = Path(__file__).resolve().parent / "run" / "artifacts" / "tmp" / "best_stage"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    dataset = _safe_slug(_canonical_dataset_name(cfg_dict.get("dataset", "")))
+    model = _safe_slug(str(cfg_dict.get("model", "")))
+    phase = _safe_slug(str(cfg_dict.get("run_phase", "")))
+    return tmp_dir / f"pid{os.getpid()}_{dataset}_{model}_{phase}.pth"
+
+
+def _save_best_stage(model, path: Path) -> None:
+    cpu_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+    torch.save(cpu_state, path)
+    del cpu_state
+    gc.collect()
+
+
 def _reapply_cli_overrides(cfg: dict, overrides: list[str]):
     """Re-apply explicit key=value CLI overrides after --space-yaml merge."""
     allowed_top_keys = {
@@ -876,6 +932,7 @@ def _reapply_cli_overrides(cfg: dict, overrides: list[str]):
         "learning_rate",
         "weight_decay",
         "hidden_dropout_prob",
+        "dropout_ratio",
         "balance_loss_lambda",
         "search_space_type_overrides",
         "num_heads",
@@ -910,6 +967,17 @@ def _reapply_cli_overrides(cfg: dict, overrides: list[str]):
         "moe_top_k_start",
         "moe_top_k_warmup_until",
         "eval_every",
+        "feature_encoder_mode",
+        "feature_encoder_sinusoidal_features",
+        "feature_encoder_sinusoidal_n_freqs",
+        "rule_bias_scale",
+        "fmoe_special_logging",
+        "expert_hidden_by_stage",
+        "expert_depth_by_stage",
+        "wave",
+        "combo_id",
+        "combo_desc",
+        "pair_id",
     }
     for token in overrides:
         if "=" not in token:
@@ -998,6 +1066,10 @@ def _extract_context_fixed(cfg: dict) -> dict:
         "moe_top_k",
         "moe_top_k_warmup_until",
         "search_space_type_overrides",
+        "wave",
+        "combo_id",
+        "combo_desc",
+        "pair_id",
     )
     out = {}
     for key in keys:
@@ -1083,6 +1155,9 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     """Train one configuration.  Returns best-validation MRR@20 and metrics."""
     cfg = copy.deepcopy(cfg_dict)
     cfg["log_wandb"] = False
+    model_name = str(cfg.get("model", "")).lower()
+    if model_name in _FEATURE_AWARE_MOE_MODELS and "fmoe_special_logging" not in cfg:
+        cfg["fmoe_special_logging"] = True
     trial_epoch_log = bool(cfg.get("trial_epoch_log", False))
     cfg["show_progress"] = bool(cfg.get("show_progress", True)) and trial_epoch_log
     for drop in ("search", "search_stages", "search_strategy", "max_search"):
@@ -1189,9 +1264,16 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
         from recbole_patch import setup_sampled_eval
         setup_sampled_eval(trainer, neg_items, sample_num, n_items, config["device"])
 
-    # Training loop with early stopping
+    # Training loop with early stopping + temp best-stage checkpoint for test.
+    best_stage_path = _best_stage_temp_path(cfg)
+    try:
+        best_stage_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    _register_temp_path(best_stage_path)
     best_mrr20 = float("-inf")
     best_result: dict = {}
+    test_result: dict = {}
     try:
         patience = int(config["stopping_step"])
     except (KeyError, TypeError):
@@ -1201,47 +1283,88 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     eval_every = max(1, int(cfg.get("eval_every", 1)))
     show_progress = bool(cfg.get("show_progress", True))
     early_stopped = False
+    final_epoch = 0
 
     t0 = time.time()
-    final_epoch = 0
-    for epoch in range(max_epochs):
-        epoch_start = time.time()
-        final_epoch = epoch + 1
-        if progress_cb is not None:
+    try:
+        for epoch in range(max_epochs):
+            epoch_start = time.time()
+            final_epoch = epoch + 1
+            if progress_cb is not None:
+                try:
+                    progress_cb(
+                        {
+                            "trial_num": trial_num,
+                            "epoch": epoch + 1,
+                            "max_epochs": max_epochs,
+                            "train_loss": 0.0,
+                            "eval": False,
+                            "best_mrr20": float(best_mrr20) if best_mrr20 > -1e8 else 0.0,
+                            "patience_used": int(no_improve),
+                            "patience_total": int(patience),
+                            "state": "epoch_start",
+                        }
+                    )
+                except Exception:
+                    pass
+
             try:
-                progress_cb(
-                    {
-                        "trial_num": trial_num,
-                        "epoch": epoch + 1,
-                        "max_epochs": max_epochs,
-                        "train_loss": 0.0,
-                        "eval": False,
-                        "best_mrr20": float(best_mrr20) if best_mrr20 > -1e8 else 0.0,
-                        "patience_used": int(no_improve),
-                        "patience_total": int(patience),
-                        "state": "epoch_start",
-                    }
-                )
+                schedule_model = trainer.model
+                if hasattr(schedule_model, "set_schedule_epoch"):
+                    schedule_model.set_schedule_epoch(
+                        epoch_idx=epoch,
+                        max_epochs=max_epochs,
+                        log_now=False,
+                    )
             except Exception:
                 pass
-        # Keep epoch-based scheduling behavior consistent with recbole_train.py.
-        try:
-            schedule_model = trainer.model
-            if hasattr(schedule_model, "set_schedule_epoch"):
-                schedule_model.set_schedule_epoch(
-                    epoch_idx=epoch,
-                    max_epochs=max_epochs,
-                    log_now=False,
-                )
-        except Exception:
-            pass
-        train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
-        if isinstance(train_loss, (tuple, list)):
-            train_loss = sum(float(x) for x in train_loss)
-        train_loss = float(train_loss)
 
-        should_eval = ((epoch + 1) % eval_every == 0) or (epoch + 1 == max_epochs)
-        if not should_eval:
+            train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+            if isinstance(train_loss, (tuple, list)):
+                train_loss = sum(float(x) for x in train_loss)
+            train_loss = float(train_loss)
+
+            should_eval = ((epoch + 1) % eval_every == 0) or (epoch + 1 == max_epochs)
+            if not should_eval:
+                if progress_cb is not None:
+                    try:
+                        progress_cb(
+                            {
+                                "trial_num": trial_num,
+                                "epoch": epoch + 1,
+                                "max_epochs": max_epochs,
+                                "train_loss": float(train_loss),
+                                "eval": False,
+                                "best_mrr20": float(best_mrr20) if best_mrr20 > -1e8 else 0.0,
+                                "patience_used": int(no_improve),
+                                "patience_total": int(patience),
+                            }
+                        )
+                    except Exception:
+                        pass
+
+                if trial_epoch_log:
+                    epoch_time = time.time() - epoch_start
+                    print(
+                        f"    Ep {epoch+1:>3}/{max_epochs:<3}\tSKIP@{eval_every}\t"
+                        f"train_loss {train_loss:7.4f}\tpat {no_improve:>2}/{patience:<2}\t"
+                        f"time {epoch_time:6.2f}s"
+                    )
+                continue
+
+            vr = trainer._valid_epoch(valid_data, show_progress=show_progress)
+            if isinstance(vr, tuple):
+                vr = next((x for x in vr if isinstance(x, dict)), vr[0])
+
+            mrr20 = float(vr.get("mrr@20", 0.0))
+            if mrr20 > best_mrr20:
+                best_mrr20 = mrr20
+                best_result = {k: float(v) for k, v in vr.items()}
+                _save_best_stage(trainer.model, best_stage_path)
+                no_improve = 0
+            else:
+                no_improve += 1
+
             if progress_cb is not None:
                 try:
                     progress_cb(
@@ -1250,8 +1373,9 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                             "epoch": epoch + 1,
                             "max_epochs": max_epochs,
                             "train_loss": float(train_loss),
-                            "eval": False,
-                            "best_mrr20": float(best_mrr20) if best_mrr20 > -1e8 else 0.0,
+                            "eval": True,
+                            "valid_mrr20": float(mrr20),
+                            "best_mrr20": float(best_mrr20),
                             "patience_used": int(no_improve),
                             "patience_total": int(patience),
                         }
@@ -1261,81 +1385,61 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
 
             if trial_epoch_log:
                 epoch_time = time.time() - epoch_start
+                best_disp = best_mrr20 if best_mrr20 > -1e8 else 0.0
                 print(
-                    f"    Ep {epoch+1:>3}/{max_epochs:<3}\tSKIP@{eval_every}\t"
-                    f"train_loss {train_loss:7.4f}\tpat {no_improve:>2}/{patience:<2}\t"
+                    f"    Ep {epoch+1:>3}/{max_epochs:<3}\tEVAL    \t"
+                    f"train_loss {train_loss:7.4f}\tvalid M@20 {mrr20:7.4f}\t"
+                    f"best M@20 {best_disp:7.4f}\tpat {no_improve:>2}/{patience:<2}\t"
                     f"time {epoch_time:6.2f}s"
                 )
-            continue
 
-        vr = trainer._valid_epoch(valid_data, show_progress=show_progress)
-        if isinstance(vr, tuple):
-            vr = next((x for x in vr if isinstance(x, dict)), vr[0])
+            if no_improve >= patience:
+                early_stopped = True
+                break
 
-        mrr20 = float(vr.get("mrr@20", 0.0))
-        if mrr20 > best_mrr20:
-            best_mrr20 = mrr20
-            best_result = {k: float(v) for k, v in vr.items()}
-            no_improve = 0
+        if not best_result:
+            best_result = {"mrr@20": 0.0}
+        if best_mrr20 <= -1e8:
+            best_mrr20 = float(best_result.get("mrr@20", 0.0) or 0.0)
+
+        if best_stage_path.exists():
+            best_state = torch.load(best_stage_path, map_location="cpu")
+            trainer.model.load_state_dict(best_state)
+            del best_state
+            gc.collect()
         else:
-            no_improve += 1
+            print(f"[WARN] Missing best-stage checkpoint before test: {best_stage_path}")
 
-        if progress_cb is not None:
-            try:
-                progress_cb(
-                    {
-                        "trial_num": trial_num,
-                        "epoch": epoch + 1,
-                        "max_epochs": max_epochs,
-                        "train_loss": float(train_loss),
-                        "eval": True,
-                        "valid_mrr20": float(mrr20),
-                        "best_mrr20": float(best_mrr20),
-                        "patience_used": int(no_improve),
-                        "patience_total": int(patience),
-                    }
-                )
-            except Exception:
-                pass
+        tr = trainer._valid_epoch(test_data, show_progress=show_progress)
+        if isinstance(tr, tuple):
+            tr = next((x for x in tr if isinstance(x, dict)), tr[0])
+        test_result = {k: float(v) for k, v in tr.items()}
 
-        if trial_epoch_log:
-            epoch_time = time.time() - epoch_start
-            best_disp = best_mrr20 if best_mrr20 > -1e8 else 0.0
-            print(
-                f"    Ep {epoch+1:>3}/{max_epochs:<3}\tEVAL    \t"
-                f"train_loss {train_loss:7.4f}\tvalid M@20 {mrr20:7.4f}\t"
-                f"best M@20 {best_disp:7.4f}\tpat {no_improve:>2}/{patience:<2}\t"
-                f"time {epoch_time:6.2f}s"
-            )
+        elapsed = time.time() - t0
 
-        if no_improve >= patience:
-            early_stopped = True
-            break
-
-    elapsed = time.time() - t0
-
-    fmoe_arch = {}
-    try:
-        model_name = str(cfg.get("model", "")).lower()
-        if model_name in _FEATURE_AWARE_MOE_MODELS:
-            fmoe_arch = _extract_featured_moe_arch(model, cfg)
-    except Exception:
         fmoe_arch = {}
+        try:
+            model_name = str(cfg.get("model", "")).lower()
+            if model_name in _FEATURE_AWARE_MOE_MODELS:
+                fmoe_arch = _extract_featured_moe_arch(model, cfg)
+        except Exception:
+            fmoe_arch = {}
 
-    # GPU memory cleanup
-    del model, trainer, train_data, valid_data, test_data, dataset, config
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    return {
-        "mrr@20": best_mrr20,
-        "valid_result": best_result,
-        "epochs_run": final_epoch,
-        "early_stop_epoch": final_epoch,
-        "early_stopped": early_stopped,
-        "elapsed": elapsed,
-        "fmoe_arch": fmoe_arch,
-    }
+        return {
+            "mrr@20": float(best_mrr20),
+            "valid_result": best_result,
+            "test_result": test_result,
+            "epochs_run": final_epoch,
+            "early_stop_epoch": final_epoch,
+            "early_stopped": early_stopped,
+            "elapsed": elapsed,
+            "fmoe_arch": fmoe_arch,
+        }
+    finally:
+        _cleanup_temp_path(best_stage_path)
+        del model, trainer, train_data, valid_data, test_data, dataset, config
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1415,10 +1519,48 @@ def _save_results(
     ok = [t for t in normalized_trials if t.get("status") == "ok"]
     if ok:
         bt = max(ok, key=lambda x: x.get("mrr@20", 0))
-        data["best_mrr@20"] = bt["mrr@20"]
-        data["best_valid_result"] = bt.get("valid_result", {})
+        best_valid_result = bt.get("valid_result", {}) or {}
+        test_result = bt.get("test_result", {}) or {}
+        data["best_mrr@20"] = _ser(bt.get("mrr@20", 0.0))
+        data["best_hr@10"] = _ser(best_valid_result.get("hit@10", 0.0))
+        data["test_mrr@20"] = _ser(test_result.get("mrr@20", 0.0))
+        data["test_hr@10"] = _ser(test_result.get("hit@10", 0.0))
+        data["best_valid_result"] = best_valid_result
+        data["test_result"] = test_result
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=_ser)
+
+
+def _maybe_update_baseline_phase_summary(dataset: str, phase: str) -> None:
+    enabled = str(os.environ.get("BASELINE_PHASE_SUMMARY", "")).strip().lower()
+    if enabled not in {"1", "true", "yes", "on"}:
+        return
+
+    phase_folder = str(os.environ.get("BASELINE_SUMMARY_PHASE", "")).strip()
+    if not phase_folder:
+        parts = [tok for tok in str(phase or "").split("_") if tok]
+        for i, tok in enumerate(parts):
+            if tok in {"A", "B"}:
+                phase_folder = "_".join(parts[:i]) if i > 0 else parts[0]
+                break
+        if not phase_folder:
+            phase_folder = str(phase or "").strip()
+    if not dataset or not phase_folder:
+        return
+
+    script_path = Path(__file__).resolve().parent / "run" / "baseline" / "update_phase_summary.py"
+    if not script_path.exists():
+        return
+
+    try:
+        subprocess.run(
+            [sys.executable, str(script_path), "--dataset", str(dataset), "--phase", phase_folder],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
 
 
 def _format_duration(seconds: float) -> str:
@@ -1693,7 +1835,7 @@ def main():
     tuned_search, fixed_search = split_search_params(search)
     if fixed_search:
         for k, v in fixed_search.items():
-            _set_nested_value(cfg, str(k), copy.deepcopy(v))
+            _apply_runtime_param(cfg, str(k), copy.deepcopy(v))
     context_fixed = _extract_context_fixed(cfg)
 
     single_run_mode = False
@@ -1813,8 +1955,12 @@ def main():
         # Merge sampled hyperparams into base config
         cfg_trial = copy.deepcopy(cfg)
         cfg_trial.pop("search", None)
+        cfg_trial["run_group"] = run_group
+        cfg_trial["run_axis"] = run_axis
+        cfg_trial["run_phase"] = run_phase
+        cfg_trial["parent_result"] = parent_result
         for k, v in sampled_params.items():
-            _set_nested_value(cfg_trial, str(k), _ser(v))
+            _apply_runtime_param(cfg_trial, str(k), _ser(v))
 
         # Compact trial header
         parts = []
@@ -1866,6 +2012,10 @@ def main():
                 "params": {k: _ser(v) for k, v in sampled_params.items()},
                 "mrr@20": float(mrr20),
                 "valid_result": result["valid_result"],
+                "test_result": result.get("test_result", {}),
+                "best_hr@10": float((result.get("valid_result", {}) or {}).get("hit@10", 0.0) or 0.0),
+                "test_mrr@20": float((result.get("test_result", {}) or {}).get("mrr@20", 0.0) or 0.0),
+                "test_hr@10": float((result.get("test_result", {}) or {}).get("hit@10", 0.0) or 0.0),
                 "epochs_run": result["epochs_run"],
                 "early_stop_epoch": result.get("early_stop_epoch", result["epochs_run"]),
                 "early_stopped": bool(result.get("early_stopped", False)),
@@ -1904,6 +2054,7 @@ def main():
                 interrupted=interrupted,
                 interrupted_at=interrupted_at,
             )
+            _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
             _wandb_log_trial(trial_num, sampled_params, result)
             _wandb_trial_finish(
                 {
@@ -1954,6 +2105,7 @@ def main():
                 interrupted=interrupted,
                 interrupted_at=interrupted_at,
             )
+            _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
             raise
         except Exception as e:
             print(f"  -> FAILED: {e}")
@@ -1998,6 +2150,7 @@ def main():
                 interrupted=interrupted,
                 interrupted_at=interrupted_at,
             )
+            _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
             return {"loss": 1.0, "status": STATUS_FAIL}
 
     # Run TPE
@@ -2059,6 +2212,7 @@ def main():
         interrupted=interrupted,
         interrupted_at=interrupted_at,
     )
+    _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
 
 
 if __name__ == "__main__":
