@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from ..FeaturedMoE.moe_stages import MoEStage as LegacyMoEStage
 from ..FeaturedMoE.moe_stages import _scaled_expert_lists, _scaled_expert_names
 from ..FeaturedMoE.routers import Router, RuleSoftRouter
-from ..FeaturedMoE.transformer import TransformerEncoder
+from ..FeaturedMoE.transformer import PositionwiseFFN, TransformerEncoder
 from .feature_bank import _to_ratio
 from ..FeaturedMoE_v2.feature_config import STAGE_ALL_FEATURES
 
@@ -71,6 +71,75 @@ class StageRuntimeConfig:
     router_impl: str
     rule_router_cfg: Dict[str, Any]
     rule_bias_scale: float
+    inter_layer_style: str
+    router_group_feature_mode: str
+    moe_block_variant: str
+
+
+class _IdentityInterBlock(nn.Module):
+    def forward(self, hidden: torch.Tensor, item_seq: Optional[torch.Tensor] = None) -> torch.Tensor:
+        return hidden
+
+
+class _ResidualNonlinearInterBlock(nn.Module):
+    def __init__(self, d_model: int, dropout: float):
+        super().__init__()
+        self.ln = nn.LayerNorm(int(d_model))
+        self.proj = nn.Linear(int(d_model), int(d_model))
+        self.drop = nn.Dropout(float(dropout))
+        self.resid_scale = nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, hidden: torch.Tensor, item_seq: Optional[torch.Tensor] = None) -> torch.Tensor:
+        delta = self.drop(F.gelu(self.proj(self.ln(hidden))))
+        return hidden + self.resid_scale * delta
+
+
+class _ResidualFFNInterBlock(nn.Module):
+    def __init__(self, d_model: int, d_ff: int, dropout: float):
+        super().__init__()
+        self.ln = nn.LayerNorm(int(d_model))
+        self.ffn = PositionwiseFFN(int(d_model), int(d_ff), float(dropout))
+        self.resid_scale = nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, hidden: torch.Tensor, item_seq: Optional[torch.Tensor] = None) -> torch.Tensor:
+        return hidden + self.resid_scale * self.ffn(self.ln(hidden))
+
+
+def _build_inter_block(style: str, cfg: StageRuntimeConfig) -> nn.Module:
+    key = str(style or "attn").lower().strip()
+    if key == "attn":
+        return TransformerEncoder(
+            d_model=cfg.d_model,
+            n_heads=cfg.n_heads,
+            n_layers=1,
+            d_ff=cfg.d_ff,
+            dropout=cfg.dropout,
+            ffn_moe=False,
+        )
+    if key == "identity":
+        return _IdentityInterBlock()
+    if key == "nonlinear":
+        return _ResidualNonlinearInterBlock(d_model=cfg.d_model, dropout=cfg.dropout)
+    if key == "ffn":
+        return _ResidualFFNInterBlock(d_model=cfg.d_model, d_ff=cfg.d_ff, dropout=cfg.dropout)
+    raise ValueError(
+        "stage_inter_layer_style must be one of ['attn','identity','nonlinear','ffn'], "
+        f"got {style}"
+    )
+
+
+def _build_moe_replacement_block(variant: str, cfg: StageRuntimeConfig) -> nn.Module:
+    key = str(variant or "moe").lower().strip()
+    if key == "dense_ffn":
+        return _ResidualFFNInterBlock(d_model=cfg.d_model, d_ff=cfg.d_ff, dropout=cfg.dropout)
+    if key == "nonlinear":
+        return _ResidualNonlinearInterBlock(d_model=cfg.d_model, dropout=cfg.dropout)
+    if key == "identity":
+        return _IdentityInterBlock()
+    raise ValueError(
+        "moe_block_variant must be one of ['moe','dense_ffn','nonlinear','identity'], "
+        f"got {variant}"
+    )
 
 
 class NExpertMLP(nn.Module):
@@ -176,10 +245,18 @@ class NMoEStage(nn.Module):
             )
         self.router_use_hidden = bool(cfg.router_use_hidden)
         self.router_use_feature = bool(cfg.router_use_feature)
+        self.router_group_feature_mode = str(cfg.router_group_feature_mode or "none").lower().strip()
+        if self.router_group_feature_mode not in {"none", "mean", "mean_std"}:
+            raise ValueError(
+                "router_group_feature_mode must be one of ['none','mean','mean_std'], "
+                f"got {cfg.router_group_feature_mode}"
+            )
         self.expert_use_hidden = bool(cfg.expert_use_hidden)
         self.expert_use_feature = bool(cfg.expert_use_feature)
-        if not (self.router_use_hidden or self.router_use_feature):
-            raise ValueError("router_use_hidden and router_use_feature cannot both be false.")
+        if not (self.router_use_hidden or self.router_use_feature or self.router_group_feature_mode != "none"):
+            raise ValueError(
+                "router inputs cannot all be disabled. Enable hidden, feature, or group-feature mode."
+            )
         if not (self.expert_use_hidden or self.expert_use_feature):
             raise ValueError("expert_use_hidden and expert_use_feature cannot both be false.")
 
@@ -210,6 +287,7 @@ class NMoEStage(nn.Module):
         )
         self.stage_all_features = [stage_all_features[i] for i in range(len(stage_idx))]
         stage_col2local = {name: idx for idx, name in enumerate(self.stage_all_features)}
+        self._router_group_local_idx: list[torch.Tensor] = []
 
         self.base_names = list(cfg.expert_names)
         self.group_names = list(self.base_names)
@@ -229,6 +307,22 @@ class NMoEStage(nn.Module):
                 raw_idx = [int(self.stage_feat_idx[0].item())]
             expert_bank_indices.append(raw_idx)
             expert_bank_dims.append(len(raw_idx) * self.feature_bank_dim)
+
+        for group_idx, expert_feats in enumerate(cfg.expert_feature_lists):
+            local_idx = [
+                int(stage_col2local[name])
+                for name in expert_feats
+                if name in stage_col2local
+            ]
+            if not local_idx and len(self.stage_all_features) > 0:
+                local_idx = [0]
+            tensor_idx = torch.tensor(local_idx, dtype=torch.long)
+            self.register_buffer(
+                f"router_group_local_idx_{group_idx}",
+                tensor_idx,
+                persistent=False,
+            )
+            self._router_group_local_idx.append(tensor_idx)
 
         for expert_idx, raw_idx in enumerate(expert_bank_indices):
             self.register_buffer(
@@ -253,6 +347,10 @@ class NMoEStage(nn.Module):
             router_in_dim += int(cfg.d_model)
         if self.router_use_feature:
             router_in_dim += len(self.stage_all_features) * self.feature_bank_dim
+        if self.router_group_feature_mode == "mean":
+            router_in_dim += len(self._router_group_local_idx)
+        elif self.router_group_feature_mode == "mean_std":
+            router_in_dim += 2 * len(self._router_group_local_idx)
         self.learned_router = None
         if self.router_impl == "learned":
             self.learned_router = Router(
@@ -391,6 +489,22 @@ class NMoEStage(nn.Module):
         stage_bank = feat_bank.index_select(2, self.stage_feat_idx)
         return stage_bank.reshape(stage_bank.size(0), stage_bank.size(1), -1)
 
+    def _group_router_features(self, stage_raw_feat: torch.Tensor) -> Optional[torch.Tensor]:
+        if self.router_group_feature_mode == "none" or not self._router_group_local_idx:
+            return None
+
+        pieces = []
+        for idx in self._router_group_local_idx:
+            idx = idx.to(device=stage_raw_feat.device)
+            group_feat = stage_raw_feat.index_select(-1, idx)
+            mean_feat = group_feat.mean(dim=-1, keepdim=True)
+            if self.router_group_feature_mode == "mean":
+                pieces.append(mean_feat)
+                continue
+            std_feat = group_feat.std(dim=-1, keepdim=True, unbiased=False)
+            pieces.extend([mean_feat, std_feat])
+        return torch.cat(pieces, dim=-1) if pieces else None
+
     def _build_router_inputs(
         self,
         *,
@@ -404,6 +518,7 @@ class NMoEStage(nn.Module):
         stage_bank_flat = self._stage_bank_flat(feat_bank)
         stage_raw_feat, stage_bank_flat = self._apply_reliability(stage_raw_feat, stage_bank_flat, feat)
         stage_bank_flat = self.router_feat_drop(stage_bank_flat)
+        group_router_feat = self._group_router_features(stage_raw_feat)
 
         if self.router_mode == "session":
             pooled_parts = []
@@ -411,6 +526,8 @@ class NMoEStage(nn.Module):
                 pooled_parts.append(self._pool_sequence(h_norm, valid_mask, item_seq_len))
             if self.router_use_feature:
                 pooled_parts.append(self._pool_sequence(stage_bank_flat, valid_mask, item_seq_len))
+            if group_router_feat is not None:
+                pooled_parts.append(self._pool_sequence(group_router_feat, valid_mask, item_seq_len))
             router_input = pooled_parts[0] if len(pooled_parts) == 1 else torch.cat(pooled_parts, dim=-1)
             rule_features = self._pool_sequence(stage_raw_feat, valid_mask, item_seq_len)
             return router_input, rule_features
@@ -420,6 +537,8 @@ class NMoEStage(nn.Module):
             router_parts.append(h_norm)
         if self.router_use_feature:
             router_parts.append(stage_bank_flat)
+        if group_router_feat is not None:
+            router_parts.append(group_router_feat)
         router_input = router_parts[0] if len(router_parts) == 1 else torch.cat(router_parts, dim=-1)
         return router_input, stage_raw_feat
 
@@ -500,37 +619,47 @@ class StageBranchRunner(nn.Module):
         self.stage_name = cfg.stage_name
         self.pass_layers = int(cfg.pass_layers)
         self.moe_blocks = int(cfg.moe_blocks)
+        self.inter_layer_style = str(cfg.inter_layer_style).lower().strip()
+        self.moe_block_variant = str(cfg.moe_block_variant or "moe").lower().strip()
+        if self.moe_block_variant not in {"moe", "dense_ffn", "nonlinear", "identity"}:
+            raise ValueError(
+                "moe_block_variant must be one of ['moe','dense_ffn','nonlinear','identity'], "
+                f"got {cfg.moe_block_variant}"
+            )
+        self.pass_transformer = None
+        self.pass_blocks = nn.ModuleList()
 
         if self.pass_layers > 0:
-            self.pass_transformer = TransformerEncoder(
-                d_model=cfg.d_model,
-                n_heads=cfg.n_heads,
-                n_layers=self.pass_layers,
-                d_ff=cfg.d_ff,
-                dropout=cfg.dropout,
-                ffn_moe=False,
-            )
-        else:
-            self.pass_transformer = None
+            if self.inter_layer_style == "attn":
+                self.pass_transformer = TransformerEncoder(
+                    d_model=cfg.d_model,
+                    n_heads=cfg.n_heads,
+                    n_layers=self.pass_layers,
+                    d_ff=cfg.d_ff,
+                    dropout=cfg.dropout,
+                    ffn_moe=False,
+                )
+            else:
+                self.pass_blocks = nn.ModuleList(
+                    [_build_inter_block(self.inter_layer_style, cfg) for _ in range(self.pass_layers)]
+                )
 
         if self.moe_blocks > 0:
             self.moe_pre_blocks = nn.ModuleList(
-                [
-                    TransformerEncoder(
-                        d_model=cfg.d_model,
-                        n_heads=cfg.n_heads,
-                        n_layers=1,
-                        d_ff=cfg.d_ff,
-                        dropout=cfg.dropout,
-                        ffn_moe=False,
-                    )
-                    for _ in range(self.moe_blocks)
-                ]
+                [_build_inter_block(self.inter_layer_style, cfg) for _ in range(self.moe_blocks)]
             )
-            self.stage_module = NMoEStage(cfg)
+            if self.moe_block_variant == "moe":
+                self.stage_module = NMoEStage(cfg)
+                self.moe_replacement_blocks = nn.ModuleList()
+            else:
+                self.stage_module = None
+                self.moe_replacement_blocks = nn.ModuleList(
+                    [_build_moe_replacement_block(self.moe_block_variant, cfg) for _ in range(self.moe_blocks)]
+                )
         else:
             self.moe_pre_blocks = nn.ModuleList()
             self.stage_module = None
+            self.moe_replacement_blocks = nn.ModuleList()
 
     @property
     def n_experts(self) -> int:
@@ -561,7 +690,13 @@ class StageBranchRunner(nn.Module):
 
     def _run_pass_layers(self, hidden: torch.Tensor, item_seq: torch.Tensor) -> torch.Tensor:
         if self.pass_transformer is None:
-            return hidden
+            out = hidden
+            for block in self.pass_blocks:
+                if isinstance(block, TransformerEncoder):
+                    out, _ = block(out, item_seq)
+                else:
+                    out = block(out, item_seq)
+            return out
         out, _ = self.pass_transformer(hidden, item_seq)
         return out
 
@@ -584,17 +719,23 @@ class StageBranchRunner(nn.Module):
         weights: Dict[str, torch.Tensor] = {}
         logits: Dict[str, torch.Tensor] = {}
         router_aux: Dict[str, Dict[str, torch.Tensor]] = {}
-        if self.stage_module is None:
+        if self.stage_module is None and len(self.moe_replacement_blocks) == 0:
             return out, weights, logits, router_aux
 
         for idx, pre_block in enumerate(self.moe_pre_blocks, start=1):
-            out, _ = pre_block(out, item_seq)
-            out, _delta, w, l, aux = self.stage_module(out, feat, feat_bank, item_seq_len=item_seq_len)
-            key = f"{self.stage_name}@{idx}"
-            weights[key] = w
-            logits[key] = l
-            for aux_key, aux_tensor in aux.items():
-                router_aux.setdefault(aux_key, {})[key] = aux_tensor
+            if isinstance(pre_block, TransformerEncoder):
+                out, _ = pre_block(out, item_seq)
+            else:
+                out = pre_block(out, item_seq)
+            if self.stage_module is not None:
+                out, _delta, w, l, aux = self.stage_module(out, feat, feat_bank, item_seq_len=item_seq_len)
+                key = f"{self.stage_name}@{idx}"
+                weights[key] = w
+                logits[key] = l
+                for aux_key, aux_tensor in aux.items():
+                    router_aux.setdefault(aux_key, {})[key] = aux_tensor
+            else:
+                out = self.moe_replacement_blocks[idx - 1](out, item_seq)
         return out, weights, logits, router_aux
 
     def forward_parallel(
@@ -617,16 +758,22 @@ class StageBranchRunner(nn.Module):
         weights: Dict[str, torch.Tensor] = {}
         logits: Dict[str, torch.Tensor] = {}
         router_aux: Dict[str, Dict[str, torch.Tensor]] = {}
-        if self.stage_module is None:
+        if self.stage_module is None and len(self.moe_replacement_blocks) == 0:
             return out, (out - base_hidden), weights, logits, router_aux
 
         for idx, pre_block in enumerate(self.moe_pre_blocks, start=1):
-            out, _ = pre_block(out, item_seq)
-            out, _delta, w, l, aux = self.stage_module(out, feat, feat_bank, item_seq_len=item_seq_len)
-            key = f"{self.stage_name}@{idx}"
-            weights[key] = w
-            logits[key] = l
-            for aux_key, aux_tensor in aux.items():
-                router_aux.setdefault(aux_key, {})[key] = aux_tensor
+            if isinstance(pre_block, TransformerEncoder):
+                out, _ = pre_block(out, item_seq)
+            else:
+                out = pre_block(out, item_seq)
+            if self.stage_module is not None:
+                out, _delta, w, l, aux = self.stage_module(out, feat, feat_bank, item_seq_len=item_seq_len)
+                key = f"{self.stage_name}@{idx}"
+                weights[key] = w
+                logits[key] = l
+                for aux_key, aux_tensor in aux.items():
+                    router_aux.setdefault(aux_key, {})[key] = aux_tensor
+            else:
+                out = self.moe_replacement_blocks[idx - 1](out, item_seq)
 
         return out, (out - base_hidden), weights, logits, router_aux

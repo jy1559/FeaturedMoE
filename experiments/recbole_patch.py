@@ -31,6 +31,17 @@ import recbole.utils.utils as recbole_utils
 import recbole.quick_start.quick_start as quick_start_module
 
 
+def _config_get(config_obj, key, default=None):
+    if config_obj is None:
+        return default
+    if isinstance(config_obj, dict):
+        return config_obj.get(key, default)
+    try:
+        return config_obj[key]
+    except Exception:
+        return getattr(config_obj, key, default)
+
+
 # ============ Patch: get_model to support custom models ============
 _original_get_model = recbole_utils.get_model
 
@@ -699,7 +710,7 @@ def _patched_valid_epoch(self, valid_data, show_progress=False):
             if not hasattr(self, '_patched_valid_step'):
                 self._patched_valid_step = 0
             # Determine improvement based on valid_metric
-            valid_metric = str(self.config.get('valid_metric', 'NDCG@10')).lower()
+            valid_metric = str(_config_get(self.config, 'valid_metric', 'NDCG@10')).lower()
             current = result.get(valid_metric, None)
 
             # Initialize store
@@ -778,10 +789,13 @@ def _build_special_metric_item_counts(data_loader):
 
 
 def begin_special_eval(trainer, data_loader, *, split_name: str):
-    model_name = str(trainer.config.get("model", "")).lower()
-    if not (model_name.startswith("featured_moe") or model_name.startswith("featuredmoe")):
-        return
-    if not bool(trainer.config.get("fmoe_special_logging", True)):
+    model_name = str(_config_get(trainer.config, "model", "")).lower()
+    generic_enabled = bool(_config_get(trainer.config, "special_logging", False))
+    fmoe_enabled = (
+        (model_name.startswith("featured_moe") or model_name.startswith("featuredmoe"))
+        and bool(_config_get(trainer.config, "fmoe_special_logging", True))
+    )
+    if not (generic_enabled or fmoe_enabled):
         return
 
     from models.FeaturedMoE.special_metrics import (
@@ -799,15 +813,35 @@ def begin_special_eval(trainer, data_loader, *, split_name: str):
 
     item_seq_len_field = getattr(getattr(trainer, "model", None), "ITEM_SEQ_LEN", None)
     if item_seq_len_field is None:
-        item_seq_len_field = trainer.config.get("ITEM_LIST_LENGTH_FIELD", "item_length")
+        item_seq_len_field = _config_get(trainer.config, "ITEM_LIST_LENGTH_FIELD", "item_length")
     new_user_field = default_new_user_field()
+    new_user_base_field = new_user_field[:-5] if new_user_field.endswith("_list") else new_user_field
+    new_user_available = False
+    dataset_fields = set()
+    dataset = getattr(data_loader, "dataset", None)
+    inter_feat = getattr(dataset, "inter_feat", None)
+    try:
+        if inter_feat is not None:
+            dataset_fields.update(getattr(inter_feat, "columns", []))
+    except Exception:
+        pass
+    try:
+        field2type = getattr(dataset, "field2type", None)
+        if isinstance(field2type, dict):
+            dataset_fields.update(field2type.keys())
+    except Exception:
+        pass
+    if new_user_field in dataset_fields or new_user_base_field in dataset_fields:
+        new_user_available = True
+    if not new_user_available:
+        new_user_field = None
     snapshot = build_special_metric_config_snapshot(
         feature_available=True,
-        new_user_available=True,
+        new_user_available=new_user_available,
     )
     snapshot["split"] = str(split_name)
     snapshot["item_seq_len_field"] = str(item_seq_len_field)
-    snapshot["new_user_field"] = str(new_user_field)
+    snapshot["new_user_field"] = str(new_user_field or "")
 
     trainer._fmoe_special_metric_collector = SpecialMetricCollector(
         split_name=split_name,

@@ -11,6 +11,7 @@ MODEL=""
 GPU_ID="0"
 CONFIG_NAME=""
 LOG_WANDB="false"
+SPECIAL_LOGGING="false"
 EPOCHS=""
 PATIENCE=""
 SEED="42"
@@ -19,7 +20,7 @@ DRY_RUN="${DRY_RUN:-false}"
 
 usage() {
   cat <<USAGE
-Usage: $0 --dataset <ds> --model <model> [--gpu <id>] [--config-name <cfg>] [--epochs N] [--patience N]
+Usage: $0 --dataset <ds> --model <model> [--gpu <id>] [--config-name <cfg>] [--epochs N] [--patience N] [--special-logging]
 USAGE
 }
 
@@ -47,6 +48,7 @@ while [ "$#" -gt 0 ]; do
     --patience) PATIENCE="$2"; shift 2 ;;
     --seed) SEED="$2"; shift 2 ;;
     --log-wandb) LOG_WANDB="true"; shift ;;
+    --special-logging) SPECIAL_LOGGING="true"; shift ;;
     --phase) PHASE="$2"; shift 2 ;;
     --dry-run) DRY_RUN="true"; shift ;;
     --help|-h) usage; exit 0 ;;
@@ -80,6 +82,9 @@ if [ -n "$EPOCHS" ]; then
 fi
 if [ -n "$PATIENCE" ]; then
   cmd+=("stopping_step=${PATIENCE}")
+fi
+if [ "$SPECIAL_LOGGING" = "true" ]; then
+  cmd+=("++special_logging=true")
 fi
 
 run_echo_cmd "${cmd[@]}"

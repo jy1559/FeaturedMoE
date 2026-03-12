@@ -187,16 +187,31 @@ class FeaturedMoE_N(SequentialRecommender):
         self.stage_merge_aux_enable = bool(resolver.get("fmoe_v2_stage_merge_aux_enable", False))
         self.stage_merge_aux_lambda_scale = float(resolver.get("fmoe_v2_stage_merge_aux_lambda_scale", 1.0))
         self.z_loss_lambda = float(resolver.get("z_loss_lambda", 0.0))
-        if self.z_loss_lambda > 0:
-            logger.info(
-                "FeaturedMoE_N currently documents z-loss only; z_loss_lambda=%.6f is ignored.",
-                self.z_loss_lambda,
-            )
+        self.gate_entropy_lambda = float(resolver.get("gate_entropy_lambda", 0.0))
+        self.gate_entropy_until = float(resolver.get("gate_entropy_until", 0.0))
 
         self.ffn_moe = bool(resolver.get("ffn_moe", False))
         self.n_ffn_experts = int(resolver.get("n_ffn_experts", 4))
         raw_ffn_top_k = int(resolver.get("ffn_top_k", 0))
         self.ffn_top_k = None if raw_ffn_top_k <= 0 else raw_ffn_top_k
+        self.stage_inter_layer_style = str(resolver.get("stage_inter_layer_style", "attn")).lower().strip()
+        if self.stage_inter_layer_style not in {"attn", "identity", "nonlinear", "ffn"}:
+            raise ValueError(
+                "stage_inter_layer_style must be one of ['attn','identity','nonlinear','ffn'], "
+                f"got {self.stage_inter_layer_style}"
+            )
+        self.moe_block_variant = str(resolver.get("moe_block_variant", "moe")).lower().strip()
+        if self.moe_block_variant not in {"moe", "dense_ffn", "nonlinear", "identity"}:
+            raise ValueError(
+                "moe_block_variant must be one of ['moe','dense_ffn','nonlinear','identity'], "
+                f"got {self.moe_block_variant}"
+            )
+        self.router_group_feature_mode = str(resolver.get("router_group_feature_mode", "none")).lower().strip()
+        if self.router_group_feature_mode not in {"none", "mean", "mean_std"}:
+            raise ValueError(
+                "router_group_feature_mode must be one of ['none','mean','mean_std'], "
+                f"got {self.router_group_feature_mode}"
+            )
 
         self.fmoe_debug_logging = bool(resolver.get("fmoe_debug_logging", False))
         self.fmoe_special_logging = bool(resolver.get("fmoe_special_logging", True))
@@ -297,6 +312,9 @@ class FeaturedMoE_N(SequentialRecommender):
             use_valid_ratio_gating=self.use_valid_ratio_gating,
             parallel_stage_gate_top_k=self.parallel_stage_gate_top_k,
             parallel_stage_gate_temperature=self.parallel_stage_gate_temperature,
+            inter_layer_style=self.stage_inter_layer_style,
+            router_group_feature_mode=self.router_group_feature_mode,
+            moe_block_variant=self.moe_block_variant,
         )
 
         self._stage_n_experts = self.stage_executor.stage_n_experts()
@@ -352,6 +370,12 @@ class FeaturedMoE_N(SequentialRecommender):
             config["feature_encoder_sinusoidal_features"] = list(self.feature_encoder_sinusoidal_features)
             config["feature_encoder_sinusoidal_n_freqs"] = int(self.feature_encoder_sinusoidal_n_freqs)
             config["fmoe_special_logging"] = bool(self.fmoe_special_logging)
+            config["stage_inter_layer_style"] = str(self.stage_inter_layer_style)
+            config["moe_block_variant"] = str(self.moe_block_variant)
+            config["router_group_feature_mode"] = str(self.router_group_feature_mode)
+            config["z_loss_lambda"] = float(self.z_loss_lambda)
+            config["gate_entropy_lambda"] = float(self.gate_entropy_lambda)
+            config["gate_entropy_until"] = float(self.gate_entropy_until)
             config["expert_hidden_by_stage"] = dict(expert_hidden_by_stage)
             config["expert_depth_by_stage"] = dict(expert_depth_by_stage)
         except Exception:
@@ -363,7 +387,9 @@ class FeaturedMoE_N(SequentialRecommender):
         logger.info(
             "FeaturedMoE_N init: layout_id=%s execution=%s boundaries=%s total_moe_blocks=%s "
             "router_impl=%s router_impl_by_stage=%s rule_bias_scale=%.4f feature_encoder_mode=%s "
-            "feature_bank_dim=%s expert_scale=%s top_k=%s balance_lambda=%.6f special_logging=%s",
+            "feature_bank_dim=%s expert_scale=%s top_k=%s balance_lambda=%.6f "
+            "z_loss_lambda=%.6f gate_entropy_lambda=%.6f gate_entropy_until=%.4f "
+            "inter_layer_style=%s moe_block_variant=%s router_group_feature_mode=%s special_logging=%s",
             self.layout_id,
             self.layout.execution,
             stage_boundary_summary(self.layout),
@@ -376,6 +402,12 @@ class FeaturedMoE_N(SequentialRecommender):
             self.expert_scale,
             self.moe_top_k,
             self.balance_loss_lambda,
+            self.z_loss_lambda,
+            self.gate_entropy_lambda,
+            self.gate_entropy_until,
+            self.stage_inter_layer_style,
+            self.moe_block_variant,
+            self.router_group_feature_mode,
             self.fmoe_special_logging,
         )
 
@@ -403,6 +435,44 @@ class FeaturedMoE_N(SequentialRecommender):
                 feat_list.append(torch.zeros(batch_size, seq_len, device=item_seq.device))
                 logger.warning("Feature field '%s' not found - using zeros.", field)
         return torch.stack(feat_list, dim=-1)
+
+    @staticmethod
+    def _sequence_valid_mask(item_seq_len: torch.Tensor, seq_len: int, device: torch.device) -> torch.Tensor:
+        lens = item_seq_len.to(device=device).long().clamp(min=1, max=seq_len)
+        arange = torch.arange(seq_len, device=device).unsqueeze(0)
+        return arange < lens.unsqueeze(1)
+
+    def _aux_until_active(self, until: float) -> float:
+        limit = float(until or 0.0)
+        if limit <= 0:
+            return 0.0
+        epoch_num = float(self._schedule_epoch + 1)
+        if limit <= 1.0:
+            cutoff = max(int(round(limit * max(self._schedule_total_epochs, 1))), 1)
+            return 1.0 if epoch_num <= cutoff else 0.0
+        return 1.0 if epoch_num <= limit else 0.0
+
+    def _compute_router_z_loss(self, gate_logits: Dict[str, torch.Tensor], item_seq_len: torch.Tensor) -> torch.Tensor:
+        if not gate_logits:
+            return self.item_embedding.weight.new_tensor(0.0)
+        losses = []
+        for logits in gate_logits.values():
+            mask = self._sequence_valid_mask(item_seq_len, logits.size(1), logits.device).float()
+            z = torch.logsumexp(logits, dim=-1).pow(2)
+            denom = mask.sum().clamp(min=1.0)
+            losses.append((z * mask).sum() / denom)
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
+    def _compute_gate_entropy_reg(self, gate_weights: Dict[str, torch.Tensor], item_seq_len: torch.Tensor) -> torch.Tensor:
+        if not gate_weights:
+            return self.item_embedding.weight.new_tensor(0.0)
+        entropies = []
+        for weights in gate_weights.values():
+            mask = self._sequence_valid_mask(item_seq_len, weights.size(1), weights.device).float()
+            entropy = -(weights.clamp(min=1e-8) * weights.clamp(min=1e-8).log()).sum(dim=-1)
+            denom = mask.sum().clamp(min=1.0)
+            entropies.append((entropy * mask).sum() / denom)
+        return torch.stack(entropies).mean() if entropies else self.item_embedding.weight.new_tensor(0.0)
 
     def _reset_router_epoch_stats(self) -> None:
         self._router_group_entropy_sum = defaultdict(float)
@@ -518,6 +588,17 @@ class FeaturedMoE_N(SequentialRecommender):
                         stage_weights,
                         self.n_ffn_experts,
                     )
+        if self.z_loss_lambda > 0:
+            aux_loss = aux_loss + self.z_loss_lambda * self._compute_router_z_loss(
+                aux_data.get("gate_logits", {}),
+                item_seq_len,
+            )
+        entropy_scale = self._aux_until_active(self.gate_entropy_until)
+        if self.gate_entropy_lambda > 0 and entropy_scale > 0:
+            aux_loss = aux_loss - (self.gate_entropy_lambda * entropy_scale) * self._compute_gate_entropy_reg(
+                aux_data.get("gate_weights", {}),
+                item_seq_len,
+            )
 
         if self.fmoe_debug_logging and self.training and aux_data.get("gate_weights"):
             self.moe_logger.accumulate(

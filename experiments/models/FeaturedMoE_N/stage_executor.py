@@ -55,6 +55,9 @@ class StageExecutorN(nn.Module):
         use_valid_ratio_gating: bool,
         parallel_stage_gate_top_k: Optional[int],
         parallel_stage_gate_temperature: float,
+        inter_layer_style: str,
+        router_group_feature_mode: str,
+        moe_block_variant: str,
     ):
         super().__init__()
         self.execution = layout.execution
@@ -103,6 +106,9 @@ class StageExecutorN(nn.Module):
                 router_impl=stage_router_impl,
                 rule_router_cfg=self.rule_router_cfg,
                 rule_bias_scale=self.rule_bias_scale,
+                inter_layer_style=str(inter_layer_style),
+                router_group_feature_mode=str(router_group_feature_mode),
+                moe_block_variant=str(moe_block_variant),
             )
             self.branches[stage_name] = StageBranchRunner(cfg)
 

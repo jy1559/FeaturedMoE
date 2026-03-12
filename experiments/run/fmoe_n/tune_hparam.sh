@@ -10,6 +10,7 @@ DATASET=""
 GPU_ID="0"
 SEED="42"
 PHASE="P0"
+RUN_AXIS="hparam"
 MAX_EVALS="8"
 TUNE_EPOCHS="18"
 TUNE_PATIENCE="3"
@@ -46,10 +47,16 @@ DROPOUT_SPACE_OVERRIDE=""
 BALANCE_SPACE_OVERRIDE=""
 
 ROUTER_FAMILY="plain"
+ROUTER_IMPL="learned"
 ROUTER_IMPL_BY_STAGE=""
 RULE_BIAS_SCALE=""
 FEATURE_ENCODER_MODE="linear"
 FEATURE_ENCODER_SIN_N_FREQS="4"
+MOE_BLOCK_VARIANT="moe"
+ROUTER_GROUP_FEATURE_MODE="none"
+Z_LOSS_LAMBDA="0.0"
+GATE_ENTROPY_LAMBDA="0.0"
+GATE_ENTROPY_UNTIL="0.0"
 MOE_TOP_K="0"
 MOE_TOP_K_POLICY="auto"
 MOE_TOP_K_RATIO="0.5"
@@ -61,6 +68,9 @@ RULE_FEATURE_PER_EXPERT="4"
 MID_ROUTER_TEMPERATURE="1.2"
 MICRO_ROUTER_TEMPERATURE="1.2"
 FMOE_SCHEDULE_ENABLE="false"
+STAGE_INTER_LAYER_STYLE="attn"
+STATE_TAG=""
+COMBO_DESC=""
 
 EXP_NAME=""
 EXP_DESC=""
@@ -70,11 +80,17 @@ EXTRA_OVERRIDES=()
 usage() {
   cat <<USAGE
 Usage: $0 --dataset <dataset> [--gpu N] [--seed N] [--phase P0_Q01]
+          [--run-axis hparam|arch_s01_base] [--state-tag S01_base]
           [--layout-id N] [--execution serial|parallel]
           [--max-evals N] [--tune-epochs N] [--tune-patience N]
-          [--router-family plain|hybrid|bias]
+          [--router-family plain|hybrid|bias|rule]
+          [--router-impl learned|rule_soft]
+          [--stage-inter-layer-style attn|identity|nonlinear|ffn]
+          [--moe-block-variant moe|dense_ffn|nonlinear|identity]
+          [--router-group-feature-mode none|mean|mean_std]
           [--feature-encoder-mode linear|sinusoidal_selected]
           [--expert-scale N] [--moe-top-k N] [--moe-top-k-policy auto|fixed]
+          [--z-loss-lambda X] [--gate-entropy-lambda X] [--gate-entropy-until X]
           [--lr-space lo,hi] [--wd-space csv] [--dropout-space csv] [--balance-space csv]
           [--parent-result path] [--override hydra.key=value]
 USAGE
@@ -155,6 +171,8 @@ while [ "$#" -gt 0 ]; do
     --gpu|--gpu-id) GPU_ID="$2"; shift 2 ;;
     --seed) SEED="$2"; shift 2 ;;
     --phase) PHASE="$2"; shift 2 ;;
+    --run-axis) RUN_AXIS="$2"; shift 2 ;;
+    --state-tag) STATE_TAG="$2"; shift 2 ;;
     --max-evals) MAX_EVALS="$2"; shift 2 ;;
     --tune-epochs) TUNE_EPOCHS="$2"; shift 2 ;;
     --tune-patience) TUNE_PATIENCE="$2"; shift 2 ;;
@@ -162,10 +180,13 @@ while [ "$#" -gt 0 ]; do
     --execution) EXECUTION="$2"; shift 2 ;;
     --parent-result|--parent_result) PARENT_RESULT="$2"; shift 2 ;;
     --router-family) ROUTER_FAMILY="$2"; shift 2 ;;
+    --router-impl) ROUTER_IMPL="$2"; shift 2 ;;
     --router-impl-by-stage) ROUTER_IMPL_BY_STAGE="$2"; shift 2 ;;
     --rule-bias-scale) RULE_BIAS_SCALE="$2"; shift 2 ;;
     --feature-encoder-mode) FEATURE_ENCODER_MODE="$2"; shift 2 ;;
     --feature-encoder-sinusoidal-n-freqs) FEATURE_ENCODER_SIN_N_FREQS="$2"; shift 2 ;;
+    --moe-block-variant) MOE_BLOCK_VARIANT="$2"; shift 2 ;;
+    --router-group-feature-mode) ROUTER_GROUP_FEATURE_MODE="$2"; shift 2 ;;
     --train-batch-size) TRAIN_BATCH_SIZE="$2"; shift 2 ;;
     --eval-batch-size) EVAL_BATCH_SIZE="$2"; shift 2 ;;
     --embedding-size) EMBEDDING_SIZE="$2"; shift 2 ;;
@@ -178,6 +199,9 @@ while [ "$#" -gt 0 ]; do
     --weight-decay) WEIGHT_DECAY="$2"; HAS_WD_OVERRIDE="true"; shift 2 ;;
     --hidden-dropout) HIDDEN_DROPOUT="$2"; HAS_DROPOUT_OVERRIDE="true"; shift 2 ;;
     --balance-loss-lambda) BALANCE_LOSS_LAMBDA="$2"; HAS_BALANCE_OVERRIDE="true"; shift 2 ;;
+    --z-loss-lambda) Z_LOSS_LAMBDA="$2"; shift 2 ;;
+    --gate-entropy-lambda) GATE_ENTROPY_LAMBDA="$2"; shift 2 ;;
+    --gate-entropy-until) GATE_ENTROPY_UNTIL="$2"; shift 2 ;;
     --lr-space) LR_SPACE_OVERRIDE="$2"; shift 2 ;;
     --wd-space) WD_SPACE_OVERRIDE="$2"; shift 2 ;;
     --dropout-space) DROPOUT_SPACE_OVERRIDE="$2"; shift 2 ;;
@@ -191,8 +215,10 @@ while [ "$#" -gt 0 ]; do
     --mid-router-temperature) MID_ROUTER_TEMPERATURE="$2"; shift 2 ;;
     --micro-router-temperature) MICRO_ROUTER_TEMPERATURE="$2"; shift 2 ;;
     --fmoe-schedule-enable) FMOE_SCHEDULE_ENABLE="$2"; shift 2 ;;
+    --stage-inter-layer-style) STAGE_INTER_LAYER_STYLE="$2"; shift 2 ;;
     --result-path-file) RESULT_PATH_FILE="$2"; shift 2 ;;
     --log-path-file) LOG_PATH_FILE="$2"; shift 2 ;;
+    --combo-desc) COMBO_DESC="$2"; shift 2 ;;
     --override)
       EXTRA_OVERRIDES+=("$2")
       shift 2
@@ -215,12 +241,45 @@ case "${EXECUTION,,}" in
   *) echo "--execution must be serial|parallel" >&2; exit 1 ;;
 esac
 EXECUTION="${EXECUTION,,}"
+RUN_AXIS="$(run_sanitize "${RUN_AXIS}")"
+[ -n "$RUN_AXIS" ] || RUN_AXIS="hparam"
+RUN_AXIS="$(printf '%s' "$RUN_AXIS" | tr '[:upper:]' '[:lower:]')"
+
+if [ -n "$STATE_TAG" ]; then
+  STATE_TAG="$(run_sanitize "${STATE_TAG}")"
+  [ -n "$STATE_TAG" ] || { echo "--state-tag must not sanitize to empty" >&2; exit 1; }
+  RUN_AXIS="$(printf '%s' "$STATE_TAG" | tr '[:upper:]' '[:lower:]')"
+fi
 
 case "${ROUTER_FAMILY,,}" in
-  plain|hybrid|bias) ;;
-  *) echo "--router-family must be plain|hybrid|bias" >&2; exit 1 ;;
+  plain|hybrid|bias|rule) ;;
+  *) echo "--router-family must be plain|hybrid|bias|rule" >&2; exit 1 ;;
 esac
 ROUTER_FAMILY="${ROUTER_FAMILY,,}"
+
+case "${ROUTER_IMPL,,}" in
+  learned|rule_soft) ;;
+  *) echo "--router-impl must be learned|rule_soft" >&2; exit 1 ;;
+esac
+ROUTER_IMPL="${ROUTER_IMPL,,}"
+
+case "${STAGE_INTER_LAYER_STYLE,,}" in
+  attn|identity|nonlinear|ffn) ;;
+  *) echo "--stage-inter-layer-style must be attn|identity|nonlinear|ffn" >&2; exit 1 ;;
+esac
+STAGE_INTER_LAYER_STYLE="${STAGE_INTER_LAYER_STYLE,,}"
+
+case "${MOE_BLOCK_VARIANT,,}" in
+  moe|dense_ffn|nonlinear|identity) ;;
+  *) echo "--moe-block-variant must be moe|dense_ffn|nonlinear|identity" >&2; exit 1 ;;
+esac
+MOE_BLOCK_VARIANT="${MOE_BLOCK_VARIANT,,}"
+
+case "${ROUTER_GROUP_FEATURE_MODE,,}" in
+  none|mean|mean_std) ;;
+  *) echo "--router-group-feature-mode must be none|mean|mean_std" >&2; exit 1 ;;
+esac
+ROUTER_GROUP_FEATURE_MODE="${ROUTER_GROUP_FEATURE_MODE,,}"
 
 load_defaults
 
@@ -282,19 +341,30 @@ BALANCE_LOSS_LAMBDA="${BALANCE_LOSS_LAMBDA:-$DEF_BAL}"
 
 case "$ROUTER_FAMILY" in
   plain)
+    FAMILY_ROUTER_KIND="learned"
     FAMILY_ROUTER_IMPL="{}"
     FAMILY_RULE_BIAS="0.0"
     ;;
   hybrid)
+    FAMILY_ROUTER_KIND="learned"
     FAMILY_ROUTER_IMPL="{mid:rule_soft,micro:rule_soft}"
     FAMILY_RULE_BIAS="0.0"
     ;;
   bias)
+    FAMILY_ROUTER_KIND="learned"
     FAMILY_ROUTER_IMPL="{}"
     FAMILY_RULE_BIAS="0.15"
     ;;
+  rule)
+    FAMILY_ROUTER_KIND="rule_soft"
+    FAMILY_ROUTER_IMPL="{}"
+    FAMILY_RULE_BIAS="0.0"
+    ;;
 esac
 
+if [ "$ROUTER_IMPL" = "learned" ] && [ "$ROUTER_FAMILY" = "rule" ]; then
+  ROUTER_IMPL="$FAMILY_ROUTER_KIND"
+fi
 ROUTER_IMPL_BY_STAGE="${ROUTER_IMPL_BY_STAGE:-$FAMILY_ROUTER_IMPL}"
 RULE_BIAS_SCALE="${RULE_BIAS_SCALE:-$FAMILY_RULE_BIAS}"
 
@@ -320,21 +390,43 @@ else
 fi
 
 if [ -z "$EXP_NAME" ]; then
-  EXP_NAME="fmoe_n_${PHASE%%_*}_hparam"
+  if [ -n "$STATE_TAG" ]; then
+    EXP_NAME="fmoe_n_${STATE_TAG}_${PHASE%%_*}"
+  else
+    EXP_NAME="fmoe_n_${PHASE%%_*}_${RUN_AXIS}"
+  fi
 fi
 if [ -z "$EXP_DESC" ]; then
-  EXP_DESC="FeaturedMoE_N hyperopt run with fixed combo and LR-first search."
+  if [ -n "$STATE_TAG" ]; then
+    EXP_DESC="FeaturedMoE_N state=${STATE_TAG} hyperopt run with fixed combo and LR-first search."
+  else
+    EXP_DESC="FeaturedMoE_N hyperopt run with fixed combo and LR-first search."
+  fi
 fi
 if [ -z "$EXP_FOCUS" ]; then
-  EXP_FOCUS="fmoe_v2_layout_id,fmoe_stage_execution_mode,router_family,feature_encoder_mode,expert_scale,moe_top_k,learning_rate,weight_decay,balance_loss_lambda"
+  EXP_FOCUS="fmoe_v2_layout_id,fmoe_stage_execution_mode,router_family,router_impl,stage_inter_layer_style,moe_block_variant,router_group_feature_mode,feature_encoder_mode,expert_scale,moe_top_k,learning_rate,weight_decay,balance_loss_lambda,z_loss_lambda,gate_entropy_lambda"
 fi
 
 EXP_DIR="$(run_experiments_dir)"
 cd "$EXP_DIR"
 run_export_runtime_env
 PY_BIN="$(run_python_bin)"
+PHASE_BUCKET="${PHASE%%_*}"
+[ -n "$PHASE_BUCKET" ] || PHASE_BUCKET="$PHASE"
+SUMMARY_SCRIPT="${SCRIPT_DIR}/update_phase_summary.py"
 
-LOG_FILE_PATH="$(run_make_log_path fmoe_n hparam "$DATASET" "FeaturedMoE_N_${EXECUTION}_${ROUTER_FAMILY}" "$GPU_ID" "$PHASE")"
+MODEL_TRACK_NAME="FeaturedMoE_N_${EXECUTION}_${ROUTER_FAMILY}"
+if [ -n "$STATE_TAG" ]; then
+  MODEL_TRACK_NAME="${MODEL_TRACK_NAME}_${STATE_TAG}"
+fi
+
+AXIS_DIR_NAME="$(run_sanitize "${RUN_AXIS}")"
+PHASE_DIR_NAME="$(run_sanitize "${PHASE_BUCKET}")"
+DATASET_DIR_NAME="$(run_sanitize "${DATASET}")"
+MODEL_DIR_NAME="$(run_model_tag "${MODEL_TRACK_NAME}")"
+LOG_DIR_PATH="$(run_log_dir fmoe_n)/${AXIS_DIR_NAME}/${PHASE_DIR_NAME}/${DATASET_DIR_NAME}/${MODEL_DIR_NAME}"
+run_ensure_dir "$LOG_DIR_PATH"
+LOG_FILE_PATH="${LOG_DIR_PATH}/$(run_timestamp)_$(run_sanitize "${RUN_AXIS}")_$(run_sanitize "${PHASE}").log"
 write_optional_path_file "$LOG_PATH_FILE" "$LOG_FILE_PATH"
 
 cmd=(
@@ -345,7 +437,7 @@ cmd=(
   --tune-patience "$TUNE_PATIENCE"
   --seed "$SEED"
   --run-group fmoe_n
-  --run-axis hparam
+  --run-axis "$RUN_AXIS"
   --run-phase "$PHASE"
   "model=featured_moe_n_tune"
   "dataset=${DATASET}"
@@ -379,8 +471,8 @@ cmd=(
   "++search.fmoe_stage_execution_mode=[${EXECUTION}]"
   "router_design=simple_flat"
   "++search.router_design=[simple_flat]"
-  "router_impl=learned"
-  "++search.router_impl=[learned]"
+  "router_impl=${ROUTER_IMPL}"
+  "++search.router_impl=[${ROUTER_IMPL}]"
   "router_use_hidden=true"
   "++search.router_use_hidden=[true]"
   "router_use_feature=true"
@@ -399,6 +491,10 @@ cmd=(
   "++search.feature_encoder_mode=[${FEATURE_ENCODER_MODE}]"
   "feature_encoder_sinusoidal_n_freqs=${FEATURE_ENCODER_SIN_N_FREQS}"
   "++search.feature_encoder_sinusoidal_n_freqs=[${FEATURE_ENCODER_SIN_N_FREQS}]"
+  "moe_block_variant=${MOE_BLOCK_VARIANT}"
+  "++search.moe_block_variant=[${MOE_BLOCK_VARIANT}]"
+  "router_group_feature_mode=${ROUTER_GROUP_FEATURE_MODE}"
+  "++search.router_group_feature_mode=[${ROUTER_GROUP_FEATURE_MODE}]"
   "rule_bias_scale=${RULE_BIAS_SCALE}"
   "++search.rule_bias_scale=[${RULE_BIAS_SCALE}]"
   "rule_router.variant=${RULE_VARIANT}"
@@ -419,6 +515,12 @@ cmd=(
   "+weight_decay=${WEIGHT_DECAY}"
   "hidden_dropout_prob=${HIDDEN_DROPOUT}"
   "balance_loss_lambda=${BALANCE_LOSS_LAMBDA}"
+  "z_loss_lambda=${Z_LOSS_LAMBDA}"
+  "++search.z_loss_lambda=[${Z_LOSS_LAMBDA}]"
+  "gate_entropy_lambda=${GATE_ENTROPY_LAMBDA}"
+  "++search.gate_entropy_lambda=[${GATE_ENTROPY_LAMBDA}]"
+  "gate_entropy_until=${GATE_ENTROPY_UNTIL}"
+  "++search.gate_entropy_until=[${GATE_ENTROPY_UNTIL}]"
   "++search.learning_rate=${LR_SPACE}"
   "++search.weight_decay=${WD_SPACE}"
   "++search.hidden_dropout_prob=${DROPOUT_SPACE}"
@@ -432,6 +534,8 @@ cmd=(
   "++search.moe_top_k_ratio=[${MOE_TOP_K_RATIO}]"
   "fmoe_schedule_enable=${FMOE_SCHEDULE_ENABLE}"
   "++search.fmoe_schedule_enable=[${FMOE_SCHEDULE_ENABLE}]"
+  "stage_inter_layer_style=${STAGE_INTER_LAYER_STYLE}"
+  "++search.stage_inter_layer_style=[${STAGE_INTER_LAYER_STYLE}]"
   "alpha_warmup_until=0"
   "++search.alpha_warmup_until=[0]"
   "alpha_warmup_start=0.0"
@@ -452,6 +556,13 @@ cmd=(
   "++search.fmoe_special_logging=[true]"
 )
 
+if [ -n "$STATE_TAG" ]; then
+  cmd+=("++arch_state_tag=${STATE_TAG}")
+fi
+if [ -n "$COMBO_DESC" ]; then
+  cmd+=("++combo_desc=${COMBO_DESC}")
+fi
+
 [ -n "$PARENT_RESULT" ] && cmd+=(--parent-result "$PARENT_RESULT")
 if [ "${#EXTRA_OVERRIDES[@]}" -gt 0 ]; then
   cmd+=("${EXTRA_OVERRIDES[@]}")
@@ -470,10 +581,10 @@ fi
 CMD_STR="$(run_cmd_str "${cmd[@]}")"
 RUN_ID="$(run_tracker_start \
   --track fmoe_n \
-  --axis hparam \
+  --axis "$RUN_AXIS" \
   --phase "$PHASE" \
   --dataset "$DATASET" \
-  --model "FeaturedMoE_N_${EXECUTION}_${ROUTER_FAMILY}" \
+  --model "${MODEL_TRACK_NAME}" \
   --exp-name "$EXP_NAME" \
   --exp-desc "$EXP_DESC" \
   --exp-focus "$EXP_FOCUS" \
@@ -482,9 +593,21 @@ RUN_ID="$(run_tracker_start \
 
 set +e
 if [ "$LOG_WANDB" = "true" ]; then
-  WANDB_DISABLED="false" LOG_FILE="${LOG_FILE_PATH}" PYTHONUNBUFFERED=1 "${cmd[@]}"
+  WANDB_DISABLED="false" \
+  LOG_FILE="${LOG_FILE_PATH}" \
+  PYTHONUNBUFFERED=1 \
+  FMOE_N_PHASE_SUMMARY="true" \
+  FMOE_N_SUMMARY_PHASE="${PHASE_BUCKET}" \
+  FMOE_N_SUMMARY_AXIS="${RUN_AXIS}" \
+  "${cmd[@]}"
 else
-  WANDB_DISABLED="true" LOG_FILE="${LOG_FILE_PATH}" PYTHONUNBUFFERED=1 "${cmd[@]}"
+  WANDB_DISABLED="true" \
+  LOG_FILE="${LOG_FILE_PATH}" \
+  PYTHONUNBUFFERED=1 \
+  FMOE_N_PHASE_SUMMARY="true" \
+  FMOE_N_SUMMARY_PHASE="${PHASE_BUCKET}" \
+  FMOE_N_SUMMARY_AXIS="${RUN_AXIS}" \
+  "${cmd[@]}"
 fi
 RC=$?
 set -e
@@ -497,14 +620,20 @@ fi
 
 RESULT_DIR="$(run_results_dir fmoe_n)"
 PHASE_SLUG="$(phase_slug "$PHASE")"
-RESULT_PATH="$("$PY_BIN" - <<'PY' "$RESULT_DIR" "$DATASET" "$PHASE_SLUG"
+RESULT_MIRROR_DIR="${RESULT_DIR}/normal/${RUN_AXIS}/${PHASE_BUCKET}/${DATASET_DIR_NAME}/$(run_model_tag "$MODEL_TRACK_NAME")"
+RESULT_PATH="$("$PY_BIN" - <<'PY' "$RESULT_DIR" "$RESULT_MIRROR_DIR" "$DATASET" "$PHASE_SLUG"
 from pathlib import Path
 import sys
 
 result_dir = Path(sys.argv[1])
-dataset = sys.argv[2]
-phase_slug = sys.argv[3]
-matches = sorted(result_dir.glob(f"{dataset}_FeaturedMoE_N_{phase_slug}_*.json"))
+mirror_dir = Path(sys.argv[2])
+dataset = sys.argv[3]
+phase_slug = sys.argv[4]
+matches = []
+if mirror_dir.is_dir():
+    matches = sorted(mirror_dir.glob(f"{dataset}_FeaturedMoE_N_{phase_slug}_*.json"))
+if not matches:
+    matches = sorted(result_dir.glob(f"{dataset}_FeaturedMoE_N_{phase_slug}_*.json"))
 if matches:
     print(matches[-1])
 PY
@@ -517,10 +646,10 @@ fi
 run_tracker_end \
   --run-id "$RUN_ID" \
   --track fmoe_n \
-  --axis hparam \
+  --axis "$RUN_AXIS" \
   --phase "$PHASE" \
   --dataset "$DATASET" \
-  --model "FeaturedMoE_N_${EXECUTION}_${ROUTER_FAMILY}" \
+  --model "$MODEL_TRACK_NAME" \
   --exp-name "$EXP_NAME" \
   --exp-desc "$EXP_DESC" \
   --exp-focus "$EXP_FOCUS" \
@@ -534,5 +663,12 @@ run_update_model_report \
   FeaturedMoE_N \
   "$(run_experiments_dir)/models/FeaturedMoE_N"
 run_update_track_report fmoe_n
+
+if [ -f "$SUMMARY_SCRIPT" ]; then
+  FMOE_N_PHASE_SUMMARY="true" \
+  FMOE_N_SUMMARY_PHASE="${PHASE_BUCKET}" \
+  FMOE_N_SUMMARY_AXIS="${RUN_AXIS}" \
+  "$PY_BIN" "$SUMMARY_SCRIPT" --phase "$PHASE_BUCKET" --axis "$RUN_AXIS" >/dev/null 2>&1 || true
+fi
 
 exit "$RC"

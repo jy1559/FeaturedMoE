@@ -149,6 +149,17 @@ _FEATURED_MOE_V2_MODELS = {
 }
 
 
+def _config_get(config_obj, key, default=None):
+    if config_obj is None:
+        return default
+    if isinstance(config_obj, dict):
+        return config_obj.get(key, default)
+    try:
+        return config_obj[key]
+    except Exception:
+        return getattr(config_obj, key, default)
+
+
 def _sync_model_dimensions(cfg_dict: dict) -> None:
     """Synchronize hidden/embedding size according to model family policy."""
     model_name = str(cfg_dict.get("model", "")).strip().lower()
@@ -905,6 +916,173 @@ def _best_stage_temp_path(cfg_dict: dict) -> Path:
     return tmp_dir / f"pid{os.getpid()}_{dataset}_{model}_{phase}.pth"
 
 
+def _dataset_tag(raw: str) -> str:
+    key = str(raw or "").strip().lower()
+    mapping = {
+        "movielens1m": "ML1",
+        "retail_rocket": "ReR",
+        "retailrocket": "ReR",
+        "foursquare": "FSQ",
+        "lastfm0.3": "LF3",
+        "lastfm0.03": "LF03",
+        "kuairec0.3": "KU3",
+        "kuairecsmall0.1": "KU01",
+        "amazon_beauty": "AMA",
+        "amazonbeauty": "AMA",
+    }
+    if key in mapping:
+        return mapping[key]
+    slim = re.sub(r"[^a-z0-9]+", "", key).upper()
+    if len(slim) >= 3:
+        return slim[:3]
+    if slim:
+        return slim.ljust(3, "X")
+    return "UNK"
+
+
+def _model_tag(raw: str) -> str:
+    key = str(raw or "").strip().lower()
+    if "featuredmoe_protox" in key or "featured_moe_protox" in key:
+        return "FMoEProtoX"
+    if "featured_moe_individual" in key or "featuredmoe_individual" in key:
+        return "FMoEIndividual"
+    if "featuredmoe_hir2" in key or "featured_moe_hir2" in key:
+        return "FMoEHiR2"
+    if "featured_moe_v2_hir" in key or "featuredmoe_v2_hir" in key:
+        return "FMoEv2HiR"
+    if "featured_moe_v3" in key or "featuredmoe_v3" in key:
+        return "FMoEv3"
+    if "featured_moe_v4_distillation" in key or "featuredmoe_v4_distillation" in key:
+        return "FMoEv4D"
+    if (
+        "featured_moe_hgr_v4" in key
+        or "featuredmoe_hgr_v4" in key
+        or "featuredmoe_hgrv4" in key
+        or "featured_moe_hgrv4" in key
+    ):
+        return "FMoEHGRv4"
+    if (
+        "featured_moe_hgr_v3" in key
+        or "featuredmoe_hgr_v3" in key
+        or "featuredmoe_hgrv3" in key
+        or "featured_moe_hgrv3" in key
+    ):
+        return "FMoEHGRv3"
+    if "featured_moe_hgr" in key or "featuredmoe_hgr" in key:
+        return "FMoEHGR"
+    if "featuredmoe_hir" in key or "featured_moe_hir" in key:
+        return "FMoEHiR"
+    if "featured_moe_v2" in key or "featuredmoe_v2" in key:
+        return "FMoEv2"
+    if "featuredmoe" in key or "featured_moe" in key:
+        return "FMoE"
+    return _safe_slug(raw)
+
+
+def _phase_bucket(raw: str) -> str:
+    return _safe_slug(str(raw or "").split("_", 1)[0]) or "PNA"
+
+
+def _logs_root() -> Path:
+    raw = str(os.environ.get("RUN_LOGS_DIR", "")).strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return Path(__file__).resolve().parent / "run" / "artifacts" / "logs"
+
+
+def _artifact_mirror_paths(
+    result_file: Path,
+    dataset: str,
+    model: str,
+    run_group: str,
+    run_axis: str,
+    run_phase: str,
+) -> dict[str, Path]:
+    dataset_dir = _safe_slug(_canonical_dataset_name(dataset))
+    model_tag = _model_tag(model)
+    axis_tag = _safe_slug(run_axis or "axis")
+    phase_bucket = _phase_bucket(run_phase)
+    results_group_dir = result_file.parent
+    normal_dir = results_group_dir / "normal" / axis_tag / phase_bucket / dataset_dir / model_tag
+    special_results_dir = results_group_dir / "special" / axis_tag / phase_bucket / dataset_dir / model_tag
+    special_logs_dir = (
+        _logs_root()
+        / _safe_slug(run_group or "misc")
+        / "special"
+        / axis_tag
+        / phase_bucket
+        / dataset_dir
+        / model_tag
+    )
+    special_name = f"{result_file.stem}_special_metrics.json"
+    return {
+        "normal_result": normal_dir / result_file.name,
+        "special_result": special_results_dir / special_name,
+        "special_log": special_logs_dir / special_name,
+    }
+
+
+def _write_json_file(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, default=_ser) + "\n", encoding="utf-8")
+
+
+def _build_special_metrics_payload(
+    *,
+    normalized_trials: list[dict],
+    model: str,
+    dataset: str,
+    run_group: str,
+    run_axis: str,
+    run_phase: str,
+    source_result_file: Path,
+) -> dict | None:
+    rows = []
+    for trial in normalized_trials:
+        valid_special = trial.get("valid_special_metrics")
+        test_special = trial.get("test_special_metrics")
+        if valid_special is None and test_special is None:
+            continue
+        rows.append(
+            {
+                "trial": trial.get("trial"),
+                "status": trial.get("status"),
+                "mrr@20": _ser(trial.get("mrr@20", 0.0)),
+                "best_hr@10": _ser(trial.get("best_hr@10", 0.0)),
+                "test_mrr@20": _ser(trial.get("test_mrr@20", 0.0)),
+                "test_hr@10": _ser(trial.get("test_hr@10", 0.0)),
+                "params": trial.get("params", {}),
+                "valid_special_metrics": valid_special or {},
+                "test_special_metrics": test_special or {},
+            }
+        )
+    if not rows:
+        return None
+
+    ok_rows = [row for row in rows if row.get("status") == "ok"]
+    best_row = max(ok_rows or rows, key=lambda row: float(row.get("mrr@20", 0.0) or 0.0))
+    return {
+        "model": model,
+        "dataset": _canonical_dataset_name(dataset),
+        "dataset_raw": dataset,
+        "run_group": run_group,
+        "run_axis": run_axis,
+        "run_phase": run_phase,
+        "source_result_file": str(source_result_file.resolve()),
+        "best_trial": {
+            "trial": best_row.get("trial"),
+            "mrr@20": _ser(best_row.get("mrr@20", 0.0)),
+            "best_hr@10": _ser(best_row.get("best_hr@10", 0.0)),
+            "test_mrr@20": _ser(best_row.get("test_mrr@20", 0.0)),
+            "test_hr@10": _ser(best_row.get("test_hr@10", 0.0)),
+            "params": best_row.get("params", {}),
+        },
+        "best_valid_special_metrics": best_row.get("valid_special_metrics", {}) or {},
+        "test_special_metrics": best_row.get("test_special_metrics", {}) or {},
+        "trials": rows,
+    }
+
+
 def _save_best_stage(model, path: Path) -> None:
     cpu_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
     torch.save(cpu_state, path)
@@ -974,6 +1152,9 @@ def _reapply_cli_overrides(cfg: dict, overrides: list[str]):
         "fmoe_special_logging",
         "expert_hidden_by_stage",
         "expert_depth_by_stage",
+        "stage_inter_layer_style",
+        "arch_state_tag",
+        "arch_variant_tag",
         "wave",
         "combo_id",
         "combo_desc",
@@ -1008,6 +1189,9 @@ def _extract_featured_moe_arch(model, cfg: dict) -> dict:
         "router_impl",
         "router_impl_by_stage",
         "rule_router_cfg",
+        "stage_inter_layer_style",
+        "arch_state_tag",
+        "arch_variant_tag",
         "n_pre_layer",
         "n_pre_macro",
         "n_pre_mid",
@@ -1042,6 +1226,9 @@ def _extract_context_fixed(cfg: dict) -> dict:
         "router_impl",
         "router_impl_by_stage",
         "rule_router",
+        "stage_inter_layer_style",
+        "arch_state_tag",
+        "arch_variant_tag",
         "num_layers",
         "n_pre_layer",
         "n_pre_macro",
@@ -1185,26 +1372,6 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     warnings.filterwarnings("ignore", category=FutureWarning)
     init_seed(config["seed"], config["reproducibility"])
 
-    if torch.cuda.is_available() and bool(config["use_gpu"]):
-        vis = os.environ.get("CUDA_VISIBLE_DEVICES", "(not set)")
-        try:
-            cur = torch.cuda.current_device()
-            dev_name = torch.cuda.get_device_name(cur)
-            print(f"    [Device] CUDA_VISIBLE_DEVICES={vis} | torch_device=cuda:{cur} ({dev_name})")
-        except Exception:
-            print(f"    [Device] CUDA_VISIBLE_DEVICES={vis} | torch_device={config['device']}")
-    else:
-        print(f"    [Device] torch_device={config['device']}")
-
-    if bool(cfg.get("enable_data_cache", True)):
-        print(
-            "    [DataCache] "
-            f"save_dataset={config['save_dataset']} "
-            f"save_dataloaders={config['save_dataloaders']} | "
-            f"checkpoint_dir={config['checkpoint_dir']} | "
-            f"dataloaders_save_path={config['dataloaders_save_path']}"
-        )
-
     cache_key = _make_data_cache_key(cfg)
     use_mem_cache = bool(cfg.get("in_memory_data_cache", True))
     max_mem_cache = max(1, int(cfg.get("max_in_memory_data_cache", 1)))
@@ -1234,18 +1401,20 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             )
         data_cache_hit = "disk_or_build"
 
-    print(
-        f"    [DataPrep] cache_hit={data_cache_hit}, "
-        f"create_dataset={t_ds:.2f}s, data_preparation={t_dl:.2f}s, "
-        f"n_items={dataset.item_num}"
-    )
-
     model_cls = get_model(config["model"])
     model = model_cls(config, train_data.dataset).to(config["device"])
 
     trainer_cls = get_trainer(config["MODEL_TYPE"], config["model"])
     trainer = trainer_cls(config, model)
     setattr(trainer, "_disable_patch_logging", True)
+    special_logging_enabled = bool(_config_get(config, "special_logging", cfg.get("special_logging", False)))
+    if model_name in _FEATURE_AWARE_MOE_MODELS:
+        special_logging_enabled = special_logging_enabled or bool(
+            _config_get(config, "fmoe_special_logging", cfg.get("fmoe_special_logging", True))
+        )
+    best_valid_special_metrics = None
+    last_valid_special_metrics = None
+    test_special_metrics = None
 
     # Sampled evaluation for large item sets
     n_items = dataset.item_num
@@ -1352,7 +1521,13 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                     )
                 continue
 
+            if special_logging_enabled:
+                from recbole_patch import begin_special_eval
+                begin_special_eval(trainer, valid_data, split_name="valid")
             vr = trainer._valid_epoch(valid_data, show_progress=show_progress)
+            if special_logging_enabled:
+                from recbole_patch import end_special_eval
+                last_valid_special_metrics = end_special_eval(trainer)
             if isinstance(vr, tuple):
                 vr = next((x for x in vr if isinstance(x, dict)), vr[0])
 
@@ -1360,6 +1535,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             if mrr20 > best_mrr20:
                 best_mrr20 = mrr20
                 best_result = {k: float(v) for k, v in vr.items()}
+                best_valid_special_metrics = copy.deepcopy(last_valid_special_metrics)
                 _save_best_stage(trainer.model, best_stage_path)
                 no_improve = 0
             else:
@@ -1401,6 +1577,8 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             best_result = {"mrr@20": 0.0}
         if best_mrr20 <= -1e8:
             best_mrr20 = float(best_result.get("mrr@20", 0.0) or 0.0)
+        if best_valid_special_metrics is None:
+            best_valid_special_metrics = copy.deepcopy(last_valid_special_metrics)
 
         if best_stage_path.exists():
             best_state = torch.load(best_stage_path, map_location="cpu")
@@ -1410,7 +1588,13 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
         else:
             print(f"[WARN] Missing best-stage checkpoint before test: {best_stage_path}")
 
+        if special_logging_enabled:
+            from recbole_patch import begin_special_eval
+            begin_special_eval(trainer, test_data, split_name="test")
         tr = trainer._valid_epoch(test_data, show_progress=show_progress)
+        if special_logging_enabled:
+            from recbole_patch import end_special_eval
+            test_special_metrics = end_special_eval(trainer)
         if isinstance(tr, tuple):
             tr = next((x for x in tr if isinstance(x, dict)), tr[0])
         test_result = {k: float(v) for k, v in tr.items()}
@@ -1429,6 +1613,8 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "mrr@20": float(best_mrr20),
             "valid_result": best_result,
             "test_result": test_result,
+            "valid_special_metrics": best_valid_special_metrics,
+            "test_special_metrics": test_special_metrics,
             "epochs_run": final_epoch,
             "early_stop_epoch": final_epoch,
             "early_stopped": early_stopped,
@@ -1471,6 +1657,7 @@ def _save_results(
     interrupted=False,
     interrupted_at=None,
 ):
+    path = Path(path)
     dataset_canonical = _canonical_dataset_name(dataset)
     normalized_trials = []
     completed_trials = 0
@@ -1498,7 +1685,14 @@ def _save_results(
         "n_completed": completed_trials,
         "n_recorded_trials": len(normalized_trials),
         "timestamp": datetime.now().isoformat(),
-        "trials": normalized_trials,
+        "trials": [
+            {
+                k: v
+                for k, v in trial.items()
+                if k not in {"valid_special_metrics", "test_special_metrics"}
+            }
+            for trial in normalized_trials
+        ],
         "run_group": run_group,
         "run_axis": run_axis,
         "run_phase": run_phase,
@@ -1517,6 +1711,16 @@ def _save_results(
     if final_best is not None:
         data["best_params"] = {k: _ser(v) for k, v in final_best.items()}
     ok = [t for t in normalized_trials if t.get("status") == "ok"]
+    special_payload = _build_special_metrics_payload(
+        normalized_trials=normalized_trials,
+        model=model,
+        dataset=dataset,
+        run_group=run_group,
+        run_axis=run_axis,
+        run_phase=run_phase,
+        source_result_file=path,
+    )
+    mirror_paths = _artifact_mirror_paths(path, dataset_canonical, model, run_group, run_axis, run_phase)
     if ok:
         bt = max(ok, key=lambda x: x.get("mrr@20", 0))
         best_valid_result = bt.get("valid_result", {}) or {}
@@ -1527,8 +1731,52 @@ def _save_results(
         data["test_hr@10"] = _ser(test_result.get("hit@10", 0.0))
         data["best_valid_result"] = best_valid_result
         data["test_result"] = test_result
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=_ser)
+        data["best_valid_special_metrics"] = bt.get("valid_special_metrics") or {}
+        data["test_special_metrics"] = bt.get("test_special_metrics") or {}
+    data["normal_result_mirror_file"] = str(mirror_paths["normal_result"].resolve())
+    data["special_result_file"] = str(mirror_paths["special_result"].resolve()) if special_payload else ""
+    data["special_log_file"] = str(mirror_paths["special_log"].resolve()) if special_payload else ""
+
+    _write_json_file(path, data)
+    _write_json_file(mirror_paths["normal_result"], data)
+    if special_payload is not None:
+        _write_json_file(mirror_paths["special_result"], special_payload)
+        _write_json_file(mirror_paths["special_log"], special_payload)
+    return {
+        "result_file": str(path.resolve()),
+        "normal_result_mirror_file": str(mirror_paths["normal_result"].resolve()),
+        "special_result_file": str(mirror_paths["special_result"].resolve()) if special_payload else "",
+        "special_log_file": str(mirror_paths["special_log"].resolve()) if special_payload else "",
+    }
+
+
+def _maybe_update_active_tracker_result(result_path) -> None:
+    run_id = str(os.environ.get("RUN_ID", "")).strip()
+    if not run_id:
+        return
+
+    timeline_raw = str(os.environ.get("RUN_TIMELINE_DIR", "")).strip()
+    if timeline_raw:
+        timeline_dir = Path(timeline_raw).expanduser().resolve()
+    else:
+        timeline_dir = Path(__file__).resolve().parent / "run" / "artifacts" / "timeline"
+
+    state_path = timeline_dir / "state" / f"{run_id}.json"
+    if not state_path.exists():
+        return
+
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    if not isinstance(state, dict):
+        return
+
+    try:
+        state["result_file"] = str(Path(result_path).resolve())
+        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _maybe_update_baseline_phase_summary(dataset: str, phase: str) -> None:
@@ -1555,6 +1803,35 @@ def _maybe_update_baseline_phase_summary(dataset: str, phase: str) -> None:
     try:
         subprocess.run(
             [sys.executable, str(script_path), "--dataset", str(dataset), "--phase", phase_folder],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
+def _maybe_update_fmoe_n_phase_summary(run_group: str, run_axis: str, phase: str) -> None:
+    enabled = str(os.environ.get("FMOE_N_PHASE_SUMMARY", "")).strip().lower()
+    if enabled not in {"1", "true", "yes", "on"}:
+        return
+    if str(run_group or "").strip().lower() != "fmoe_n":
+        return
+
+    phase_folder = str(os.environ.get("FMOE_N_SUMMARY_PHASE", "")).strip()
+    if not phase_folder:
+        phase_folder = str(str(phase or "").split("_", 1)[0]).strip()
+    axis_folder = str(os.environ.get("FMOE_N_SUMMARY_AXIS", "")).strip() or str(run_axis or "").strip() or "hparam"
+    if not phase_folder:
+        return
+
+    script_path = Path(__file__).resolve().parent / "run" / "fmoe_n" / "update_phase_summary.py"
+    if not script_path.exists():
+        return
+
+    try:
+        subprocess.run(
+            [sys.executable, str(script_path), "--phase", phase_folder, "--axis", axis_folder],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -1945,6 +2222,12 @@ def main():
     parent_result = str(args.parent_result or "").strip()
     interrupted = False
     interrupted_at = None
+    artifact_paths = {
+        "result_file": str(result_file.resolve()),
+        "normal_result_mirror_file": "",
+        "special_result_file": "",
+        "special_log_file": "",
+    }
 
     # Objective function
     def objective(params):
@@ -1990,6 +2273,28 @@ def main():
             mrr20 = result["mrr@20"]
             if mrr20 > best_so_far:
                 best_so_far = mrr20
+            current_best_hr10 = float((result.get("valid_result", {}) or {}).get("hit@10", 0.0) or 0.0)
+            current_test_mrr20 = float((result.get("test_result", {}) or {}).get("mrr@20", 0.0) or 0.0)
+            current_test_hr10 = float((result.get("test_result", {}) or {}).get("hit@10", 0.0) or 0.0)
+            run_best_trial = {
+                "mrr@20": float(mrr20),
+                "valid_result": result.get("valid_result", {}) or {},
+                "test_result": result.get("test_result", {}) or {},
+            }
+            for prev in all_trials_data:
+                if prev.get("status") != "ok":
+                    continue
+                prev_mrr = float(prev.get("mrr@20", 0.0) or 0.0)
+                if prev_mrr > float(run_best_trial.get("mrr@20", 0.0) or 0.0):
+                    run_best_trial = prev
+            run_best_valid = (run_best_trial.get("valid_result", {}) or {})
+            run_best_test = (run_best_trial.get("test_result", {}) or {})
+            run_best_metrics = {
+                "best_mrr@20": float(run_best_trial.get("mrr@20", 0.0) or 0.0),
+                "best_hr@10": float(run_best_valid.get("hit@10", 0.0) or 0.0),
+                "test_mrr@20": float(run_best_test.get("mrr@20", 0.0) or 0.0),
+                "test_hr@10": float(run_best_test.get("hit@10", 0.0) or 0.0),
+            }
             elapsed_total = time.time() - global_t0
             avg_trial_sec = elapsed_total / max(1, trial_num)
             remaining_trials = max(0, int(args.max_evals) - trial_num)
@@ -2006,6 +2311,17 @@ def main():
                 f"total={_format_duration(elapsed_total)}, "
                 f"ETA={_format_duration(eta_sec)})"
             )
+            print(
+                "[TRIAL_METRICS] "
+                f"cur_best_mrr20={float(mrr20):.4f} "
+                f"cur_best_hr10={current_best_hr10:.4f} "
+                f"cur_test_mrr20={current_test_mrr20:.4f} "
+                f"cur_test_hr10={current_test_hr10:.4f} "
+                f"run_best_mrr20={run_best_metrics['best_mrr@20']:.4f} "
+                f"run_best_hr10={run_best_metrics['best_hr@10']:.4f} "
+                f"run_test_mrr20={run_best_metrics['test_mrr@20']:.4f} "
+                f"run_test_hr10={run_best_metrics['test_hr@10']:.4f}"
+            )
 
             trial_record = {
                 "trial": trial_num,
@@ -2013,9 +2329,11 @@ def main():
                 "mrr@20": float(mrr20),
                 "valid_result": result["valid_result"],
                 "test_result": result.get("test_result", {}),
-                "best_hr@10": float((result.get("valid_result", {}) or {}).get("hit@10", 0.0) or 0.0),
-                "test_mrr@20": float((result.get("test_result", {}) or {}).get("mrr@20", 0.0) or 0.0),
-                "test_hr@10": float((result.get("test_result", {}) or {}).get("hit@10", 0.0) or 0.0),
+                "valid_special_metrics": result.get("valid_special_metrics") or {},
+                "test_special_metrics": result.get("test_special_metrics") or {},
+                "best_hr@10": current_best_hr10,
+                "test_mrr@20": current_test_mrr20,
+                "test_hr@10": current_test_hr10,
                 "epochs_run": result["epochs_run"],
                 "early_stop_epoch": result.get("early_stop_epoch", result["epochs_run"]),
                 "early_stopped": bool(result.get("early_stopped", False)),
@@ -2037,7 +2355,7 @@ def main():
                     if k in fmoe_arch:
                         trial_record[k] = _ser(fmoe_arch[k])
             all_trials_data.append(trial_record)
-            _save_results(
+            artifact_paths = _save_results(
                 result_file,
                 all_trials_data,
                 model,
@@ -2054,7 +2372,9 @@ def main():
                 interrupted=interrupted,
                 interrupted_at=interrupted_at,
             )
+            _maybe_update_active_tracker_result(result_file)
             _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
+            _maybe_update_fmoe_n_phase_summary(run_group, run_axis, run_phase)
             _wandb_log_trial(trial_num, sampled_params, result)
             _wandb_trial_finish(
                 {
@@ -2088,7 +2408,7 @@ def main():
                 "status": "interrupted",
                 "error": "KeyboardInterrupt",
             })
-            _save_results(
+            artifact_paths = _save_results(
                 result_file,
                 all_trials_data,
                 model,
@@ -2105,7 +2425,9 @@ def main():
                 interrupted=interrupted,
                 interrupted_at=interrupted_at,
             )
+            _maybe_update_active_tracker_result(result_file)
             _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
+            _maybe_update_fmoe_n_phase_summary(run_group, run_axis, run_phase)
             raise
         except Exception as e:
             print(f"  -> FAILED: {e}")
@@ -2133,7 +2455,7 @@ def main():
                 "status": "fail",
                 "error": str(e),
             })
-            _save_results(
+            artifact_paths = _save_results(
                 result_file,
                 all_trials_data,
                 model,
@@ -2150,7 +2472,9 @@ def main():
                 interrupted=interrupted,
                 interrupted_at=interrupted_at,
             )
+            _maybe_update_active_tracker_result(result_file)
             _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
+            _maybe_update_fmoe_n_phase_summary(run_group, run_axis, run_phase)
             return {"loss": 1.0, "status": STATUS_FAIL}
 
     # Run TPE
@@ -2178,7 +2502,13 @@ def main():
 
     # Best results
     ok_trials = [t for t in all_trials_data if t.get("status") == "ok"]
-    best_mrr = max((t["mrr@20"] for t in ok_trials), default=0.0)
+    best_trial = max(ok_trials, key=lambda x: x.get("mrr@20", 0.0)) if ok_trials else None
+    best_mrr = float(best_trial.get("mrr@20", 0.0) or 0.0) if best_trial else 0.0
+    best_valid_result = (best_trial or {}).get("valid_result", {}) or {}
+    best_test_result = (best_trial or {}).get("test_result", {}) or {}
+    best_hr10 = float(best_valid_result.get("hit@10", 0.0) or 0.0)
+    test_mrr20 = float(best_test_result.get("mrr@20", 0.0) or 0.0)
+    test_hr10 = float(best_test_result.get("hit@10", 0.0) or 0.0)
     if not best_params and ok_trials:
         best_params = max(ok_trials, key=lambda x: x["mrr@20"]).get("params", {})
 
@@ -2187,14 +2517,21 @@ def main():
     print(f"\n{'=' * 65}")
     print(f"  DONE  |  {model} x {dataset}")
     print(f"  Best MRR@20 = {best_mrr:.4f}  |  {len(ok_trials)}/{args.max_evals} trials OK")
+    print(f"  Best HR@10  = {best_hr10:.4f}")
+    print(f"  Test MRR@20 = {test_mrr20:.4f}  (best-valid checkpoint)")
+    print(f"  Test HR@10  = {test_hr10:.4f}  (best-valid checkpoint)")
+    print(
+        "[RUN_METRICS] "
+        f"best_valid_mrr20={best_mrr:.4f} "
+        f"best_valid_hr10={best_hr10:.4f} "
+        f"test_mrr20={test_mrr20:.4f} "
+        f"test_hr10={test_hr10:.4f}"
+    )
     print(f"  Total time: {total_time / 60:.1f} min")
     print(f"  Best params:")
     for k, v in sorted(best_params.items()):
         print(f"    {k}: {v:.6g}" if isinstance(v, float) else f"    {k}: {v}")
-    print(f"  Results -> {result_file}")
-    print(f"{'=' * 65}\n")
-
-    _save_results(
+    artifact_paths = _save_results(
         result_file,
         all_trials_data,
         model,
@@ -2212,7 +2549,17 @@ def main():
         interrupted=interrupted,
         interrupted_at=interrupted_at,
     )
+    print(f"  Results -> {result_file}")
+    if artifact_paths.get("normal_result_mirror_file"):
+        print(f"  Normal mirror -> {artifact_paths['normal_result_mirror_file']}")
+    if artifact_paths.get("special_result_file"):
+        print(f"  Special result -> {artifact_paths['special_result_file']}")
+    if artifact_paths.get("special_log_file"):
+        print(f"  Special log -> {artifact_paths['special_log_file']}")
+    print(f"{'=' * 65}\n")
+    _maybe_update_active_tracker_result(result_file)
     _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
+    _maybe_update_fmoe_n_phase_summary(run_group, run_axis, run_phase)
 
 
 if __name__ == "__main__":

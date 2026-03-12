@@ -41,6 +41,9 @@ expert_use_feature: true
 router_impl: learned
 router_impl_by_stage: {}
 router_design: simple_flat
+stage_inter_layer_style: attn
+moe_block_variant: moe
+router_group_feature_mode: none
 moe_top_k: 1
 moe_top_k_policy: fixed
 moe_top_k_ratio: 0.5
@@ -62,6 +65,9 @@ micro_router_temperature_start: 1.6
 moe_top_k_start: 1
 moe_top_k_warmup_until: 0
 balance_loss_lambda: 0.002
+z_loss_lambda: 0.0
+gate_entropy_lambda: 0.0
+gate_entropy_until: 0.0
 fmoe_v2_stage_merge_aux_enable: false
 fmoe_v2_stage_merge_aux_lambda_scale: 1.0
 
@@ -309,6 +315,38 @@ layout_execution:
         macro: {pass_layers: 1, moe_blocks: 1}
         mid: {pass_layers: 1, moe_blocks: 1}
         micro: {pass_layers: 1, moe_blocks: 0}
+    - id: L30
+      execution: serial
+      global_pre_layers: 2
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 0}
+    - id: L31
+      execution: serial
+      global_pre_layers: 2
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 1}
+    - id: L32
+      execution: serial
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 0}
+    - id: L33
+      execution: serial
+      global_pre_layers: 1
+      global_post_layers: 0
+      stages:
+        macro: {pass_layers: 0, moe_blocks: 1}
+        mid: {pass_layers: 0, moe_blocks: 1}
+        micro: {pass_layers: 0, moe_blocks: 1}
 
 routing_common:
   router_use_hidden: true

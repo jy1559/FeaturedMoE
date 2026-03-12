@@ -694,10 +694,11 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     trainer_cls = get_trainer(config['MODEL_TYPE'], config['model'])
     trainer = trainer_cls(config, model)
     setattr(trainer, '_disable_patch_logging', True)  # bypass patched valid/train hooks
-    special_logging_enabled = (
-        model_name_l in _FEATURE_AWARE_MOE_MODELS
-        and bool(config.get("fmoe_special_logging", cfg_i.get("fmoe_special_logging", True)))
-    )
+    special_logging_enabled = bool(config.get("special_logging", cfg_i.get("special_logging", False)))
+    if model_name_l in _FEATURE_AWARE_MOE_MODELS:
+        special_logging_enabled = special_logging_enabled or bool(
+            config.get("fmoe_special_logging", cfg_i.get("fmoe_special_logging", True))
+        )
     best_valid_special_metrics = None
     last_valid_special_metrics = None
     test_special_metrics = None

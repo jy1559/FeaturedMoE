@@ -13,10 +13,11 @@ GPU_LIST="0,1,2,3"
 PHASE="P0"
 PHASE_SET="false"
 MAX_EVALS="10"
-TUNE_EPOCHS="40"
+TUNE_EPOCHS="100"
 TUNE_PATIENCE="10"
 SEED="42"
 LOG_WANDB="false"
+SPECIAL_LOGGING="false"
 PAIR_LIST=""
 SMOKE="false"
 DRY_RUN="${DRY_RUN:-false}"
@@ -42,6 +43,7 @@ usage() {
 Usage: tune_small_ab.sh --mode a|b|all [--gpus 0,1,2,3] [--phase P0]
                         [--max-evals 10] [--tune-epochs 40] [--tune-patience 10]
                         [--seed 42] [--pairs 1,2] [--smoke] [--dry-run] [--log-wandb]
+                        [--special-logging]
 USAGE
 }
 
@@ -405,6 +407,9 @@ run_small_job() {
   if [ "$LOG_WANDB" = "true" ]; then
     cmd+=(--log-wandb)
   fi
+  if [ "$SPECIAL_LOGGING" = "true" ]; then
+    cmd+=("++special_logging=true")
+  fi
 
   echo "[JOB] gpu=${gpu} dataset=${dataset} model=${model} combo=${combo} phase=${run_phase}"
   echo "[LOG] ${log_path}"
@@ -427,6 +432,7 @@ run_small_job() {
   set +e
   BASELINE_PHASE_SUMMARY=1 \
   BASELINE_SUMMARY_PHASE="$PHASE" \
+  RUN_ID="$run_id" \
   LOG_FILE="${log_path}" \
   PYTHONUNBUFFERED=1 \
   "${cmd[@]}"
@@ -595,6 +601,7 @@ while [ "$#" -gt 0 ]; do
     --dry-run) DRY_RUN="true"; shift ;;
     --log-wandb) LOG_WANDB="true"; shift ;;
     --no-wandb) LOG_WANDB="false"; shift ;;
+    --special-logging) SPECIAL_LOGGING="true"; shift ;;
     --help|-h) usage; exit 0 ;;
     --) shift; break ;;
     *) echo "Unknown arg: $1" >&2; usage; exit 1 ;;
