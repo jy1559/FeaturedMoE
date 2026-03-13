@@ -26,14 +26,15 @@ USAGE
 }
 
 dataset_to_config() {
-  case "$1" in
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
     movielens1m) echo tune_ml ;;
     amazon_beauty) echo tune_ab ;;
     foursquare) echo tune_fs ;;
     retail_rocket) echo tune_rr ;;
-    kuairec0.3|KuaiRec0.3) echo tune_kuai ;;
+    kuairec0.3) echo tune_kuai ;;
     lastfm0.3) echo tune_lfm ;;
-    kuairecsmall0.1|KuaiRecSmall0.1) echo tune_kuai_small ;;
+    kuairecsmall0.1) echo tune_kuai_small ;;
+    kuaireclargestrictposv2_0.2) echo tune_kuai_strict_small ;;
     lastfm0.03) echo tune_lfm_small ;;
     *) echo config ;;
   esac

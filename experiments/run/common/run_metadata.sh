@@ -50,6 +50,8 @@ run_dataset_tag() {
     lastfm0.03) echo "LF03" ;;
     kuairec0.3) echo "KU3" ;;
     kuairecsmall0.1) echo "KU01" ;;
+    kuaireclargestrictposv2) echo "KUL" ;;
+    kuaireclargestrictposv2_0.2) echo "KUL02" ;;
     amazon_beauty|amazonbeauty) echo "AMA" ;;
     *)
       key="$(printf '%s' "$raw" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')"
@@ -80,6 +82,8 @@ run_model_tag() {
     *featured_moe_hgr*|*featuredmoe_hgr*) echo "FMoEHGR" ;;
     *featuredmoe_hir*) echo "FMoEHiR" ;;
     *featuredmoe_v2*) echo "FMoEv2" ;;
+    *featured_moe_n3*|*featuredmoe_n3*) echo "FMoEN3" ;;
+    *featured_moe_n2*|*featuredmoe_n2*) echo "FMoEN2" ;;
     *featuredmoe*) echo "FMoE" ;;
     *)
       echo "$(run_sanitize "$raw")"

@@ -46,7 +46,7 @@ cache_dataloaders: false          # keep false to avoid heavy dataloader pickle 
 # - write disk cache only at anchor len (default: 50)
 # - non-anchor len runs skip disk cache to prevent cache explosion
 large_dataset_cache_policy_enabled: true
-large_dataset_cache_datasets: [lastfm, lastfm0.3, kuairec, kuairec0.3]
+large_dataset_cache_datasets: [lastfm, lastfm0.3, kuairec, kuairec0.3, kuaireclargestrictposv2, kuaireclargestrictposv2_0.2]
 large_dataset_cache_anchor_len: 50
 enable_session_split_cache: true  # cache converted session splits to skip interaction->sequence rebuild
 use_fast_data_augmentation: true  # optimized SequentialDataset.data_augmentation patch
@@ -113,6 +113,11 @@ fmoe_v2_layout_id: 0
 fmoe_stage_execution_mode: serial
 router_use_hidden: true
 router_use_feature: true
+router_feature_proj_dim: 0
+router_feature_proj_layers: 1
+router_feature_scale: 1.0
+router_hidden_scale: 1.0
+router_group_feature_scale: 1.0
 expert_use_hidden: true
 expert_use_feature: true
 router_impl: learned
@@ -155,6 +160,11 @@ teacher_temperature: 1.5
 teacher_until: 0.25
 teacher_stat_sharpness: 16.0
 balance_loss_lambda: 0.01
+z_loss_lambda: 0.0
+gate_entropy_lambda: 0.0
+gate_entropy_until: 0.0
+rule_agreement_lambda: 0.0
+group_coverage_lambda: 0.0
 fmoe_v2_parallel_stage_gate_top_k: 0
 fmoe_v2_parallel_stage_gate_temperature: 1.0
 fmoe_v2_stage_merge_aux_enable: false
@@ -186,6 +196,11 @@ micro_router_temperature_start: 1.3
 moe_top_k_start: 0
 moe_top_k_warmup_until: 0
 fmoe_schedule_log_every_epoch: 1
+lr_scheduler_type: none
+lr_scheduler_warmup_ratio: 0.0
+lr_scheduler_min_lr_ratio: 0.1
+lr_scheduler_plateau_factor: 0.5
+lr_scheduler_plateau_patience: 3
 
 # ============ Evaluation ============
 # Evaluation modes (set via eval_mode/*.yaml):

@@ -6,6 +6,13 @@ RUN_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=/dev/null
 source "${RUN_DIR}/common/run_metadata.sh"
 
+TRACK_GROUP="${TRACK_GROUP:-fmoe_n}"
+TRACK_MODEL_CONFIG="${TRACK_MODEL_CONFIG:-featured_moe_n_tune}"
+TRACK_MODEL_CLASS="${TRACK_MODEL_CLASS:-FeaturedMoE_N}"
+TRACK_MODEL_PREFIX="${TRACK_MODEL_PREFIX:-FeaturedMoE_N}"
+TRACK_MODEL_DIR="${TRACK_MODEL_DIR:-}"
+TRACK_SUMMARY_SCRIPT="${TRACK_SUMMARY_SCRIPT:-${SCRIPT_DIR}/update_phase_summary.py}"
+
 DATASET=""
 GPU_ID="0"
 SEED="42"
@@ -49,14 +56,23 @@ BALANCE_SPACE_OVERRIDE=""
 ROUTER_FAMILY="plain"
 ROUTER_IMPL="learned"
 ROUTER_IMPL_BY_STAGE=""
+ROUTER_USE_HIDDEN="true"
+ROUTER_USE_FEATURE="true"
 RULE_BIAS_SCALE=""
 FEATURE_ENCODER_MODE="linear"
 FEATURE_ENCODER_SIN_N_FREQS="4"
 MOE_BLOCK_VARIANT="moe"
 ROUTER_GROUP_FEATURE_MODE="none"
+ROUTER_FEATURE_PROJ_DIM="0"
+ROUTER_FEATURE_PROJ_LAYERS="1"
+ROUTER_FEATURE_SCALE="1.0"
+ROUTER_HIDDEN_SCALE="1.0"
+ROUTER_GROUP_FEATURE_SCALE="1.0"
 Z_LOSS_LAMBDA="0.0"
 GATE_ENTROPY_LAMBDA="0.0"
 GATE_ENTROPY_UNTIL="0.0"
+RULE_AGREEMENT_LAMBDA="0.0"
+GROUP_COVERAGE_LAMBDA="0.0"
 MOE_TOP_K="0"
 MOE_TOP_K_POLICY="auto"
 MOE_TOP_K_RATIO="0.5"
@@ -69,6 +85,11 @@ MID_ROUTER_TEMPERATURE="1.2"
 MICRO_ROUTER_TEMPERATURE="1.2"
 FMOE_SCHEDULE_ENABLE="false"
 STAGE_INTER_LAYER_STYLE="attn"
+LR_SCHEDULER_TYPE="none"
+LR_SCHEDULER_WARMUP_RATIO="0.0"
+LR_SCHEDULER_MIN_LR_RATIO="0.1"
+LR_SCHEDULER_PLATEAU_FACTOR="0.5"
+LR_SCHEDULER_PLATEAU_PATIENCE="3"
 STATE_TAG=""
 COMBO_DESC=""
 
@@ -85,12 +106,19 @@ Usage: $0 --dataset <dataset> [--gpu N] [--seed N] [--phase P0_Q01]
           [--max-evals N] [--tune-epochs N] [--tune-patience N]
           [--router-family plain|hybrid|bias|rule]
           [--router-impl learned|rule_soft]
+          [--router-use-hidden true|false] [--router-use-feature true|false]
           [--stage-inter-layer-style attn|identity|nonlinear|ffn]
           [--moe-block-variant moe|dense_ffn|nonlinear|identity]
           [--router-group-feature-mode none|mean|mean_std]
+          [--router-feature-proj-dim N] [--router-feature-proj-layers 1|2]
+          [--router-feature-scale X] [--router-hidden-scale X] [--router-group-feature-scale X]
           [--feature-encoder-mode linear|sinusoidal_selected]
           [--expert-scale N] [--moe-top-k N] [--moe-top-k-policy auto|fixed]
           [--z-loss-lambda X] [--gate-entropy-lambda X] [--gate-entropy-until X]
+          [--rule-agreement-lambda X] [--group-coverage-lambda X]
+          [--lr-scheduler-type none|cosine|warmup_cosine|plateau]
+          [--lr-scheduler-warmup-ratio X] [--lr-scheduler-min-lr-ratio X]
+          [--lr-scheduler-plateau-factor X] [--lr-scheduler-plateau-patience N]
           [--lr-space lo,hi] [--wd-space csv] [--dropout-space csv] [--balance-space csv]
           [--parent-result path] [--override hydra.key=value]
 USAGE
@@ -135,14 +163,25 @@ write_optional_path_file() {
 }
 
 load_defaults() {
-  case "$DATASET" in
-    KuaiRecSmall0.1)
+  case "$(printf '%s' "$DATASET" | tr '[:upper:]' '[:lower:]')" in
+    kuairecsmall0.1)
       DEF_TRAIN_BS="6144"
       DEF_EVAL_BS="12288"
       DEF_D_FEAT="16"
       DEF_D_EXP="128"
       DEF_SCALE="3"
       DEF_LR="0.001"
+      DEF_WD="5e-5"
+      DEF_DROP="0.10"
+      DEF_BAL="0.002"
+      ;;
+    kuaireclargestrictposv2_0.2)
+      DEF_TRAIN_BS="8192"
+      DEF_EVAL_BS="16384"
+      DEF_D_FEAT="16"
+      DEF_D_EXP="128"
+      DEF_SCALE="1"
+      DEF_LR="5e-4"
       DEF_WD="5e-5"
       DEF_DROP="0.10"
       DEF_BAL="0.002"
@@ -182,11 +221,18 @@ while [ "$#" -gt 0 ]; do
     --router-family) ROUTER_FAMILY="$2"; shift 2 ;;
     --router-impl) ROUTER_IMPL="$2"; shift 2 ;;
     --router-impl-by-stage) ROUTER_IMPL_BY_STAGE="$2"; shift 2 ;;
+    --router-use-hidden) ROUTER_USE_HIDDEN="$2"; shift 2 ;;
+    --router-use-feature) ROUTER_USE_FEATURE="$2"; shift 2 ;;
     --rule-bias-scale) RULE_BIAS_SCALE="$2"; shift 2 ;;
     --feature-encoder-mode) FEATURE_ENCODER_MODE="$2"; shift 2 ;;
     --feature-encoder-sinusoidal-n-freqs) FEATURE_ENCODER_SIN_N_FREQS="$2"; shift 2 ;;
     --moe-block-variant) MOE_BLOCK_VARIANT="$2"; shift 2 ;;
     --router-group-feature-mode) ROUTER_GROUP_FEATURE_MODE="$2"; shift 2 ;;
+    --router-feature-proj-dim) ROUTER_FEATURE_PROJ_DIM="$2"; shift 2 ;;
+    --router-feature-proj-layers) ROUTER_FEATURE_PROJ_LAYERS="$2"; shift 2 ;;
+    --router-feature-scale) ROUTER_FEATURE_SCALE="$2"; shift 2 ;;
+    --router-hidden-scale) ROUTER_HIDDEN_SCALE="$2"; shift 2 ;;
+    --router-group-feature-scale) ROUTER_GROUP_FEATURE_SCALE="$2"; shift 2 ;;
     --train-batch-size) TRAIN_BATCH_SIZE="$2"; shift 2 ;;
     --eval-batch-size) EVAL_BATCH_SIZE="$2"; shift 2 ;;
     --embedding-size) EMBEDDING_SIZE="$2"; shift 2 ;;
@@ -202,6 +248,8 @@ while [ "$#" -gt 0 ]; do
     --z-loss-lambda) Z_LOSS_LAMBDA="$2"; shift 2 ;;
     --gate-entropy-lambda) GATE_ENTROPY_LAMBDA="$2"; shift 2 ;;
     --gate-entropy-until) GATE_ENTROPY_UNTIL="$2"; shift 2 ;;
+    --rule-agreement-lambda) RULE_AGREEMENT_LAMBDA="$2"; shift 2 ;;
+    --group-coverage-lambda) GROUP_COVERAGE_LAMBDA="$2"; shift 2 ;;
     --lr-space) LR_SPACE_OVERRIDE="$2"; shift 2 ;;
     --wd-space) WD_SPACE_OVERRIDE="$2"; shift 2 ;;
     --dropout-space) DROPOUT_SPACE_OVERRIDE="$2"; shift 2 ;;
@@ -216,6 +264,11 @@ while [ "$#" -gt 0 ]; do
     --micro-router-temperature) MICRO_ROUTER_TEMPERATURE="$2"; shift 2 ;;
     --fmoe-schedule-enable) FMOE_SCHEDULE_ENABLE="$2"; shift 2 ;;
     --stage-inter-layer-style) STAGE_INTER_LAYER_STYLE="$2"; shift 2 ;;
+    --lr-scheduler-type) LR_SCHEDULER_TYPE="$2"; shift 2 ;;
+    --lr-scheduler-warmup-ratio) LR_SCHEDULER_WARMUP_RATIO="$2"; shift 2 ;;
+    --lr-scheduler-min-lr-ratio) LR_SCHEDULER_MIN_LR_RATIO="$2"; shift 2 ;;
+    --lr-scheduler-plateau-factor) LR_SCHEDULER_PLATEAU_FACTOR="$2"; shift 2 ;;
+    --lr-scheduler-plateau-patience) LR_SCHEDULER_PLATEAU_PATIENCE="$2"; shift 2 ;;
     --result-path-file) RESULT_PATH_FILE="$2"; shift 2 ;;
     --log-path-file) LOG_PATH_FILE="$2"; shift 2 ;;
     --combo-desc) COMBO_DESC="$2"; shift 2 ;;
@@ -263,6 +316,18 @@ case "${ROUTER_IMPL,,}" in
 esac
 ROUTER_IMPL="${ROUTER_IMPL,,}"
 
+case "${ROUTER_USE_HIDDEN,,}" in
+  true|false) ;;
+  *) echo "--router-use-hidden must be true|false" >&2; exit 1 ;;
+esac
+ROUTER_USE_HIDDEN="${ROUTER_USE_HIDDEN,,}"
+
+case "${ROUTER_USE_FEATURE,,}" in
+  true|false) ;;
+  *) echo "--router-use-feature must be true|false" >&2; exit 1 ;;
+esac
+ROUTER_USE_FEATURE="${ROUTER_USE_FEATURE,,}"
+
 case "${STAGE_INTER_LAYER_STYLE,,}" in
   attn|identity|nonlinear|ffn) ;;
   *) echo "--stage-inter-layer-style must be attn|identity|nonlinear|ffn" >&2; exit 1 ;;
@@ -280,6 +345,12 @@ case "${ROUTER_GROUP_FEATURE_MODE,,}" in
   *) echo "--router-group-feature-mode must be none|mean|mean_std" >&2; exit 1 ;;
 esac
 ROUTER_GROUP_FEATURE_MODE="${ROUTER_GROUP_FEATURE_MODE,,}"
+
+case "${LR_SCHEDULER_TYPE,,}" in
+  none|cosine|warmup_cosine|plateau) ;;
+  *) echo "--lr-scheduler-type must be none|cosine|warmup_cosine|plateau" >&2; exit 1 ;;
+esac
+LR_SCHEDULER_TYPE="${LR_SCHEDULER_TYPE,,}"
 
 load_defaults
 
@@ -391,20 +462,20 @@ fi
 
 if [ -z "$EXP_NAME" ]; then
   if [ -n "$STATE_TAG" ]; then
-    EXP_NAME="fmoe_n_${STATE_TAG}_${PHASE%%_*}"
+    EXP_NAME="${TRACK_GROUP}_${STATE_TAG}_${PHASE%%_*}"
   else
-    EXP_NAME="fmoe_n_${PHASE%%_*}_${RUN_AXIS}"
+    EXP_NAME="${TRACK_GROUP}_${PHASE%%_*}_${RUN_AXIS}"
   fi
 fi
 if [ -z "$EXP_DESC" ]; then
   if [ -n "$STATE_TAG" ]; then
-    EXP_DESC="FeaturedMoE_N state=${STATE_TAG} hyperopt run with fixed combo and LR-first search."
+    EXP_DESC="${TRACK_MODEL_CLASS} state=${STATE_TAG} hyperopt run with fixed combo and LR-first search."
   else
-    EXP_DESC="FeaturedMoE_N hyperopt run with fixed combo and LR-first search."
+    EXP_DESC="${TRACK_MODEL_CLASS} hyperopt run with fixed combo and LR-first search."
   fi
 fi
 if [ -z "$EXP_FOCUS" ]; then
-  EXP_FOCUS="fmoe_v2_layout_id,fmoe_stage_execution_mode,router_family,router_impl,stage_inter_layer_style,moe_block_variant,router_group_feature_mode,feature_encoder_mode,expert_scale,moe_top_k,learning_rate,weight_decay,balance_loss_lambda,z_loss_lambda,gate_entropy_lambda"
+  EXP_FOCUS="fmoe_v2_layout_id,fmoe_stage_execution_mode,router_family,router_impl,stage_inter_layer_style,moe_block_variant,router_group_feature_mode,router_use_hidden,router_use_feature,router_feature_proj_dim,router_feature_scale,router_hidden_scale,feature_encoder_mode,expert_scale,moe_top_k,learning_rate,weight_decay,balance_loss_lambda,z_loss_lambda,gate_entropy_lambda,rule_agreement_lambda,group_coverage_lambda,lr_scheduler_type"
 fi
 
 EXP_DIR="$(run_experiments_dir)"
@@ -413,9 +484,12 @@ run_export_runtime_env
 PY_BIN="$(run_python_bin)"
 PHASE_BUCKET="${PHASE%%_*}"
 [ -n "$PHASE_BUCKET" ] || PHASE_BUCKET="$PHASE"
-SUMMARY_SCRIPT="${SCRIPT_DIR}/update_phase_summary.py"
+SUMMARY_SCRIPT="${TRACK_SUMMARY_SCRIPT}"
+if [ -z "$TRACK_MODEL_DIR" ]; then
+  TRACK_MODEL_DIR="${EXP_DIR}/models/${TRACK_MODEL_CLASS}"
+fi
 
-MODEL_TRACK_NAME="FeaturedMoE_N_${EXECUTION}_${ROUTER_FAMILY}"
+MODEL_TRACK_NAME="${TRACK_MODEL_PREFIX}_${EXECUTION}_${ROUTER_FAMILY}"
 if [ -n "$STATE_TAG" ]; then
   MODEL_TRACK_NAME="${MODEL_TRACK_NAME}_${STATE_TAG}"
 fi
@@ -424,7 +498,7 @@ AXIS_DIR_NAME="$(run_sanitize "${RUN_AXIS}")"
 PHASE_DIR_NAME="$(run_sanitize "${PHASE_BUCKET}")"
 DATASET_DIR_NAME="$(run_sanitize "${DATASET}")"
 MODEL_DIR_NAME="$(run_model_tag "${MODEL_TRACK_NAME}")"
-LOG_DIR_PATH="$(run_log_dir fmoe_n)/${AXIS_DIR_NAME}/${PHASE_DIR_NAME}/${DATASET_DIR_NAME}/${MODEL_DIR_NAME}"
+LOG_DIR_PATH="$(run_log_dir "${TRACK_GROUP}")/${AXIS_DIR_NAME}/${PHASE_DIR_NAME}/${DATASET_DIR_NAME}/${MODEL_DIR_NAME}"
 run_ensure_dir "$LOG_DIR_PATH"
 LOG_FILE_PATH="${LOG_DIR_PATH}/$(run_timestamp)_$(run_sanitize "${RUN_AXIS}")_$(run_sanitize "${PHASE}").log"
 write_optional_path_file "$LOG_PATH_FILE" "$LOG_FILE_PATH"
@@ -436,10 +510,10 @@ cmd=(
   --tune-epochs "$TUNE_EPOCHS"
   --tune-patience "$TUNE_PATIENCE"
   --seed "$SEED"
-  --run-group fmoe_n
+  --run-group "$TRACK_GROUP"
   --run-axis "$RUN_AXIS"
   --run-phase "$PHASE"
-  "model=featured_moe_n_tune"
+  "model=${TRACK_MODEL_CONFIG}"
   "dataset=${DATASET}"
   "eval_mode=session"
   "feature_mode=full_v2"
@@ -473,10 +547,10 @@ cmd=(
   "++search.router_design=[simple_flat]"
   "router_impl=${ROUTER_IMPL}"
   "++search.router_impl=[${ROUTER_IMPL}]"
-  "router_use_hidden=true"
-  "++search.router_use_hidden=[true]"
-  "router_use_feature=true"
-  "++search.router_use_feature=[true]"
+  "router_use_hidden=${ROUTER_USE_HIDDEN}"
+  "++search.router_use_hidden=[${ROUTER_USE_HIDDEN}]"
+  "router_use_feature=${ROUTER_USE_FEATURE}"
+  "++search.router_use_feature=[${ROUTER_USE_FEATURE}]"
   "expert_use_hidden=true"
   "++search.expert_use_hidden=[true]"
   "expert_use_feature=true"
@@ -495,6 +569,16 @@ cmd=(
   "++search.moe_block_variant=[${MOE_BLOCK_VARIANT}]"
   "router_group_feature_mode=${ROUTER_GROUP_FEATURE_MODE}"
   "++search.router_group_feature_mode=[${ROUTER_GROUP_FEATURE_MODE}]"
+  "router_feature_proj_dim=${ROUTER_FEATURE_PROJ_DIM}"
+  "++search.router_feature_proj_dim=[${ROUTER_FEATURE_PROJ_DIM}]"
+  "router_feature_proj_layers=${ROUTER_FEATURE_PROJ_LAYERS}"
+  "++search.router_feature_proj_layers=[${ROUTER_FEATURE_PROJ_LAYERS}]"
+  "router_feature_scale=${ROUTER_FEATURE_SCALE}"
+  "++search.router_feature_scale=[${ROUTER_FEATURE_SCALE}]"
+  "router_hidden_scale=${ROUTER_HIDDEN_SCALE}"
+  "++search.router_hidden_scale=[${ROUTER_HIDDEN_SCALE}]"
+  "router_group_feature_scale=${ROUTER_GROUP_FEATURE_SCALE}"
+  "++search.router_group_feature_scale=[${ROUTER_GROUP_FEATURE_SCALE}]"
   "rule_bias_scale=${RULE_BIAS_SCALE}"
   "++search.rule_bias_scale=[${RULE_BIAS_SCALE}]"
   "rule_router.variant=${RULE_VARIANT}"
@@ -521,6 +605,10 @@ cmd=(
   "++search.gate_entropy_lambda=[${GATE_ENTROPY_LAMBDA}]"
   "gate_entropy_until=${GATE_ENTROPY_UNTIL}"
   "++search.gate_entropy_until=[${GATE_ENTROPY_UNTIL}]"
+  "rule_agreement_lambda=${RULE_AGREEMENT_LAMBDA}"
+  "++search.rule_agreement_lambda=[${RULE_AGREEMENT_LAMBDA}]"
+  "group_coverage_lambda=${GROUP_COVERAGE_LAMBDA}"
+  "++search.group_coverage_lambda=[${GROUP_COVERAGE_LAMBDA}]"
   "++search.learning_rate=${LR_SPACE}"
   "++search.weight_decay=${WD_SPACE}"
   "++search.hidden_dropout_prob=${DROPOUT_SPACE}"
@@ -536,6 +624,16 @@ cmd=(
   "++search.fmoe_schedule_enable=[${FMOE_SCHEDULE_ENABLE}]"
   "stage_inter_layer_style=${STAGE_INTER_LAYER_STYLE}"
   "++search.stage_inter_layer_style=[${STAGE_INTER_LAYER_STYLE}]"
+  "lr_scheduler_type=${LR_SCHEDULER_TYPE}"
+  "++search.lr_scheduler_type=[${LR_SCHEDULER_TYPE}]"
+  "lr_scheduler_warmup_ratio=${LR_SCHEDULER_WARMUP_RATIO}"
+  "++search.lr_scheduler_warmup_ratio=[${LR_SCHEDULER_WARMUP_RATIO}]"
+  "lr_scheduler_min_lr_ratio=${LR_SCHEDULER_MIN_LR_RATIO}"
+  "++search.lr_scheduler_min_lr_ratio=[${LR_SCHEDULER_MIN_LR_RATIO}]"
+  "lr_scheduler_plateau_factor=${LR_SCHEDULER_PLATEAU_FACTOR}"
+  "++search.lr_scheduler_plateau_factor=[${LR_SCHEDULER_PLATEAU_FACTOR}]"
+  "lr_scheduler_plateau_patience=${LR_SCHEDULER_PLATEAU_PATIENCE}"
+  "++search.lr_scheduler_plateau_patience=[${LR_SCHEDULER_PLATEAU_PATIENCE}]"
   "alpha_warmup_until=0"
   "++search.alpha_warmup_until=[0]"
   "alpha_warmup_start=0.0"
@@ -580,7 +678,7 @@ fi
 
 CMD_STR="$(run_cmd_str "${cmd[@]}")"
 RUN_ID="$(run_tracker_start \
-  --track fmoe_n \
+  --track "$TRACK_GROUP" \
   --axis "$RUN_AXIS" \
   --phase "$PHASE" \
   --dataset "$DATASET" \
@@ -596,17 +694,19 @@ if [ "$LOG_WANDB" = "true" ]; then
   WANDB_DISABLED="false" \
   LOG_FILE="${LOG_FILE_PATH}" \
   PYTHONUNBUFFERED=1 \
-  FMOE_N_PHASE_SUMMARY="true" \
-  FMOE_N_SUMMARY_PHASE="${PHASE_BUCKET}" \
-  FMOE_N_SUMMARY_AXIS="${RUN_AXIS}" \
+  TRACK_PHASE_SUMMARY="true" \
+  TRACK_SUMMARY_PHASE="${PHASE_BUCKET}" \
+  TRACK_SUMMARY_AXIS="${RUN_AXIS}" \
+  TRACK_SUMMARY_SCRIPT="${SUMMARY_SCRIPT}" \
   "${cmd[@]}"
 else
   WANDB_DISABLED="true" \
   LOG_FILE="${LOG_FILE_PATH}" \
   PYTHONUNBUFFERED=1 \
-  FMOE_N_PHASE_SUMMARY="true" \
-  FMOE_N_SUMMARY_PHASE="${PHASE_BUCKET}" \
-  FMOE_N_SUMMARY_AXIS="${RUN_AXIS}" \
+  TRACK_PHASE_SUMMARY="true" \
+  TRACK_SUMMARY_PHASE="${PHASE_BUCKET}" \
+  TRACK_SUMMARY_AXIS="${RUN_AXIS}" \
+  TRACK_SUMMARY_SCRIPT="${SUMMARY_SCRIPT}" \
   "${cmd[@]}"
 fi
 RC=$?
@@ -618,10 +718,10 @@ else
   STATUS="fail"
 fi
 
-RESULT_DIR="$(run_results_dir fmoe_n)"
+RESULT_DIR="$(run_results_dir "${TRACK_GROUP}")"
 PHASE_SLUG="$(phase_slug "$PHASE")"
 RESULT_MIRROR_DIR="${RESULT_DIR}/normal/${RUN_AXIS}/${PHASE_BUCKET}/${DATASET_DIR_NAME}/$(run_model_tag "$MODEL_TRACK_NAME")"
-RESULT_PATH="$("$PY_BIN" - <<'PY' "$RESULT_DIR" "$RESULT_MIRROR_DIR" "$DATASET" "$PHASE_SLUG"
+RESULT_PATH="$("$PY_BIN" - <<'PY' "$RESULT_DIR" "$RESULT_MIRROR_DIR" "$DATASET" "$PHASE_SLUG" "$TRACK_MODEL_CLASS"
 from pathlib import Path
 import sys
 
@@ -629,11 +729,12 @@ result_dir = Path(sys.argv[1])
 mirror_dir = Path(sys.argv[2])
 dataset = sys.argv[3]
 phase_slug = sys.argv[4]
+model_class = sys.argv[5]
 matches = []
 if mirror_dir.is_dir():
-    matches = sorted(mirror_dir.glob(f"{dataset}_FeaturedMoE_N_{phase_slug}_*.json"))
+    matches = sorted(mirror_dir.glob(f"{dataset}_{model_class}_{phase_slug}_*.json"))
 if not matches:
-    matches = sorted(result_dir.glob(f"{dataset}_FeaturedMoE_N_{phase_slug}_*.json"))
+    matches = sorted(result_dir.glob(f"{dataset}_{model_class}_{phase_slug}_*.json"))
 if matches:
     print(matches[-1])
 PY
@@ -645,7 +746,7 @@ fi
 
 run_tracker_end \
   --run-id "$RUN_ID" \
-  --track fmoe_n \
+  --track "$TRACK_GROUP" \
   --axis "$RUN_AXIS" \
   --phase "$PHASE" \
   --dataset "$DATASET" \
@@ -659,15 +760,16 @@ run_tracker_end \
   --exit-code "$RC"
 
 run_update_model_report \
-  fmoe_n \
-  FeaturedMoE_N \
-  "$(run_experiments_dir)/models/FeaturedMoE_N"
-run_update_track_report fmoe_n
+  "$TRACK_GROUP" \
+  "$TRACK_MODEL_CLASS" \
+  "$TRACK_MODEL_DIR"
+run_update_track_report "$TRACK_GROUP"
 
 if [ -f "$SUMMARY_SCRIPT" ]; then
-  FMOE_N_PHASE_SUMMARY="true" \
-  FMOE_N_SUMMARY_PHASE="${PHASE_BUCKET}" \
-  FMOE_N_SUMMARY_AXIS="${RUN_AXIS}" \
+  TRACK_PHASE_SUMMARY="true" \
+  TRACK_SUMMARY_PHASE="${PHASE_BUCKET}" \
+  TRACK_SUMMARY_AXIS="${RUN_AXIS}" \
+  TRACK_SUMMARY_SCRIPT="${SUMMARY_SCRIPT}" \
   "$PY_BIN" "$SUMMARY_SCRIPT" --phase "$PHASE_BUCKET" --axis "$RUN_AXIS" >/dev/null 2>&1 || true
 fi
 

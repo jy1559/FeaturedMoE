@@ -48,6 +48,7 @@ class StageRuntimeConfig:
     d_ff: int
     n_heads: int
     dropout: float
+    attn_dropout: float
     d_expert_hidden: int
     d_router_hidden: int
     expert_depth: int
@@ -114,6 +115,7 @@ def _build_inter_block(style: str, cfg: StageRuntimeConfig) -> nn.Module:
             n_layers=1,
             d_ff=cfg.d_ff,
             dropout=cfg.dropout,
+            attn_dropout=cfg.attn_dropout,
             ffn_moe=False,
         )
     if key == "identity":

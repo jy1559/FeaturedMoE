@@ -24,7 +24,13 @@ from .routers import Router, load_balance_loss
 # -----------------------------------------------------------------------
 
 class MultiHeadSelfAttention(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, dropout: float = 0.1):
+    def __init__(
+        self,
+        d_model: int,
+        n_heads: int,
+        dropout: float = 0.1,
+        attn_dropout: Optional[float] = None,
+    ):
         super().__init__()
         assert d_model % n_heads == 0
         self.d_model = d_model
@@ -35,7 +41,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.Wk = nn.Linear(d_model, d_model)
         self.Wv = nn.Linear(d_model, d_model)
         self.Wo = nn.Linear(d_model, d_model)
-        self.attn_drop = nn.Dropout(dropout)
+        self.attn_drop = nn.Dropout(float(dropout if attn_dropout is None else attn_dropout))
 
     def forward(
         self,
@@ -106,9 +112,16 @@ class PositionwiseFFN(nn.Module):
 # -----------------------------------------------------------------------
 
 class TransformerBlock(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, d_ff: int, dropout: float = 0.1):
+    def __init__(
+        self,
+        d_model: int,
+        n_heads: int,
+        d_ff: int,
+        dropout: float = 0.1,
+        attn_dropout: Optional[float] = None,
+    ):
         super().__init__()
-        self.attn = MultiHeadSelfAttention(d_model, n_heads, dropout)
+        self.attn = MultiHeadSelfAttention(d_model, n_heads, dropout, attn_dropout)
         self.ffn = PositionwiseFFN(d_model, d_ff, dropout)
         self.ln1 = nn.LayerNorm(d_model)
         self.ln2 = nn.LayerNorm(d_model)
@@ -179,9 +192,10 @@ class MoETransformerBlock(nn.Module):
         n_ffn_experts: int = 4,
         ffn_top_k: Optional[int] = None,
         dropout: float = 0.1,
+        attn_dropout: Optional[float] = None,
     ):
         super().__init__()
-        self.attn = MultiHeadSelfAttention(d_model, n_heads, dropout)
+        self.attn = MultiHeadSelfAttention(d_model, n_heads, dropout, attn_dropout)
         self.moe_ffn = MoEFFN(d_model, d_ff, n_ffn_experts, ffn_top_k, dropout)
         self.ln1 = nn.LayerNorm(d_model)
         self.ln2 = nn.LayerNorm(d_model)
@@ -218,6 +232,7 @@ class TransformerEncoder(nn.Module):
         n_layers: int,
         d_ff: Optional[int] = None,
         dropout: float = 0.1,
+        attn_dropout: Optional[float] = None,
         ffn_moe: bool = False,
         n_ffn_experts: int = 4,
         ffn_top_k: Optional[int] = None,
@@ -229,12 +244,12 @@ class TransformerEncoder(nn.Module):
 
         if ffn_moe:
             self.layers = nn.ModuleList([
-                MoETransformerBlock(d_model, n_heads, d_ff, n_ffn_experts, ffn_top_k, dropout)
+                MoETransformerBlock(d_model, n_heads, d_ff, n_ffn_experts, ffn_top_k, dropout, attn_dropout)
                 for _ in range(n_layers)
             ])
         else:
             self.layers = nn.ModuleList([
-                TransformerBlock(d_model, n_heads, d_ff, dropout)
+                TransformerBlock(d_model, n_heads, d_ff, dropout, attn_dropout)
                 for _ in range(n_layers)
             ])
 

@@ -101,6 +101,10 @@ _FEATURE_AWARE_MOE_MODELS = {
     "featuredmoe_v4_distillation",
     "featured_moe_n",
     "featuredmoe_n",
+    "featured_moe_n2",
+    "featuredmoe_n2",
+    "featured_moe_n3",
+    "featuredmoe_n3",
 }
 
 _FEATURED_MOE_V2_MODELS = {
@@ -117,6 +121,10 @@ _FEATURED_MOE_V2_MODELS = {
     "featuredmoe_v4_distillation",
     "featured_moe_n",
     "featuredmoe_n",
+    "featured_moe_n2",
+    "featuredmoe_n2",
+    "featured_moe_n3",
+    "featuredmoe_n3",
 }
 _WANDB_MODULE = None
 _WANDB_IMPORT_ERROR = ""
@@ -346,7 +354,14 @@ def _is_large_dataset_cache_target(cfg_dict):
         return False
     raw = cfg_dict.get(
         "large_dataset_cache_datasets",
-        ["lastfm", "lastfm0.3", "kuairec", "kuairec0.3"],
+        [
+            "lastfm",
+            "lastfm0.3",
+            "kuairec",
+            "kuairec0.3",
+            "kuaireclargestrictposv2",
+            "kuaireclargestrictposv2_0.2",
+        ],
     )
     if isinstance(raw, str):
         ds_list = [x.strip().lower() for x in raw.split(",") if x.strip()]
@@ -1041,8 +1056,12 @@ def main():
             'foursquare': 'NYC', 
             'kuairec': 'KUA',
             'kuairec0.3': 'KU3',
+            'kuaireclargestrictposv2': 'KSP',
+            'kuaireclargestrictposv2_0.2': 'KSP2',
+            'kuairecsmall0.1': 'KU01',
             'lastfm': 'LFM',
             'lastfm0.3': 'LF3',
+            'lastfm0.03': 'LF03',
             'movielens1m': 'ML1',
             'retail_rocket': 'ReR',
         }.get(dataset.lower(), dataset[:3].upper())

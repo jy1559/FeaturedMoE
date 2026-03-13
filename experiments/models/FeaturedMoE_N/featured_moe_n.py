@@ -87,8 +87,9 @@ class FeaturedMoE_N(SequentialRecommender):
             raise ValueError(f"expert_scale must be >= 1, got {self.expert_scale}")
 
         self.n_heads = int(resolver.get("num_heads", 8))
-        self.d_ff = int(resolver.get("d_ff", 0) or (4 * self.d_model))
+        self.d_ff = int(resolver.get("d_ff", 0) or (2 * self.d_model))
         self.dropout = float(resolver.get("hidden_dropout_prob", 0.1))
+        self.attn_dropout = float(resolver.get("attn_dropout_prob", self.dropout))
         self.max_seq_length = int(resolver.get("MAX_ITEM_LIST_LENGTH", 10))
 
         raw_catalog = parse_layout_catalog_from_config(resolver)
@@ -250,6 +251,7 @@ class FeaturedMoE_N(SequentialRecommender):
                 n_layers=self.layout.global_pre_layers,
                 d_ff=self.d_ff,
                 dropout=self.dropout,
+                attn_dropout=self.attn_dropout,
                 ffn_moe=False,
             )
         else:
@@ -261,6 +263,7 @@ class FeaturedMoE_N(SequentialRecommender):
             n_layers=self.layout.global_post_layers,
             d_ff=self.d_ff,
             dropout=self.dropout,
+            attn_dropout=self.attn_dropout,
             ffn_moe=self.ffn_moe,
             n_ffn_experts=self.n_ffn_experts,
             ffn_top_k=self.ffn_top_k,
@@ -290,6 +293,7 @@ class FeaturedMoE_N(SequentialRecommender):
             feature_bank_dim=self.feature_encoder.bank_dim,
             stage_top_k=self.moe_top_k,
             dropout=self.dropout,
+            attn_dropout=self.attn_dropout,
             n_heads=self.n_heads,
             d_ff=self.d_ff,
             col2idx=col2idx,

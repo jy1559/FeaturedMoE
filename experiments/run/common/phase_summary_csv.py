@@ -538,10 +538,11 @@ def build_baseline_summary(dataset: str, phase: str) -> Path:
     return out_path
 
 
-def build_fmoe_n_summaries(axis: str, phase: str) -> list[Path]:
+def build_fmoe_track_summaries(track: str, axis: str, phase: str, *, model_label: str) -> list[Path]:
+    track = str(track).strip() or "fmoe_n"
     axis = str(axis).strip() or "hparam"
     phase = str(phase).strip()
-    phase_dir = _logs_root() / "fmoe_n" / axis / phase
+    phase_dir = _logs_root() / track / axis / phase
 
     runs_by_dataset: dict[str, list[RunSummary]] = {}
     if phase_dir.exists():
@@ -551,24 +552,28 @@ def build_fmoe_n_summaries(axis: str, phase: str) -> list[Path]:
                 text = log_path.read_text(encoding="utf-8", errors="replace")
             except Exception:
                 text = ""
+            if not text.strip():
+                continue
 
             dataset = _parse_fmoe_n_dataset(text, log_path)
             run_phase = _parse_run_phase(text, phase)
             combo_id = _parse_combo_id(run_phase, log_path.name)
             fixed = _parse_fixed_params(text)
             trials = _parse_trials(text)
+            if dataset == "unknown" and not trials:
+                continue
             runs_by_dataset.setdefault(dataset, []).append(
                 RunSummary(
                     dataset=dataset,
-                    model="FeaturedMoE_N",
-                    group_key="FeaturedMoE_N",
+                    model=model_label,
+                    group_key=model_label,
                     experiment_note=_fmoe_n_note(fixed, combo_id),
                     log_rel_path=str(log_path.relative_to(phase_dir)),
                     run_phase=run_phase,
                     status=_parse_status(text),
                     trials=trials,
                     run_best=_compute_run_best(trials),
-                    sort_group=("FeaturedMoE_N",),
+                    sort_group=(model_label,),
                     sort_run=(_combo_sort_key(combo_id, default_idx), str(log_path.relative_to(phase_dir))),
                 )
             )
@@ -580,3 +585,61 @@ def build_fmoe_n_summaries(axis: str, phase: str) -> list[Path]:
         _write_csv(out_path, _serialize_rows(rows, FMOE_N_KNOB_ALIASES))
         written.append(out_path)
     return sorted(written)
+
+
+def build_fmoe_n_summaries(axis: str, phase: str) -> list[Path]:
+    return build_fmoe_track_summaries("fmoe_n", axis, phase, model_label="FeaturedMoE_N")
+
+
+def build_fmoe_n2_summaries(axis: str, phase: str) -> list[Path]:
+    return build_fmoe_track_summaries("fmoe_n2", axis, phase, model_label="FeaturedMoE_N2")
+
+
+def build_fmoe_n3_summaries(axis: str, phase: str) -> list[Path]:
+    return build_fmoe_track_summaries("fmoe_n3", axis, phase, model_label="FeaturedMoE_N3")
+
+
+def build_fmoe_n3_axis_summary(axis: str) -> Path:
+    axis = str(axis).strip() or "core_ablation_v1"
+    axis_dir = _logs_root() / "fmoe_n3" / axis
+    out_path = axis_dir / f"{axis}_summary.csv"
+
+    runs: list[RunSummary] = []
+    if axis_dir.exists():
+        log_paths = sorted(axis_dir.rglob("*.log"), key=lambda path: str(path.relative_to(axis_dir)))
+        for default_idx, log_path in enumerate(log_paths, start=100000):
+            try:
+                text = log_path.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                text = ""
+            if not text.strip():
+                continue
+
+            rel_path = log_path.relative_to(axis_dir)
+            fallback_phase = rel_path.parts[0] if rel_path.parts else axis
+            dataset = _parse_fmoe_n_dataset(text, log_path)
+            run_phase = _parse_run_phase(text, fallback_phase)
+            combo_id = _parse_combo_id(run_phase, log_path.name)
+            fixed = _parse_fixed_params(text)
+            trials = _parse_trials(text)
+            if dataset == "unknown" and not trials:
+                continue
+            runs.append(
+                RunSummary(
+                    dataset=dataset,
+                    model="FeaturedMoE_N3",
+                    group_key="FeaturedMoE_N3",
+                    experiment_note=_fmoe_n_note(fixed, combo_id),
+                    log_rel_path=str(rel_path),
+                    run_phase=run_phase,
+                    status=_parse_status(text),
+                    trials=trials,
+                    run_best=_compute_run_best(trials),
+                    sort_group=(dataset, "FeaturedMoE_N3"),
+                    sort_run=(_combo_sort_key(combo_id, default_idx), str(rel_path)),
+                )
+            )
+
+    rows = _build_milestone_rows(runs)
+    _write_csv(out_path, _serialize_rows(rows, FMOE_N_KNOB_ALIASES))
+    return out_path

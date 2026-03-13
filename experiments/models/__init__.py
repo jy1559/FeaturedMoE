@@ -19,6 +19,8 @@ from .FeaturedMoE_v2 import FeaturedMoE_V2
 from .FeaturedMoE_v3 import FeaturedMoE_V3
 from .FeaturedMoE_v4_Distillation import FeaturedMoE_V4_Distillation
 from .FeaturedMoE_N import FeaturedMoE_N
+from .FeaturedMoE_N2 import FeaturedMoE_N2
+from .FeaturedMoE_N3 import FeaturedMoE_N3
 
 __all__ = [
 	"BiLSTM",
@@ -37,4 +39,6 @@ __all__ = [
 	"FeaturedMoE_V3",
 	"FeaturedMoE_V4_Distillation",
 	"FeaturedMoE_N",
+	"FeaturedMoE_N2",
+	"FeaturedMoE_N3",
 ]

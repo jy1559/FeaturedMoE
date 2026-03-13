@@ -24,10 +24,46 @@ MANIFEST_OUT=""
 
 usage() {
   cat <<USAGE
-Usage: $0 [--dataset KuaiRecSmall0.1|lastfm0.03] [--gpus 0,1,2,3] [--state-tag S01_layout_lite_v1]
+Usage: $0 [--dataset KuaiRecSmall0.1|KuaiRecLargeStrictPosV2_0.2|lastfm0.03] [--gpus 0,1,2,3] [--state-tag S01_layout_lite_v1]
           [--phase-prefix ARCH3] [--max-evals 4] [--tune-epochs 100] [--tune-patience 10]
           [--waves 1,2,3,4,5,6,7] [--manifest-out path] [--dry-run]
 USAGE
+}
+
+emit_kuai_combo_table() {
+  local dataset="$1"
+  local train_bs="$2"
+  local eval_bs="$3"
+  cat <<'EOF' | sed -e "s#__DATASET__#${dataset}#g" -e "s#__TRAIN_BS__#${train_bs}#g" -e "s#__EVAL_BS__#${eval_bs}#g"
+A01|__DATASET__|1|plain|8|serial|__TRAIN_BS__|__EVAL_BS__|2.5e-4|6.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|none|0.0|0.0|0.0|attn|anchor_plain_l8_attn_moe
+A02|__DATASET__|1|plain|30|serial|__TRAIN_BS__|__EVAL_BS__|2.5e-4|6.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|none|0.0|0.0|0.0|attn|anchor_plain_l30_attn_moe
+A03|__DATASET__|1|plain|7|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|5.5e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|none|0.0|0.0|0.0|attn|anchor_plain_l7_attn_moe
+A04|__DATASET__|1|plain|16|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|5.5e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|none|0.0|0.0|0.0|attn|anchor_plain_l16_attn_moe
+A05|__DATASET__|2|plain|8|serial|__TRAIN_BS__|__EVAL_BS__|4.5e-4|1.2e-2|16|128|3|0|auto|linear|0.0|learned|{}|0.0|dense_ffn|none|0.0|0.0|0.0|attn|moe_off_l8_attn_dense_ffn
+A06|__DATASET__|2|plain|30|serial|__TRAIN_BS__|__EVAL_BS__|4.5e-4|1.0e-2|16|128|3|0|auto|linear|0.0|learned|{}|0.0|dense_ffn|none|0.0|0.0|0.0|attn|moe_off_l30_attn_dense_ffn
+A07|__DATASET__|2|plain|7|serial|__TRAIN_BS__|__EVAL_BS__|4.0e-4|1.0e-2|16|128|3|0|auto|linear|0.0|learned|{}|0.0|dense_ffn|none|0.0|0.0|0.0|attn|moe_off_l7_attn_dense_ffn
+A08|__DATASET__|2|plain|16|serial|__TRAIN_BS__|__EVAL_BS__|4.0e-4|9.0e-3|16|128|3|0|auto|linear|0.0|learned|{}|0.0|dense_ffn|none|0.0|0.0|0.0|attn|moe_off_l16_attn_dense_ffn
+A09|__DATASET__|3|plain|8|serial|__TRAIN_BS__|__EVAL_BS__|6.0e-4|1.5e-2|16|128|3|0|auto|linear|0.0|learned|{}|0.0|identity|none|0.0|0.0|0.0|attn|pure_attention_l8
+A10|__DATASET__|3|plain|30|serial|__TRAIN_BS__|__EVAL_BS__|6.0e-4|1.3e-2|16|128|3|0|auto|linear|0.0|learned|{}|0.0|identity|none|0.0|0.0|0.0|attn|pure_attention_l30
+A11|__DATASET__|3|plain|7|serial|__TRAIN_BS__|__EVAL_BS__|5.0e-4|1.2e-2|16|128|3|0|auto|linear|0.0|learned|{}|0.0|identity|none|0.0|0.0|0.0|attn|pure_attention_l7
+A12|__DATASET__|3|plain|16|serial|__TRAIN_BS__|__EVAL_BS__|5.0e-4|1.1e-2|16|128|3|0|auto|linear|0.0|learned|{}|0.0|identity|none|0.0|0.0|0.0|attn|pure_attention_l16
+A13|__DATASET__|4|rule|8|serial|__TRAIN_BS__|__EVAL_BS__|3.0e-4|7.0e-3|16|128|3|0|auto|linear|0.002|rule_soft|{}|0.0|moe|none|0.0|0.0|0.0|attn|full_rule_l8
+A14|__DATASET__|4|rule|30|serial|__TRAIN_BS__|__EVAL_BS__|3.0e-4|7.0e-3|16|128|3|0|auto|linear|0.002|rule_soft|{}|0.0|moe|none|0.0|0.0|0.0|attn|full_rule_l30
+A15|__DATASET__|4|rule|7|serial|__TRAIN_BS__|__EVAL_BS__|2.5e-4|6.0e-3|16|128|3|0|auto|linear|0.002|rule_soft|{}|0.0|moe|none|0.0|0.0|0.0|attn|full_rule_l7
+A16|__DATASET__|4|rule|16|serial|__TRAIN_BS__|__EVAL_BS__|2.5e-4|6.0e-3|16|128|3|0|auto|linear|0.002|rule_soft|{}|0.0|moe|none|0.0|0.0|0.0|attn|full_rule_l16
+A17|__DATASET__|5|hybrid|8|serial|__TRAIN_BS__|__EVAL_BS__|2.5e-4|6.0e-3|16|128|3|0|auto|linear|0.002|learned|{mid:rule_soft,micro:rule_soft}|0.0|moe|none|0.0|0.0|0.0|attn|hybrid_l8_attn_moe
+A18|__DATASET__|5|hybrid|30|serial|__TRAIN_BS__|__EVAL_BS__|2.5e-4|6.0e-3|16|128|3|0|auto|linear|0.002|learned|{mid:rule_soft,micro:rule_soft}|0.0|moe|none|0.0|0.0|0.0|attn|hybrid_l30_attn_moe
+A19|__DATASET__|5|plain|19|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|5.0e-3|16|128|3|0|auto|linear|0.0|learned|{}|0.0|moe|none|0.0|0.0|0.0|attn|heavy_plain_l19_balance0
+A20|__DATASET__|5|hybrid|19|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|5.0e-3|16|128|3|0|auto|linear|0.004|learned|{mid:rule_soft,micro:rule_soft}|0.0|moe|none|0.0|0.0|0.0|attn|heavy_hybrid_l19_balance4e3
+A21|__DATASET__|6|plain|8|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|4.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|none|1.0e-4|0.0|0.0|attn|zloss_plain_l8
+A22|__DATASET__|6|plain|30|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|4.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|none|1.0e-4|0.0|0.0|attn|zloss_plain_l30
+A23|__DATASET__|6|plain|8|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|4.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|none|0.0|4.0e-4|0.25|attn|entropy_plain_l8
+A24|__DATASET__|6|plain|30|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|4.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|none|0.0|4.0e-4|0.25|attn|entropy_plain_l30
+A25|__DATASET__|7|plain|8|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|4.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|mean|1.0e-4|0.0|0.0|attn|groupmean_zloss_plain_l8
+A26|__DATASET__|7|plain|30|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|4.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.0|moe|mean|1.0e-4|0.0|0.0|attn|groupmean_zloss_plain_l30
+A27|__DATASET__|7|bias|8|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|4.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.15|moe|mean_std|0.0|4.0e-4|0.25|attn|groupmeanstd_entropy_bias_l8
+A28|__DATASET__|7|hybrid|16|serial|__TRAIN_BS__|__EVAL_BS__|2.0e-4|3.5e-3|16|128|3|0|auto|linear|0.004|learned|{mid:rule_soft,micro:rule_soft}|0.0|moe|mean_std|1.0e-4|4.0e-4|0.25|attn|groupmeanstd_hybrid_l16_fullreg
+EOF
 }
 
 combo_table() {
@@ -95,6 +131,9 @@ A26|lastfm0.03|7|plain|30|serial|4096|4096|1.0e-4|1.0e-3|16|128|3|0|auto|linear|
 A27|lastfm0.03|7|bias|8|serial|4096|4096|1.0e-4|1.0e-3|16|128|3|0|auto|linear|0.002|learned|{}|0.15|moe|mean_std|0.0|4.0e-4|0.25|attn|groupmeanstd_entropy_bias_l8
 A28|lastfm0.03|7|hybrid|16|serial|4096|4096|1.0e-4|9.0e-4|16|128|3|0|auto|linear|0.004|learned|{mid:rule_soft,micro:rule_soft}|0.0|moe|mean_std|1.0e-4|4.0e-4|0.25|attn|groupmeanstd_hybrid_l16_fullreg
 EOF
+      ;;
+    KuaiRecLargeStrictPosV2_0.2|kuaireclargestrictposv2_0.2)
+      emit_kuai_combo_table "KuaiRecLargeStrictPosV2_0.2" "4096" "8192"
       ;;
     *)
       echo "Unsupported dataset for phase_arch_probe.sh: $DATASET" >&2

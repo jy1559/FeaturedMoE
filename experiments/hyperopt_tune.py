@@ -90,6 +90,8 @@ import gc
 import importlib
 import io
 import json
+import gzip
+import csv
 import time
 import argparse
 import warnings
@@ -130,6 +132,10 @@ _FEATURE_AWARE_MOE_MODELS = {
     "featuredmoe_v4_distillation",
     "featured_moe_n",
     "featuredmoe_n",
+    "featured_moe_n2",
+    "featuredmoe_n2",
+    "featured_moe_n3",
+    "featuredmoe_n3",
 }
 
 _FEATURED_MOE_V2_MODELS = {
@@ -146,6 +152,10 @@ _FEATURED_MOE_V2_MODELS = {
     "featuredmoe_v4_distillation",
     "featured_moe_n",
     "featuredmoe_n",
+    "featured_moe_n2",
+    "featuredmoe_n2",
+    "featured_moe_n3",
+    "featuredmoe_n3",
 }
 
 
@@ -374,6 +384,10 @@ def _canonical_dataset_name(name: str) -> str:
         return raw
     mapping = {
         "kuairec0.3": "kuairec0.3",
+        "kuairecsmall0.1": "KuaiRecSmall0.1",
+        "kuaireclargestrictposv2": "KuaiRecLargeStrictPosV2",
+        "kuaireclargestrictposv2_0.2": "KuaiRecLargeStrictPosV2_0.2",
+        "lastfm0.03": "lastfm0.03",
     }
     return mapping.get(raw.lower(), raw)
 
@@ -386,7 +400,14 @@ def _is_large_dataset_cache_target(cfg_dict):
         return False
     raw = cfg_dict.get(
         "large_dataset_cache_datasets",
-        ["lastfm", "lastfm0.3", "kuairec", "kuairec0.3"],
+        [
+            "lastfm",
+            "lastfm0.3",
+            "kuairec",
+            "kuairec0.3",
+            "kuaireclargestrictposv2",
+            "kuaireclargestrictposv2_0.2",
+        ],
     )
     if isinstance(raw, str):
         ds_list = [x.strip().lower() for x in raw.split(",") if x.strip()]
@@ -737,19 +758,57 @@ def _print_grouped_params(
 
 
 def _layout_catalog_from_cfg(cfg: dict) -> list | None:
+    def _with_n2_controls(catalog_obj):
+        if not isinstance(catalog_obj, list):
+            return catalog_obj
+        model_name = str(cfg.get("model", "")).lower()
+        if "featured_moe_n2" not in model_name and "featuredmoe_n2" not in model_name:
+            return catalog_obj
+        catalog = copy.deepcopy(catalog_obj)
+        known = {str(entry.get("id", "")).strip() for entry in catalog if isinstance(entry, dict)}
+        if "L34" not in known:
+            catalog.append(
+                {
+                    "id": "L34",
+                    "execution": "serial",
+                    "global_pre_layers": 1,
+                    "global_post_layers": 0,
+                    "stages": {
+                        "macro": {"pass_layers": 0, "moe_blocks": 1},
+                        "mid": {"pass_layers": 0, "moe_blocks": 0},
+                        "micro": {"pass_layers": 0, "moe_blocks": 0},
+                    },
+                }
+            )
+        if "L35" not in known:
+            catalog.append(
+                {
+                    "id": "L35",
+                    "execution": "serial",
+                    "global_pre_layers": 1,
+                    "global_post_layers": 0,
+                    "stages": {
+                        "macro": {"pass_layers": 0, "moe_blocks": 1},
+                        "mid": {"pass_layers": 0, "moe_blocks": 1},
+                        "micro": {"pass_layers": 0, "moe_blocks": 0},
+                    },
+                }
+            )
+        return catalog
+
     catalog = cfg.get("fmoe_v2_layout_catalog")
     if isinstance(catalog, list):
-        return catalog
+        return _with_n2_controls(catalog)
 
     layout_execution = cfg.get("layout_execution")
     if isinstance(layout_execution, dict):
         catalog = layout_execution.get("fmoe_v2_layout_catalog")
         if isinstance(catalog, list):
-            return catalog
+            return _with_n2_controls(catalog)
 
     catalog = cfg.get("arch_layout_catalog")
     if isinstance(catalog, list):
-        return catalog
+        return _with_n2_controls(catalog)
     return None
 
 
@@ -927,6 +986,8 @@ def _dataset_tag(raw: str) -> str:
         "lastfm0.03": "LF03",
         "kuairec0.3": "KU3",
         "kuairecsmall0.1": "KU01",
+        "kuaireclargestrictposv2": "KUL",
+        "kuaireclargestrictposv2_0.2": "KUL02",
         "amazon_beauty": "AMA",
         "amazonbeauty": "AMA",
     }
@@ -974,6 +1035,10 @@ def _model_tag(raw: str) -> str:
         return "FMoEHiR"
     if "featured_moe_v2" in key or "featuredmoe_v2" in key:
         return "FMoEv2"
+    if "featured_moe_n2" in key or "featuredmoe_n2" in key:
+        return "FMoEN2"
+    if "featured_moe_n3" in key or "featuredmoe_n3" in key:
+        return "FMoEN3"
     if "featuredmoe" in key or "featured_moe" in key:
         return "FMoE"
     return _safe_slug(raw)
@@ -1025,6 +1090,95 @@ def _artifact_mirror_paths(
 def _write_json_file(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, default=_ser) + "\n", encoding="utf-8")
+
+
+def _write_json_gz_file(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(path, "wt", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, default=_ser)
+        f.write("\n")
+
+
+def _write_csv_gz_file(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = sorted({key for row in rows for key in row.keys()})
+    with gzip.open(path, "wt", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: _ser(v) for k, v in row.items()})
+
+
+def _write_csv_file(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = sorted({key for row in rows for key in row.keys()})
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: _ser(v) for k, v in row.items()})
+
+
+def _diag_artifact_paths(
+    result_file: Path,
+    dataset: str,
+    model: str,
+    run_group: str,
+    run_axis: str,
+    run_phase: str,
+) -> dict[str, Path]:
+    dataset_dir = _safe_slug(_canonical_dataset_name(dataset))
+    model_tag = _model_tag(model)
+    axis_tag = _safe_slug(run_axis or "axis")
+    phase_bucket = _phase_bucket(run_phase)
+    diag_root = result_file.parent / "diag" / axis_tag / phase_bucket / dataset_dir / model_tag
+    return {
+        "trial_summary": diag_root / "trial_summary.csv",
+        "best_valid_diag": diag_root / "best_valid_diag.json.gz",
+        "test_diag": diag_root / "test_diag.json.gz",
+        "collapse_diag": diag_root / "collapse_diag.json.gz",
+        "epoch_trace": diag_root / "epoch_trace.csv.gz",
+    }
+
+
+def _diag_scalar_metrics(diag_payload: dict | None) -> dict:
+    if not isinstance(diag_payload, dict):
+        return {}
+    return dict(diag_payload.get("scalar_metrics", {}) or {})
+
+
+def _top1_share_from_diag(diag_payload: dict | None) -> dict[str, list[float]]:
+    if not isinstance(diag_payload, dict):
+        return {}
+    out = {}
+    for stage_key, stage_payload in dict(diag_payload.get("stage_metrics", {}) or {}).items():
+        counts = stage_payload.get("top1_count", []) or []
+        total = float(sum(float(v) for v in counts))
+        if total <= 0:
+            continue
+        out[stage_key] = [float(v) / total for v in counts]
+    return out
+
+
+def _compute_route_change_metric(normal_diag: dict | None, perturbed_diag: dict | None) -> float:
+    normal = _top1_share_from_diag(normal_diag)
+    perturbed = _top1_share_from_diag(perturbed_diag)
+    scores = []
+    for stage_key, probs in normal.items():
+        alt = perturbed.get(stage_key)
+        if not alt or len(alt) != len(probs):
+            continue
+        scores.append(sum(abs(float(a) - float(b)) for a, b in zip(probs, alt)) / 2.0)
+    return float(sum(scores) / len(scores)) if scores else 0.0
+
+
+def _select_sparse_epoch_trace(rows: list[dict], best_epoch: int | None) -> list[dict]:
+    if not rows:
+        return []
+    keep_epochs = {1, 3, 10, rows[-1].get("epoch")}
+    if best_epoch is not None:
+        keep_epochs.add(int(best_epoch))
+    return [row for row in rows if int(row.get("epoch", 0) or 0) in keep_epochs]
 
 
 def _build_special_metrics_payload(
@@ -1190,6 +1344,22 @@ def _extract_featured_moe_arch(model, cfg: dict) -> dict:
         "router_impl_by_stage",
         "rule_router_cfg",
         "stage_inter_layer_style",
+        "moe_block_variant",
+        "router_group_feature_mode",
+        "router_use_hidden",
+        "router_use_feature",
+        "router_feature_proj_dim",
+        "router_feature_proj_layers",
+        "router_feature_scale",
+        "router_hidden_scale",
+        "router_group_feature_scale",
+        "rule_agreement_lambda",
+        "group_coverage_lambda",
+        "lr_scheduler_type",
+        "lr_scheduler_warmup_ratio",
+        "lr_scheduler_min_lr_ratio",
+        "lr_scheduler_plateau_factor",
+        "lr_scheduler_plateau_patience",
         "arch_state_tag",
         "arch_variant_tag",
         "n_pre_layer",
@@ -1227,6 +1397,22 @@ def _extract_context_fixed(cfg: dict) -> dict:
         "router_impl_by_stage",
         "rule_router",
         "stage_inter_layer_style",
+        "moe_block_variant",
+        "router_group_feature_mode",
+        "router_use_hidden",
+        "router_use_feature",
+        "router_feature_proj_dim",
+        "router_feature_proj_layers",
+        "router_feature_scale",
+        "router_hidden_scale",
+        "router_group_feature_scale",
+        "rule_agreement_lambda",
+        "group_coverage_lambda",
+        "lr_scheduler_type",
+        "lr_scheduler_warmup_ratio",
+        "lr_scheduler_min_lr_ratio",
+        "lr_scheduler_plateau_factor",
+        "lr_scheduler_plateau_patience",
         "arch_state_tag",
         "arch_variant_tag",
         "num_layers",
@@ -1408,13 +1594,37 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     trainer = trainer_cls(config, model)
     setattr(trainer, "_disable_patch_logging", True)
     special_logging_enabled = bool(_config_get(config, "special_logging", cfg.get("special_logging", False)))
+    diag_logging_enabled = False
+    eval_logging_timing = "per_eval"
+    feature_ablation_logging_enabled = False
     if model_name in _FEATURE_AWARE_MOE_MODELS:
         special_logging_enabled = special_logging_enabled or bool(
             _config_get(config, "fmoe_special_logging", cfg.get("fmoe_special_logging", True))
         )
+        diag_logging_enabled = bool(
+            _config_get(config, "fmoe_diag_logging", cfg.get("fmoe_diag_logging", True))
+        )
+        eval_logging_timing = str(
+            _config_get(config, "fmoe_eval_logging_timing", cfg.get("fmoe_eval_logging_timing", "final_only"))
+        ).strip().lower() or "final_only"
+        if eval_logging_timing not in {"per_eval", "final_only"}:
+            eval_logging_timing = "final_only"
+        feature_ablation_logging_enabled = bool(
+            _config_get(
+                config,
+                "fmoe_feature_ablation_logging",
+                cfg.get("fmoe_feature_ablation_logging", False),
+            )
+        )
     best_valid_special_metrics = None
-    last_valid_special_metrics = None
     test_special_metrics = None
+    best_valid_diag = None
+    test_diag = None
+    valid_zero_diag = None
+    valid_shuffle_diag = None
+    feature_ablation_metrics = {}
+    epoch_trace_rows: list[dict] = []
+    best_epoch = None
 
     # Sampled evaluation for large item sets
     n_items = dataset.item_num
@@ -1453,6 +1663,27 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     show_progress = bool(cfg.get("show_progress", True))
     early_stopped = False
     final_epoch = 0
+    lr_scheduler, lr_scheduler_type = _build_lr_scheduler(cfg, trainer, max_epochs=max_epochs)
+
+    def _run_eval(data_loader, *, split_name: str, collect_special: bool = True, collect_diag: bool = True):
+        eval_special = None
+        eval_diag = None
+        if collect_special and special_logging_enabled:
+            from recbole_patch import begin_special_eval
+            begin_special_eval(trainer, data_loader, split_name=split_name)
+        if collect_diag and diag_logging_enabled:
+            from recbole_patch import begin_diagnostic_eval
+            begin_diagnostic_eval(trainer, split_name=split_name)
+        eval_result = trainer._valid_epoch(data_loader, show_progress=show_progress)
+        if collect_special and special_logging_enabled:
+            from recbole_patch import end_special_eval
+            eval_special = end_special_eval(trainer)
+        if collect_diag and diag_logging_enabled:
+            from recbole_patch import end_diagnostic_eval
+            eval_diag = end_diagnostic_eval(trainer)
+        if isinstance(eval_result, tuple):
+            eval_result = next((x for x in eval_result if isinstance(x, dict)), eval_result[0])
+        return eval_result, eval_special, eval_diag
 
     t0 = time.time()
     try:
@@ -1492,9 +1723,13 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             if isinstance(train_loss, (tuple, list)):
                 train_loss = sum(float(x) for x in train_loss)
             train_loss = float(train_loss)
+            epoch_lr = _optimizer_current_lr(trainer.optimizer)
 
             should_eval = ((epoch + 1) % eval_every == 0) or (epoch + 1 == max_epochs)
             if not should_eval:
+                if lr_scheduler is not None and lr_scheduler_type in {"cosine", "warmup_cosine"}:
+                    lr_scheduler.step()
+                    epoch_lr = _optimizer_current_lr(trainer.optimizer)
                 if progress_cb is not None:
                     try:
                         progress_cb(
@@ -1507,6 +1742,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                                 "best_mrr20": float(best_mrr20) if best_mrr20 > -1e8 else 0.0,
                                 "patience_used": int(no_improve),
                                 "patience_total": int(patience),
+                                "lr": float(epoch_lr),
                             }
                         )
                     except Exception:
@@ -1516,30 +1752,50 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                     epoch_time = time.time() - epoch_start
                     print(
                         f"    Ep {epoch+1:>3}/{max_epochs:<3}\tSKIP@{eval_every}\t"
-                        f"train_loss {train_loss:7.4f}\tpat {no_improve:>2}/{patience:<2}\t"
+                        f"train_loss {train_loss:7.4f}\tlr {epoch_lr:8.2e}\t"
+                        f"pat {no_improve:>2}/{patience:<2}\t"
                         f"time {epoch_time:6.2f}s"
                     )
+                epoch_trace_rows.append(
+                    {
+                        "epoch": epoch + 1,
+                        "train_loss": float(train_loss),
+                        "eval": 0,
+                        "valid_mrr20": 0.0,
+                        "best_mrr20": float(best_mrr20) if best_mrr20 > -1e8 else 0.0,
+                        "lr": float(epoch_lr),
+                        "patience_used": int(no_improve),
+                    }
+                )
                 continue
 
-            if special_logging_enabled:
-                from recbole_patch import begin_special_eval
-                begin_special_eval(trainer, valid_data, split_name="valid")
-            vr = trainer._valid_epoch(valid_data, show_progress=show_progress)
-            if special_logging_enabled:
-                from recbole_patch import end_special_eval
-                last_valid_special_metrics = end_special_eval(trainer)
-            if isinstance(vr, tuple):
-                vr = next((x for x in vr if isinstance(x, dict)), vr[0])
+            collect_epoch_logging = eval_logging_timing == "per_eval"
+            vr, epoch_valid_special, epoch_valid_diag = _run_eval(
+                valid_data,
+                split_name="valid",
+                collect_special=collect_epoch_logging,
+                collect_diag=collect_epoch_logging,
+            )
 
             mrr20 = float(vr.get("mrr@20", 0.0))
             if mrr20 > best_mrr20:
                 best_mrr20 = mrr20
                 best_result = {k: float(v) for k, v in vr.items()}
-                best_valid_special_metrics = copy.deepcopy(last_valid_special_metrics)
+                if collect_epoch_logging:
+                    best_valid_special_metrics = copy.deepcopy(epoch_valid_special)
+                    best_valid_diag = copy.deepcopy(epoch_valid_diag)
                 _save_best_stage(trainer.model, best_stage_path)
                 no_improve = 0
+                best_epoch = epoch + 1
             else:
                 no_improve += 1
+
+            if lr_scheduler is not None:
+                if lr_scheduler_type == "plateau":
+                    lr_scheduler.step(mrr20)
+                elif lr_scheduler_type in {"cosine", "warmup_cosine"}:
+                    lr_scheduler.step()
+                epoch_lr = _optimizer_current_lr(trainer.optimizer)
 
             if progress_cb is not None:
                 try:
@@ -1554,6 +1810,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                             "best_mrr20": float(best_mrr20),
                             "patience_used": int(no_improve),
                             "patience_total": int(patience),
+                            "lr": float(epoch_lr),
                         }
                     )
                 except Exception:
@@ -1565,9 +1822,22 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 print(
                     f"    Ep {epoch+1:>3}/{max_epochs:<3}\tEVAL    \t"
                     f"train_loss {train_loss:7.4f}\tvalid M@20 {mrr20:7.4f}\t"
-                    f"best M@20 {best_disp:7.4f}\tpat {no_improve:>2}/{patience:<2}\t"
+                    f"best M@20 {best_disp:7.4f}\tlr {epoch_lr:8.2e}\t"
+                    f"pat {no_improve:>2}/{patience:<2}\t"
                     f"time {epoch_time:6.2f}s"
                 )
+
+            epoch_trace_rows.append(
+                {
+                    "epoch": epoch + 1,
+                    "train_loss": float(train_loss),
+                    "eval": 1,
+                    "valid_mrr20": float(mrr20),
+                    "best_mrr20": float(best_mrr20),
+                    "lr": float(epoch_lr),
+                    "patience_used": int(no_improve),
+                }
+            )
 
             if no_improve >= patience:
                 early_stopped = True
@@ -1577,8 +1847,6 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             best_result = {"mrr@20": 0.0}
         if best_mrr20 <= -1e8:
             best_mrr20 = float(best_result.get("mrr@20", 0.0) or 0.0)
-        if best_valid_special_metrics is None:
-            best_valid_special_metrics = copy.deepcopy(last_valid_special_metrics)
 
         if best_stage_path.exists():
             best_state = torch.load(best_stage_path, map_location="cpu")
@@ -1588,15 +1856,46 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
         else:
             print(f"[WARN] Missing best-stage checkpoint before test: {best_stage_path}")
 
-        if special_logging_enabled:
-            from recbole_patch import begin_special_eval
-            begin_special_eval(trainer, test_data, split_name="test")
-        tr = trainer._valid_epoch(test_data, show_progress=show_progress)
-        if special_logging_enabled:
-            from recbole_patch import end_special_eval
-            test_special_metrics = end_special_eval(trainer)
-        if isinstance(tr, tuple):
-            tr = next((x for x in tr if isinstance(x, dict)), tr[0])
+        best_valid_eval_result, best_valid_special_metrics, best_valid_diag = _run_eval(
+            valid_data,
+            split_name="best_valid",
+            collect_special=True,
+            collect_diag=True,
+        )
+        if best_valid_eval_result:
+            best_result = {k: float(v) for k, v in best_valid_eval_result.items()}
+            best_mrr20 = float(best_result.get("mrr@20", best_mrr20) or best_mrr20)
+
+        if feature_ablation_logging_enabled and hasattr(trainer.model, "set_feature_ablation_mode"):
+            trainer.model.set_feature_ablation_mode("none")
+            zero_result, _zero_special, valid_zero_diag = _run_eval(
+                valid_data,
+                split_name="valid_zero",
+                collect_special=False,
+                collect_diag=True,
+            )
+            trainer.model.set_feature_ablation_mode("shuffle")
+            shuffle_result, _shuffle_special, valid_shuffle_diag = _run_eval(
+                valid_data,
+                split_name="valid_shuffle",
+                collect_special=False,
+                collect_diag=True,
+            )
+            trainer.model.set_feature_ablation_mode("none")
+            feature_ablation_metrics = {
+                "feature_zero_delta_mrr": float(best_mrr20 - float((zero_result or {}).get("mrr@20", 0.0) or 0.0)),
+                "feature_shuffle_delta_mrr": float(best_mrr20 - float((shuffle_result or {}).get("mrr@20", 0.0) or 0.0)),
+                "route_change_under_feature_shuffle": _compute_route_change_metric(best_valid_diag, valid_shuffle_diag),
+            }
+            if isinstance(best_valid_diag, dict):
+                best_valid_diag["feature_ablation"] = feature_ablation_metrics
+
+        tr, test_special_metrics, test_diag = _run_eval(
+            test_data,
+            split_name="test",
+            collect_special=True,
+            collect_diag=True,
+        )
         test_result = {k: float(v) for k, v in tr.items()}
 
         elapsed = time.time() - t0
@@ -1615,9 +1914,17 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "test_result": test_result,
             "valid_special_metrics": best_valid_special_metrics,
             "test_special_metrics": test_special_metrics,
+            "valid_diag": best_valid_diag,
+            "test_diag": test_diag,
+            "valid_zero_diag": valid_zero_diag,
+            "valid_shuffle_diag": valid_shuffle_diag,
+            "feature_ablation_metrics": feature_ablation_metrics,
+            "epoch_trace": _select_sparse_epoch_trace(epoch_trace_rows, best_epoch),
             "epochs_run": final_epoch,
             "early_stop_epoch": final_epoch,
             "early_stopped": early_stopped,
+            "final_lr": _optimizer_current_lr(trainer.optimizer),
+            "lr_scheduler_type": lr_scheduler_type,
             "elapsed": elapsed,
             "fmoe_arch": fmoe_arch,
         }
@@ -1689,7 +1996,17 @@ def _save_results(
             {
                 k: v
                 for k, v in trial.items()
-                if k not in {"valid_special_metrics", "test_special_metrics"}
+                if k
+                not in {
+                    "valid_special_metrics",
+                    "test_special_metrics",
+                    "valid_diag",
+                    "test_diag",
+                    "valid_zero_diag",
+                    "valid_shuffle_diag",
+                    "feature_ablation_metrics",
+                    "epoch_trace",
+                }
             }
             for trial in normalized_trials
         ],
@@ -1733,6 +2050,8 @@ def _save_results(
         data["test_result"] = test_result
         data["best_valid_special_metrics"] = bt.get("valid_special_metrics") or {}
         data["test_special_metrics"] = bt.get("test_special_metrics") or {}
+        if bt.get("feature_ablation_metrics"):
+            data["feature_ablation_metrics"] = bt.get("feature_ablation_metrics") or {}
     data["normal_result_mirror_file"] = str(mirror_paths["normal_result"].resolve())
     data["special_result_file"] = str(mirror_paths["special_result"].resolve()) if special_payload else ""
     data["special_log_file"] = str(mirror_paths["special_log"].resolve()) if special_payload else ""
@@ -1742,11 +2061,64 @@ def _save_results(
     if special_payload is not None:
         _write_json_file(mirror_paths["special_result"], special_payload)
         _write_json_file(mirror_paths["special_log"], special_payload)
+
+    diag_paths = _diag_artifact_paths(path, dataset_canonical, model, run_group, run_axis, run_phase)
+    trial_summary_rows = []
+    epoch_trace_rows = []
+    for trial in normalized_trials:
+        summary_row = {
+            "trial": trial.get("trial"),
+            "status": trial.get("status"),
+            "mrr@20": trial.get("mrr@20"),
+            "test_mrr@20": trial.get("test_mrr@20"),
+            "test_hr@10": trial.get("test_hr@10"),
+            "epochs_run": trial.get("epochs_run"),
+            "early_stopped": trial.get("early_stopped"),
+        }
+        summary_row.update(_diag_scalar_metrics(trial.get("valid_diag")))
+        summary_row.update({f"feature_ablation.{k}": v for k, v in (trial.get("feature_ablation_metrics") or {}).items()})
+        trial_summary_rows.append(summary_row)
+        for row in list(trial.get("epoch_trace") or []):
+            epoch_trace_rows.append({"trial": trial.get("trial"), **row})
+
+    has_any_diag = any(
+        bool(trial.get("valid_diag") or trial.get("test_diag"))
+        for trial in normalized_trials
+    )
+
+    if has_any_diag and trial_summary_rows:
+        _write_csv_file(diag_paths["trial_summary"], trial_summary_rows)
+    if has_any_diag and epoch_trace_rows:
+        _write_csv_gz_file(diag_paths["epoch_trace"], epoch_trace_rows)
+
+    if ok:
+        collapse_row = min(ok, key=lambda x: float(x.get("mrr@20", 0.0) or 0.0))
+        if bt.get("valid_diag"):
+            _write_json_gz_file(diag_paths["best_valid_diag"], bt.get("valid_diag") or {})
+        if bt.get("test_diag"):
+            _write_json_gz_file(diag_paths["test_diag"], bt.get("test_diag") or {})
+        if collapse_row.get("valid_diag"):
+            collapse_payload = copy.deepcopy(collapse_row.get("valid_diag") or {})
+            if collapse_row.get("feature_ablation_metrics"):
+                collapse_payload["feature_ablation"] = collapse_row.get("feature_ablation_metrics") or {}
+            _write_json_gz_file(diag_paths["collapse_diag"], collapse_payload)
+    data["diag_trial_summary_file"] = str(diag_paths["trial_summary"].resolve()) if has_any_diag and trial_summary_rows else ""
+    data["diag_best_valid_file"] = str(diag_paths["best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else ""
+    data["diag_test_file"] = str(diag_paths["test_diag"].resolve()) if ok and bt.get("test_diag") else ""
+    data["diag_collapse_file"] = str(diag_paths["collapse_diag"].resolve()) if ok and collapse_row.get("valid_diag") else ""
+    data["diag_epoch_trace_file"] = str(diag_paths["epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else ""
+    _write_json_file(path, data)
+    _write_json_file(mirror_paths["normal_result"], data)
     return {
         "result_file": str(path.resolve()),
         "normal_result_mirror_file": str(mirror_paths["normal_result"].resolve()),
         "special_result_file": str(mirror_paths["special_result"].resolve()) if special_payload else "",
         "special_log_file": str(mirror_paths["special_log"].resolve()) if special_payload else "",
+        "diag_trial_summary_file": str(diag_paths["trial_summary"].resolve()) if has_any_diag and trial_summary_rows else "",
+        "diag_best_valid_file": str(diag_paths["best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else "",
+        "diag_test_file": str(diag_paths["test_diag"].resolve()) if ok and bt.get("test_diag") else "",
+        "diag_collapse_file": str(diag_paths["collapse_diag"].resolve()) if ok and collapse_row.get("valid_diag") else "",
+        "diag_epoch_trace_file": str(diag_paths["epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else "",
     }
 
 
@@ -1812,20 +2184,33 @@ def _maybe_update_baseline_phase_summary(dataset: str, phase: str) -> None:
 
 
 def _maybe_update_fmoe_n_phase_summary(run_group: str, run_axis: str, phase: str) -> None:
-    enabled = str(os.environ.get("FMOE_N_PHASE_SUMMARY", "")).strip().lower()
+    group = str(run_group or "").strip().lower()
+    if group not in {"fmoe_n", "fmoe_n2", "fmoe_n3"}:
+        return
+
+    env_prefix = "FMOE_N3" if group == "fmoe_n3" else "FMOE_N2" if group == "fmoe_n2" else "FMOE_N"
+    enabled = str(os.environ.get("TRACK_PHASE_SUMMARY", "")).strip().lower()
+    if not enabled:
+        enabled = str(os.environ.get(f"{env_prefix}_PHASE_SUMMARY", "")).strip().lower()
     if enabled not in {"1", "true", "yes", "on"}:
         return
-    if str(run_group or "").strip().lower() != "fmoe_n":
-        return
 
-    phase_folder = str(os.environ.get("FMOE_N_SUMMARY_PHASE", "")).strip()
+    phase_folder = str(os.environ.get("TRACK_SUMMARY_PHASE", "")).strip()
+    if not phase_folder:
+        phase_folder = str(os.environ.get(f"{env_prefix}_SUMMARY_PHASE", "")).strip()
     if not phase_folder:
         phase_folder = str(str(phase or "").split("_", 1)[0]).strip()
-    axis_folder = str(os.environ.get("FMOE_N_SUMMARY_AXIS", "")).strip() or str(run_axis or "").strip() or "hparam"
+    axis_folder = str(os.environ.get("TRACK_SUMMARY_AXIS", "")).strip()
+    if not axis_folder:
+        axis_folder = str(os.environ.get(f"{env_prefix}_SUMMARY_AXIS", "")).strip()
+    axis_folder = axis_folder or str(run_axis or "").strip() or "hparam"
     if not phase_folder:
         return
 
-    script_path = Path(__file__).resolve().parent / "run" / "fmoe_n" / "update_phase_summary.py"
+    script_override = str(os.environ.get("TRACK_SUMMARY_SCRIPT", "")).strip()
+    script_path = Path(script_override).expanduser().resolve() if script_override else (
+        Path(__file__).resolve().parent / "run" / group / "update_phase_summary.py"
+    )
     if not script_path.exists():
         return
 
@@ -1848,6 +2233,61 @@ def _format_duration(seconds: float) -> str:
     if seconds >= 60:
         return f"{seconds / 60:.1f}min"
     return f"{seconds:.0f}s"
+
+
+def _optimizer_current_lr(optimizer) -> float:
+    try:
+        lrs = [float(group.get("lr", 0.0)) for group in optimizer.param_groups]
+    except Exception:
+        return 0.0
+    return max(lrs) if lrs else 0.0
+
+
+def _build_lr_scheduler(cfg: dict, trainer, max_epochs: int):
+    scheduler_type = str(cfg.get("lr_scheduler_type", "none") or "none").strip().lower()
+    if scheduler_type in {"", "none", "off", "false"}:
+        return None, "none"
+
+    base_lr = float(getattr(trainer, "learning_rate", cfg.get("learning_rate", 0.0)) or 0.0)
+    min_lr_ratio = min(max(float(cfg.get("lr_scheduler_min_lr_ratio", 0.1) or 0.1), 0.0), 1.0)
+    eta_min = base_lr * min_lr_ratio
+    t_max = max(int(max_epochs), 1)
+
+    if scheduler_type == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            trainer.optimizer,
+            T_max=t_max,
+            eta_min=eta_min,
+        )
+        return scheduler, scheduler_type
+
+    if scheduler_type == "warmup_cosine":
+        warmup_ratio = min(max(float(cfg.get("lr_scheduler_warmup_ratio", 0.1) or 0.0), 0.0), 1.0)
+        warmup_epochs = max(int(round(t_max * warmup_ratio)), 1)
+
+        def _warmup_cosine_lambda(epoch_idx: int) -> float:
+            step = epoch_idx + 1
+            if warmup_epochs > 0 and step <= warmup_epochs:
+                return max(step / float(warmup_epochs), 1e-8)
+            remain = max(t_max - warmup_epochs, 1)
+            progress = min(max((step - warmup_epochs) / float(remain), 0.0), 1.0)
+            cosine = 0.5 * (1.0 + np.cos(np.pi * progress))
+            return min_lr_ratio + (1.0 - min_lr_ratio) * cosine
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(trainer.optimizer, lr_lambda=_warmup_cosine_lambda)
+        return scheduler, scheduler_type
+
+    if scheduler_type == "plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            trainer.optimizer,
+            mode="max",
+            factor=float(cfg.get("lr_scheduler_plateau_factor", 0.5) or 0.5),
+            patience=max(int(cfg.get("lr_scheduler_plateau_patience", 3) or 0), 0),
+            min_lr=eta_min,
+        )
+        return scheduler, scheduler_type
+
+    return None, "none"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -2331,6 +2771,12 @@ def main():
                 "test_result": result.get("test_result", {}),
                 "valid_special_metrics": result.get("valid_special_metrics") or {},
                 "test_special_metrics": result.get("test_special_metrics") or {},
+                "valid_diag": result.get("valid_diag") or {},
+                "test_diag": result.get("test_diag") or {},
+                "valid_zero_diag": result.get("valid_zero_diag") or {},
+                "valid_shuffle_diag": result.get("valid_shuffle_diag") or {},
+                "feature_ablation_metrics": result.get("feature_ablation_metrics") or {},
+                "epoch_trace": result.get("epoch_trace") or [],
                 "best_hr@10": current_best_hr10,
                 "test_mrr@20": current_test_mrr20,
                 "test_hr@10": current_test_hr10,
@@ -2340,6 +2786,8 @@ def main():
                 "elapsed": round(result["elapsed"], 1),
                 "status": "ok",
             }
+            trial_record.update(_diag_scalar_metrics(trial_record.get("valid_diag")))
+            trial_record.update({f"feature_ablation.{k}": v for k, v in (trial_record.get("feature_ablation_metrics") or {}).items()})
             fmoe_arch = result.get("fmoe_arch", {}) or {}
             if fmoe_arch:
                 trial_record["fmoe_arch"] = {k: _ser(v) for k, v in fmoe_arch.items()}

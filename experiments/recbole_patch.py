@@ -67,6 +67,8 @@ def _get_custom_model(model_name):
             FeaturedMoE_V3,
             FeaturedMoE_V4_Distillation,
             FeaturedMoE_N,
+            FeaturedMoE_N2,
+            FeaturedMoE_N3,
         )
         custom_models = {
             'BiLSTM': BiLSTM, 
@@ -101,6 +103,12 @@ def _get_custom_model(model_name):
             'FeaturedMoE_N': FeaturedMoE_N,
             'featured_moe_n': FeaturedMoE_N,
             'featuredmoe_n': FeaturedMoE_N,
+            'FeaturedMoE_N2': FeaturedMoE_N2,
+            'featured_moe_n2': FeaturedMoE_N2,
+            'featuredmoe_n2': FeaturedMoE_N2,
+            'FeaturedMoE_N3': FeaturedMoE_N3,
+            'featured_moe_n3': FeaturedMoE_N3,
+            'featuredmoe_n3': FeaturedMoE_N3,
         }
         return custom_models.get(model_name)
     except:
@@ -202,11 +210,21 @@ def _convert_inter_to_sequence(dataset, inter_feat, for_training=True):
         "featuredmoe_v4_distillation",
         "featured_moe_n",
         "featuredmoe_n",
+        "featured_moe_n2",
+        "featuredmoe_n2",
+        "featured_moe_n3",
+        "featuredmoe_n3",
     }
     use_fp16 = bool(dataset.config["fmoe_feature_fp16"]) if "fmoe_feature_fp16" in dataset.config else default_fp16
 
     def _is_feature_field(name: str) -> bool:
-        return name.startswith("mac_") or name.startswith("mid_") or name.startswith("mic_")
+        return (
+            name.startswith("mac_")
+            or name.startswith("mac5_")
+            or name.startswith("mac10_")
+            or name.startswith("mid_")
+            or name.startswith("mic_")
+        )
 
     # Convert DataFrame-like input if needed (fallback path).
     if not hasattr(inter_feat, "interaction"):
@@ -241,6 +259,10 @@ def _convert_inter_to_sequence(dataset, inter_feat, for_training=True):
         "featuredmoe_v4_distillation",
         "featured_moe_n",
         "featuredmoe_n",
+        "featured_moe_n2",
+        "featuredmoe_n2",
+        "featured_moe_n3",
+        "featuredmoe_n3",
     }:
         history_fields = [
             f for f in history_fields
@@ -410,11 +432,21 @@ def _patched_data_augmentation(self):
         "featuredmoe_v4_distillation",
         "featured_moe_n",
         "featuredmoe_n",
+        "featured_moe_n2",
+        "featuredmoe_n2",
+        "featured_moe_n3",
+        "featuredmoe_n3",
     }
     use_fp16 = bool(self.config["fmoe_feature_fp16"]) if "fmoe_feature_fp16" in self.config else default_fp16
 
     def _is_feature_field(name: str) -> bool:
-        return name.startswith("mac_") or name.startswith("mid_") or name.startswith("mic_")
+        return (
+            name.startswith("mac_")
+            or name.startswith("mac5_")
+            or name.startswith("mac10_")
+            or name.startswith("mid_")
+            or name.startswith("mic_")
+        )
 
     # Keep original order semantics: sorted by (uid, time).
     self.sort(by=[self.uid_field, self.time_field], ascending=True)
@@ -859,6 +891,26 @@ def end_special_eval(trainer):
     summary = collector.finalize()
     trainer._fmoe_special_metric_collector = None
     return summary
+
+
+def begin_diagnostic_eval(trainer, *, split_name: str):
+    model = getattr(trainer, "model", None)
+    if model is None or not hasattr(model, "begin_diagnostic_eval"):
+        return
+    try:
+        model.begin_diagnostic_eval(split_name=split_name)
+    except Exception:
+        pass
+
+
+def end_diagnostic_eval(trainer):
+    model = getattr(trainer, "model", None)
+    if model is None or not hasattr(model, "end_diagnostic_eval"):
+        return None
+    try:
+        return model.end_diagnostic_eval()
+    except Exception:
+        return None
 
 
 def _patched_full_sort_batch_eval(self, batched_data):
