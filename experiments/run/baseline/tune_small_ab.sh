@@ -404,29 +404,133 @@ mode_phase_tag() {
   esac
 }
 
-lfm_completed_log_exists() {
-  local model="$1"
-  local combo="$2"
-  local dataset="lastfm0.03"
+matching_job_logs() {
+  local dataset="$1"
+  local model="$2"
+  local combo="$3"
   local combo_slug combo_token log_dir path base
 
   combo_slug="$(combo_desc "$combo")"
   combo_token="$(printf '%s' "$combo" | tr '[:upper:]' '[:lower:]')"
   log_dir="${CUSTOM_LOG_ROOT}/${dataset}/${PHASE}"
-  [ -d "$log_dir" ] || return 1
+  [ -d "$log_dir" ] || return 0
 
   while IFS= read -r path; do
     base="$(basename "$path")"
     case "$base" in
-      "${model}"_*_"${combo_slug}"*.log|*"_"${combo_token}"_"*.log) ;;
-      *) continue ;;
+      "${model}"_*_"${combo_slug}"*.log|*"_"${combo_token}"_"*.log) printf '%s\n' "$path" ;;
+      *) ;;
     esac
-    if grep -Eq '\[RUN_METRICS\]|\[RUN_STATUS\] END status=(normal|success)' "$path" 2>/dev/null; then
-      return 0
-    fi
   done < <(find "$log_dir" -maxdepth 1 -type f -name "${model}_*.log" | sort)
+}
 
-  return 1
+log_job_state() {
+  local path="$1"
+  local start_pid=""
+
+  # Treat as complete only when both final metrics and normal end status exist.
+  if grep -Eq '\[RUN_METRICS\]' "$path" 2>/dev/null \
+    && grep -Eq '\[RUN_STATUS\] END status=(normal|success)' "$path" 2>/dev/null; then
+    echo "complete"
+    return 0
+  fi
+  if grep -Eq '\[RUN_STATUS\] END status=(terminated|fail)|\[RUN_STATUS\] TERMINATED signal=' "$path" 2>/dev/null; then
+    echo "incomplete"
+    return 0
+  fi
+
+  start_pid="$(sed -n 's/.*\[RUN_STATUS\] START pid=\([0-9]\+\).*/\1/p' "$path" | tail -n 1)"
+  if [ -n "$start_pid" ] && kill -0 "$start_pid" 2>/dev/null; then
+    echo "active"
+    return 0
+  fi
+
+  if grep -q '\[RUN_STATUS\] START pid=' "$path" 2>/dev/null; then
+    echo "incomplete"
+    return 0
+  fi
+
+  echo "incomplete"
+}
+
+remove_incomplete_results_by_pid() {
+  local path="$1"
+  local pid
+  local -a result_roots=()
+  local result_root
+  local -a pids=()
+  local result_path
+
+  mapfile -t pids < <(sed -n 's/.*\[RUN_STATUS\] START pid=\([0-9]\+\).*/\1/p' "$path" | sort -u)
+  [ "${#pids[@]}" -gt 0 ] || return 0
+
+  result_roots=(
+    "${RUN_DIR}/artifacts/results/baseline"
+    "${RUN_DIR}/artifacts/results"
+  )
+
+  for pid in "${pids[@]}"; do
+    [ -n "$pid" ] || continue
+    for result_root in "${result_roots[@]}"; do
+      [ -d "$result_root" ] || continue
+      while IFS= read -r result_path; do
+        [ -n "$result_path" ] || continue
+        if [ "$DRY_RUN" = "true" ]; then
+          echo "[DRY_RUN][RESET] incomplete result would be removed: ${result_path}"
+        else
+          rm -f "$result_path"
+          echo "[RESET] removed incomplete result: ${result_path}"
+        fi
+      done < <(find "$result_root" -type f -name "*pid${pid}*.json" 2>/dev/null | sort)
+    done
+  done
+}
+
+prepare_job_for_rerun() {
+  local dataset="$1"
+  local model="$2"
+  local combo="$3"
+  local path state
+  local complete_found="false"
+  local active_found="false"
+  local cleaned="false"
+
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    state="$(log_job_state "$path")"
+    case "$state" in
+      complete)
+        complete_found="true"
+        ;;
+      active)
+        active_found="true"
+        ;;
+      incomplete)
+        if [ "$DRY_RUN" = "true" ]; then
+          echo "[DRY_RUN][RESET] incomplete log would be removed: ${path}"
+          remove_incomplete_results_by_pid "$path"
+        else
+          remove_incomplete_results_by_pid "$path"
+          rm -f "$path"
+          echo "[RESET] removed incomplete log: ${path}"
+        fi
+        cleaned="true"
+        ;;
+    esac
+  done < <(matching_job_logs "$dataset" "$model" "$combo")
+
+  if [ "$cleaned" = "true" ]; then
+    update_phase_summary "$dataset" "$PHASE"
+  fi
+  if [ "$complete_found" = "true" ]; then
+    echo "[SKIP] completed run found: dataset=${dataset} model=${model} combo=${combo} phase=${PHASE}"
+    return 1
+  fi
+  if [ "$active_found" = "true" ]; then
+    echo "[SKIP] active run still exists: dataset=${dataset} model=${model} combo=${combo} phase=${PHASE}"
+    return 2
+  fi
+  return 0
 }
 
 run_small_job() {
@@ -545,50 +649,70 @@ run_small_job() {
   return "$rc"
 }
 
-run_stage_jobs() {
-  local pair_idx="$1"
-  local mode_tag="$2"
-  local stage_idx="$3"
-  shift 3
+run_gpu_queue_jobs() {
+  local mode_tag="$1"
+  local gpu_id="$2"
+  local queue_payload="$3"
+  local spec pair_idx model dataset combo
+
+  while IFS= read -r spec; do
+    [ -n "$spec" ] || continue
+    IFS='|' read -r pair_idx model dataset combo <<< "$spec"
+    if ! run_small_job "$gpu_id" "$dataset" "$model" "$mode_tag" "$combo" "$pair_idx"; then
+      return 1
+    fi
+  done <<< "$queue_payload"
+
+  return 0
+}
+
+run_global_queues() {
+  local mode_tag="$1"
+  shift 1
   local -a stage_gpus=("${@:1:4}")
   shift 4
-  local -a stage_specs=("$@")
-  local gpu spec model dataset combo
-  local -a stage_pids=()
+  local -a gpu_queues=("$@")
+  local idx gpu_id queue_lines p pair_idx model dataset combo
+  local -a worker_pids=()
   local failed=0
 
-  echo "[STAGE] pair=${pair_idx} slot=$((stage_idx + 1)) mode=$(mode_phase_tag "$mode_tag")"
-  for gpu in 0 1 2 3; do
-    spec="${stage_specs[$gpu]:-}"
-    if [ -z "$spec" ]; then
-      echo "  gpu${stage_gpus[$gpu]}: idle"
+  echo "[QUEUE] mode=$(mode_phase_tag "$mode_tag") global"
+  for idx in 0 1 2 3; do
+    gpu_id="${stage_gpus[$idx]}"
+    queue_lines="${gpu_queues[$idx]:-}"
+    if [ -z "$queue_lines" ]; then
+      echo "  gpu${gpu_id}: empty"
       continue
     fi
-    IFS='|' read -r model dataset combo <<< "$spec"
-    echo "  gpu${stage_gpus[$gpu]}: ${model}|${dataset}|${combo}"
+    echo "  gpu${gpu_id}:"
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      IFS='|' read -r pair_idx model dataset combo <<< "$p"
+      echo "    - pair=${pair_idx} ${model}|${dataset}|${combo}"
+    done <<< "$queue_lines"
   done
 
-  for gpu in 0 1 2 3; do
-    spec="${stage_specs[$gpu]:-}"
-    if [ -z "$spec" ]; then
-      DISPATCH_GPU_PID["${stage_gpus[$gpu]}"]=""
+  for idx in 0 1 2 3; do
+    gpu_id="${stage_gpus[$idx]}"
+    queue_lines="${gpu_queues[$idx]:-}"
+    if [ -z "$queue_lines" ]; then
+      DISPATCH_GPU_PID["$gpu_id"]=""
       continue
     fi
     (
-      IFS='|' read -r model dataset combo <<< "$spec"
-      run_small_job "${stage_gpus[$gpu]}" "$dataset" "$model" "$mode_tag" "$combo" "$pair_idx"
+      run_gpu_queue_jobs "$mode_tag" "$gpu_id" "$queue_lines"
     ) &
-    stage_pids+=("$!")
-    dispatch_set_pid "${stage_gpus[$gpu]}" "$!"
+    worker_pids+=("$!")
+    dispatch_set_pid "$gpu_id" "$!"
   done
 
-  for gpu in "${stage_pids[@]}"; do
-    if ! wait "$gpu"; then
+  for p in "${worker_pids[@]}"; do
+    if ! wait "$p"; then
       failed=1
     fi
   done
-  for gpu in "${stage_gpus[@]}"; do
-    DISPATCH_GPU_PID["$gpu"]=""
+  for gpu_id in "${stage_gpus[@]}"; do
+    DISPATCH_GPU_PID["$gpu_id"]=""
   done
   return "$failed"
 }
@@ -600,10 +724,14 @@ run_pair_balanced() {
   local -a combo_list=()
   local -a kuai_jobs=()
   local -a lfm_jobs=()
-  local -a stage_specs=()
+  local -a gpu_queues=("" "" "" "")
+  local -a pair_gpu_queues=("" "" "" "")
   local gpu_pos next_pos lfm_gpu_pos
   local kuai_idx lfm_idx stage_idx
+  local job_rc
   local failed=0
+  local active_job_count=0
+  local total_jobs_planned=0
 
   selected_pair_indexes selected_pairs
   mapfile -t combo_list < <(mode_combo_list "$MODE")
@@ -614,15 +742,46 @@ run_pair_balanced() {
     IFS='|' read -r m1 m2 <<< "$pair_spec"
     kuai_jobs=()
     lfm_jobs=()
+    active_job_count=0
 
     for combo in "${combo_list[@]}"; do
-      kuai_jobs+=("${m1}|${KUAI_DATASET}|${combo}" "${m2}|${KUAI_DATASET}|${combo}")
-      lfm_model="$(lfm_model_for_combo "$combo" "$m1" "$m2")"
-      if lfm_completed_log_exists "$lfm_model" "$combo"; then
-        echo "[SKIP] completed LFM run found: model=${lfm_model} combo=${combo} phase=${PHASE}"
+      if prepare_job_for_rerun "${KUAI_DATASET}" "$m1" "$combo"; then
+        job_rc=0
       else
-        lfm_jobs+=("${lfm_model}|lastfm0.03|${combo}")
+        job_rc=$?
       fi
+      case "$job_rc" in
+        0) kuai_jobs+=("${m1}|${KUAI_DATASET}|${combo}") ;;
+        2)
+          active_job_count=$((active_job_count + 1))
+          echo "[SKIP] active run exists: dataset=${KUAI_DATASET} model=${m1} combo=${combo} phase=${PHASE}"
+          ;;
+      esac
+      if prepare_job_for_rerun "${KUAI_DATASET}" "$m2" "$combo"; then
+        job_rc=0
+      else
+        job_rc=$?
+      fi
+      case "$job_rc" in
+        0) kuai_jobs+=("${m2}|${KUAI_DATASET}|${combo}") ;;
+        2)
+          active_job_count=$((active_job_count + 1))
+          echo "[SKIP] active run exists: dataset=${KUAI_DATASET} model=${m2} combo=${combo} phase=${PHASE}"
+          ;;
+      esac
+      lfm_model="$(lfm_model_for_combo "$combo" "$m1" "$m2")"
+      if prepare_job_for_rerun "lastfm0.03" "$lfm_model" "$combo"; then
+        job_rc=0
+      else
+        job_rc=$?
+      fi
+      case "$job_rc" in
+        0) lfm_jobs+=("${lfm_model}|lastfm0.03|${combo}") ;;
+        2)
+          active_job_count=$((active_job_count + 1))
+          echo "[SKIP] active run exists: dataset=lastfm0.03 model=${lfm_model} combo=${combo} phase=${PHASE}"
+          ;;
+      esac
     done
 
     if [ "$SMOKE" = "true" ]; then
@@ -635,21 +794,23 @@ run_pair_balanced() {
     fi
 
     echo "[PAIR] mode=$(mode_phase_tag "$MODE") pair=${pair_idx} models=${m1},${m2}"
-    echo "  kuai_dataset=${KUAI_DATASET} kuai_jobs=${#kuai_jobs[@]} lfm_jobs=${#lfm_jobs[@]}"
+    echo "  kuai_dataset=${KUAI_DATASET} kuai_jobs=${#kuai_jobs[@]} lfm_jobs=${#lfm_jobs[@]} active_skipped=${active_job_count}"
 
+    pair_gpu_queues=("" "" "" "")
     kuai_idx=0
     lfm_idx=0
     stage_idx=0
     while [ "$kuai_idx" -lt "${#kuai_jobs[@]}" ] || [ "$lfm_idx" -lt "${#lfm_jobs[@]}" ]; do
-      stage_specs=("" "" "" "")
       lfm_gpu_pos=$((stage_idx % 4))
       if [ "$lfm_idx" -lt "${#lfm_jobs[@]}" ]; then
-        stage_specs[$lfm_gpu_pos]="${lfm_jobs[$lfm_idx]}"
+        pair_gpu_queues[$lfm_gpu_pos]="${pair_gpu_queues[$lfm_gpu_pos]}${pair_idx}|${lfm_jobs[$lfm_idx]}"$'\n'
+        total_jobs_planned=$((total_jobs_planned + 1))
         lfm_idx=$((lfm_idx + 1))
         for next_pos in 1 2 3; do
           gpu_pos=$(((lfm_gpu_pos + next_pos) % 4))
           if [ "$kuai_idx" -lt "${#kuai_jobs[@]}" ]; then
-            stage_specs[$gpu_pos]="${kuai_jobs[$kuai_idx]}"
+            pair_gpu_queues[$gpu_pos]="${pair_gpu_queues[$gpu_pos]}${pair_idx}|${kuai_jobs[$kuai_idx]}"$'\n'
+            total_jobs_planned=$((total_jobs_planned + 1))
             kuai_idx=$((kuai_idx + 1))
           fi
         done
@@ -657,34 +818,47 @@ run_pair_balanced() {
         for next_pos in 0 1 2 3; do
           gpu_pos=$(((lfm_gpu_pos + next_pos) % 4))
           if [ "$kuai_idx" -lt "${#kuai_jobs[@]}" ]; then
-            stage_specs[$gpu_pos]="${kuai_jobs[$kuai_idx]}"
+            pair_gpu_queues[$gpu_pos]="${pair_gpu_queues[$gpu_pos]}${pair_idx}|${kuai_jobs[$kuai_idx]}"$'\n'
+            total_jobs_planned=$((total_jobs_planned + 1))
             kuai_idx=$((kuai_idx + 1))
           fi
         done
       fi
-
-      if ! run_stage_jobs "$pair_idx" "$MODE" "$stage_idx" "${plan_gpus[@]:0:4}" "${stage_specs[@]}"; then
-        echo "[ERROR] mode=${MODE} pair=${pair_idx} stage=$((stage_idx + 1)) failed" >&2
-        return 1
-      fi
       stage_idx=$((stage_idx + 1))
     done
 
-    failed=0
-    for gpu_pos in "${plan_gpus[@]:0:4}"; do
-      if [ -n "${DISPATCH_GPU_PID[$gpu_pos]:-}" ]; then
-        failed=1
-      fi
-      DISPATCH_GPU_PID["$gpu_pos"]=""
-    done
-    if [ "$failed" -ne 0 ]; then
-      echo "[ERROR] pair=${pair_idx} dispatch cleanup failed" >&2
-      return 1
-    fi
     if [ "$stage_idx" -eq 0 ]; then
       echo "[PAIR] nothing to run for pair=${pair_idx}"
+      continue
     fi
+
+    for gpu_pos in 0 1 2 3; do
+      gpu_queues[$gpu_pos]="${gpu_queues[$gpu_pos]}${pair_gpu_queues[$gpu_pos]}"
+    done
   done
+
+  if [ "$total_jobs_planned" -eq 0 ]; then
+    echo "[QUEUE] no runnable jobs (all complete or active)"
+    return 0
+  fi
+
+  echo "[QUEUE] total planned jobs=${total_jobs_planned}"
+  if ! run_global_queues "$MODE" "${plan_gpus[@]:0:4}" "${gpu_queues[@]}"; then
+    echo "[ERROR] mode=${MODE} global queue execution failed" >&2
+    return 1
+  fi
+
+  failed=0
+  for gpu_pos in "${plan_gpus[@]:0:4}"; do
+    if [ -n "${DISPATCH_GPU_PID[$gpu_pos]:-}" ]; then
+      failed=1
+    fi
+    DISPATCH_GPU_PID["$gpu_pos"]=""
+  done
+  if [ "$failed" -ne 0 ]; then
+    echo "[ERROR] global dispatch cleanup failed" >&2
+    return 1
+  fi
 }
 
 run_mode_plan() {

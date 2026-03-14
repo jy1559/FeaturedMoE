@@ -25,6 +25,7 @@ if str(RUN_DIR) not in sys.path:
     sys.path.insert(0, str(RUN_DIR))
 
 from common.phase_summary_csv import build_fmoe_n3_axis_summary, build_fmoe_n3_summaries
+from fmoe_n3.update_artifact_views import build_artifact_views
 
 TRACK = "fmoe_n3"
 AXIS = "core_ablation_v2"
@@ -32,7 +33,7 @@ PHASE = "CORE28"
 SUMMARY_REFRESH_SEC = 300.0
 
 WD_CHOICES = [0.0, 1e-7, 1e-6, 1e-5, 5e-5, 1e-4, 5e-4]
-DROPOUT_CHOICES = [0.05, 0.10, 0.15, 0.20, 0.25]
+DROPOUT_CHOICES = [0.10, 0.15, 0.20, 0.25]
 
 SMOKE_TOTAL_MIN_HINT = {
     "P00": 0.6,
@@ -131,11 +132,13 @@ def runtime_bucket(combo_id: str) -> str:
 
 
 def recommended_max_evals(combo_id: str) -> int:
-    fast = {"P00", "P01", "D10", "D11", "D12", "D13", "D14", "D15", "C71", "C72"}
+    if combo_id in {"P00", "P01"}:
+        return 15
+    fast = {"D10", "D11", "D12", "D13", "D14", "D15", "C71", "C72"}
     medium = {"M20", "M21"}
     very_heavy = {"R32", "E40", "T50", "T51", "X62"}
     if combo_id in fast:
-        return 6
+        return 10
     if combo_id in medium:
         return 4
     if combo_id in very_heavy:
@@ -214,6 +217,8 @@ def dataset_profile(dataset: str) -> dict:
             "c2_eval_bs": 4096,
             "c3_train_bs": 2048,
             "c3_eval_bs": 4096,
+            "c4_train_bs": 1024,
+            "c4_eval_bs": 2048,
             "heavy_train_bs": 1024,
             "heavy_eval_bs": 2048,
         }
@@ -222,6 +227,8 @@ def dataset_profile(dataset: str) -> dict:
         "c2_eval_bs": 8192,
         "c3_train_bs": 3072,
         "c3_eval_bs": 6144,
+        "c4_train_bs": 2048,
+        "c4_eval_bs": 4096,
         "heavy_train_bs": 1536,
         "heavy_eval_bs": 3072,
     }
@@ -271,18 +278,28 @@ def base_combo(
     max_len: int = 10,
     embedding_size: int = 128,
     num_heads: int = 4,
-    attn_dropout_prob: float = 0.15,
+    attn_dropout_prob: float = 0.10,
     stage_feature_encoder_mode: dict | None = None,
     stage_compute_mode: dict | None = None,
     stage_router_mode: dict | None = None,
     stage_router_source: dict | None = None,
     stage_feature_injection: dict | None = None,
     stage_router_granularity: dict | None = None,
+    stage_router_type: dict | None = None,
     macro_window: int = 5,
     family_mask: dict | None = None,
     moe_top_k: int = 0,
     expert_scale: int = 1,
     dense_hidden_scale: float = 1.0,
+    balance_loss_lambda: float = 0.002,
+    z_loss_lambda: float = 0.0,
+    gate_entropy_lambda: float = 0.0,
+    gate_entropy_until: float = 0.0,
+    rule_agreement_lambda: float = 0.0,
+    group_coverage_lambda: float = 0.0,
+    group_prior_align_lambda: float = 0.0,
+    feature_group_bias_lambda: float = 0.0,
+    feature_group_prior_temperature: float = 1.0,
     search_hidden_dropout_prob: list[float] | None = None,
     search_weight_decay: list[float] | None = None,
 ):
@@ -300,6 +317,7 @@ def base_combo(
         "lr_max": lr_max,
         "MAX_ITEM_LIST_LENGTH": max_len,
         "embedding_size": embedding_size,
+        "d_ff": int(2 * embedding_size),
         "num_heads": num_heads,
         "attn_dropout_prob": attn_dropout_prob,
         "stage_feature_encoder_mode": stage_feature_encoder_mode or _default_encoder_mode(),
@@ -308,11 +326,21 @@ def base_combo(
         "stage_router_source": stage_router_source or _default_router_source(),
         "stage_feature_injection": stage_feature_injection or _default_feature_injection(),
         "stage_router_granularity": stage_router_granularity or _default_granularity(),
+        "stage_router_type": stage_router_type or _all_stage_map("standard"),
         "macro_history_window": macro_window,
         "stage_feature_family_mask": family_mask or {},
         "moe_top_k": moe_top_k,
         "expert_scale": expert_scale,
         "dense_hidden_scale": dense_hidden_scale,
+        "balance_loss_lambda": balance_loss_lambda,
+        "z_loss_lambda": z_loss_lambda,
+        "gate_entropy_lambda": gate_entropy_lambda,
+        "gate_entropy_until": gate_entropy_until,
+        "rule_agreement_lambda": rule_agreement_lambda,
+        "group_coverage_lambda": group_coverage_lambda,
+        "group_prior_align_lambda": group_prior_align_lambda,
+        "feature_group_bias_lambda": feature_group_bias_lambda,
+        "feature_group_prior_temperature": feature_group_prior_temperature,
         "search_hidden_dropout_prob": list(search_hidden_dropout_prob or DROPOUT_CHOICES),
         "search_weight_decay": list(search_weight_decay or WD_CHOICES),
         "has_diag": False,
@@ -322,7 +350,8 @@ def base_combo(
 def build_combos(dataset: str) -> list[dict]:
     prof = dataset_profile(dataset)
     c2_lr = (7e-5, 5e-3)
-    c3_lr = (5e-5, 3e-3)
+    c4_lr = (3e-5, 2e-3)
+    conservative_c4_lr = (2e-5, 1.2e-3)
     all_linear = _default_encoder_mode()
     all_both = _default_router_source()
     all_none_inj = _default_feature_injection()
@@ -350,6 +379,7 @@ def build_combos(dataset: str) -> list[dict]:
             lr_min=c2_lr[0],
             lr_max=c2_lr[1],
             attn_dropout_prob=0.10,
+            search_hidden_dropout_prob=[0.05, 0.10, 0.15, 0.20],
             stage_compute_mode=all_none,
             stage_router_mode=all_none,
             stage_feature_injection=all_none_inj,
@@ -357,16 +387,19 @@ def build_combos(dataset: str) -> list[dict]:
         base_combo(
             "P01",
             combo_family="P",
-            combo_role="exact plain C3",
-            desc="plain_c3_three_layer",
-            layer_layout=["layer", "layer", "layer"],
-            baseline_recipe="C3",
-            delta_from_base="3-layer plain SASRec-style stack",
-            train_bs=prof["c3_train_bs"],
-            eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
-            attn_dropout_prob=0.15,
+            combo_role="exact plain C4 wide",
+            desc="plain_c4_wide_two_layer",
+            layer_layout=["layer", "layer"],
+            baseline_recipe="C4",
+            delta_from_base="2-layer wide SASRec-style stack",
+            train_bs=prof["c4_train_bs"],
+            eval_bs=prof["c4_eval_bs"],
+            lr_min=3e-5,
+            lr_max=2e-3,
+            max_len=20,
+            embedding_size=160,
+            attn_dropout_prob=0.10,
+            search_hidden_dropout_prob=[0.10, 0.15, 0.20, 0.25],
             stage_compute_mode=all_none,
             stage_router_mode=all_none,
             stage_feature_injection=all_none_inj,
@@ -381,8 +414,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="stage wrapper only, dense plain, macro+mid",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode={"macro": "dense_plain", "mid": "dense_plain", "micro": "none"},
             stage_router_mode=all_none,
         ),
@@ -396,8 +429,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="stage wrapper only, dense plain, full",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode={"macro": "dense_plain", "mid": "dense_plain", "micro": "dense_plain"},
             stage_router_mode=all_none,
         ),
@@ -411,8 +444,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="dense plain + FiLM, macro+mid",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode={"macro": "dense_plain", "mid": "dense_plain", "micro": "none"},
             stage_router_mode=all_none,
             stage_feature_injection={"macro": "film", "mid": "film", "micro": "none"},
@@ -427,8 +460,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="dense plain + FiLM, full",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode={"macro": "dense_plain", "mid": "dense_plain", "micro": "dense_plain"},
             stage_router_mode=all_none,
             stage_feature_injection=_all_stage_map("film"),
@@ -443,8 +476,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="dense plain + gated bias, macro+mid",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode={"macro": "dense_plain", "mid": "dense_plain", "micro": "none"},
             stage_router_mode=all_none,
             stage_feature_injection={"macro": "gated_bias", "mid": "gated_bias", "micro": "none"},
@@ -459,8 +492,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="dense plain + gated bias, full",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode={"macro": "dense_plain", "mid": "dense_plain", "micro": "dense_plain"},
             stage_router_mode=all_none,
             stage_feature_injection=_all_stage_map("gated_bias"),
@@ -475,8 +508,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="macro-only learned router, hidden+feature",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode={"macro": "moe", "mid": "none", "micro": "none"},
             stage_router_mode={"macro": "learned", "mid": "none", "micro": "none"},
             stage_router_source={"macro": "both", "mid": "both", "micro": "both"},
@@ -491,8 +524,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="macro+mid learned router, hidden+feature",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode={"macro": "moe", "mid": "moe", "micro": "none"},
             stage_router_mode={"macro": "learned", "mid": "learned", "micro": "none"},
             stage_router_source={"macro": "both", "mid": "both", "micro": "both"},
@@ -507,8 +540,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="full learned router, hidden+feature",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=c4_lr[0],
+            lr_max=c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=all_both,
@@ -523,8 +556,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="rule_soft routing on all stages",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=_all_stage_map("rule_soft"),
             stage_router_source=all_both,
@@ -539,8 +572,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="learned router hidden-only",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=_all_stage_map("hidden"),
@@ -555,8 +588,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="learned router feature-only",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=_all_stage_map("feature"),
@@ -571,8 +604,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="learned router hidden-only + gated bias injection",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=_all_stage_map("hidden"),
@@ -588,8 +621,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="macro learned both, mid/micro rule_soft",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode={"macro": "learned", "mid": "rule_soft", "micro": "rule_soft"},
             stage_router_source={"macro": "both", "mid": "both", "micro": "both"},
@@ -604,8 +637,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="complex feature encoder on all stages",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_feature_encoder_mode=_all_stage_map("complex"),
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
@@ -621,8 +654,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="complex feature encoder on macro only",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_feature_encoder_mode={"macro": "complex", "mid": "linear", "micro": "linear"},
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
@@ -638,8 +671,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="complex feature encoder on mid only",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_feature_encoder_mode={"macro": "linear", "mid": "complex", "micro": "linear"},
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
@@ -655,8 +688,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="macro session, mid token, micro token",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=all_both,
@@ -672,8 +705,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="macro token, mid token, micro token",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=all_both,
@@ -689,8 +722,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="M22 + macro window 10",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=all_both,
@@ -706,8 +739,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="M22 + Tempo+Memory only",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=all_both,
@@ -723,8 +756,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="M22 + max len 30",
             train_bs=prof["heavy_train_bs"],
             eval_bs=prof["heavy_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=all_both,
@@ -740,8 +773,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="M22 + top_k=2",
             train_bs=prof["c3_train_bs"],
             eval_bs=prof["c3_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=all_both,
@@ -757,8 +790,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="M22 + expert scale 3",
             train_bs=prof["heavy_train_bs"],
             eval_bs=prof["heavy_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_moe,
             stage_router_mode=all_learned,
             stage_router_source=all_both,
@@ -774,8 +807,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="C70 param-matched dense plain",
             train_bs=prof["heavy_train_bs"],
             eval_bs=prof["heavy_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_dense,
             stage_router_mode=all_none,
             dense_hidden_scale=3.0,
@@ -790,8 +823,8 @@ def build_combos(dataset: str) -> list[dict]:
             delta_from_base="C70 param-matched dense FiLM",
             train_bs=prof["heavy_train_bs"],
             eval_bs=prof["heavy_eval_bs"],
-            lr_min=c3_lr[0],
-            lr_max=c3_lr[1],
+            lr_min=conservative_c4_lr[0],
+            lr_max=conservative_c4_lr[1],
             stage_compute_mode=all_dense,
             stage_router_mode=all_none,
             stage_feature_injection=_all_stage_map("film"),
@@ -801,6 +834,16 @@ def build_combos(dataset: str) -> list[dict]:
 
     assert len(combos) == 28
     for idx, row in enumerate(combos):
+        if row["combo_id"] not in {"P00", "P01"}:
+            row["baseline_recipe"] = "C4"
+            row["train_batch_size"] = prof["c4_train_bs"]
+            row["eval_batch_size"] = prof["c4_eval_bs"]
+            row["attn_dropout_prob"] = 0.10
+            row["search_hidden_dropout_prob"] = list(DROPOUT_CHOICES)
+            row["search_weight_decay"] = list(WD_CHOICES)
+        if row["combo_id"] in {"X62", "C70", "C71", "C72"}:
+            row["train_batch_size"] = prof["heavy_train_bs"]
+            row["eval_batch_size"] = prof["heavy_eval_bs"]
         row["seed_offset"] = idx
         row["dataset"] = dataset
         row["feature_mode"] = "full_v3"
@@ -857,7 +900,7 @@ def build_command(combo: dict, gpu_id: str, args) -> list[str]:
         f"embedding_size={combo['embedding_size']}",
         f"num_heads={combo['num_heads']}",
         f"attn_dropout_prob={combo['attn_dropout_prob']}",
-        "d_ff=0",
+        f"d_ff={combo['d_ff']}",
         f"d_feat_emb={combo['d_feat_emb']}",
         f"d_expert_hidden={combo['d_expert_hidden']}",
         f"d_router_hidden={combo['d_router_hidden']}",
@@ -868,6 +911,7 @@ def build_command(combo: dict, gpu_id: str, args) -> list[str]:
         f"++stage_router_mode={hydra_literal(combo['stage_router_mode'])}",
         f"++stage_router_source={hydra_literal(combo['stage_router_source'])}",
         f"++stage_feature_injection={hydra_literal(combo['stage_feature_injection'])}",
+        f"++stage_router_type={hydra_literal(combo['stage_router_type'])}",
         f"++stage_router_granularity={hydra_literal(combo['stage_router_granularity'])}",
         f"++stage_feature_family_mask={hydra_literal(combo['stage_feature_family_mask'])}",
         f"macro_history_window={combo['macro_history_window']}",
@@ -879,12 +923,15 @@ def build_command(combo: dict, gpu_id: str, args) -> list[str]:
         "feature_encoder_mode=linear",
         "router_impl=learned",
         "use_valid_ratio_gating=false",
-        "balance_loss_lambda=0.002",
-        "z_loss_lambda=0.0",
-        "gate_entropy_lambda=0.0",
-        "gate_entropy_until=0.0",
-        "rule_agreement_lambda=0.0",
-        "group_coverage_lambda=0.0",
+        f"balance_loss_lambda={combo['balance_loss_lambda']}",
+        f"z_loss_lambda={combo['z_loss_lambda']}",
+        f"gate_entropy_lambda={combo['gate_entropy_lambda']}",
+        f"gate_entropy_until={combo['gate_entropy_until']}",
+        f"rule_agreement_lambda={combo['rule_agreement_lambda']}",
+        f"group_coverage_lambda={combo['group_coverage_lambda']}",
+        f"group_prior_align_lambda={combo['group_prior_align_lambda']}",
+        f"feature_group_bias_lambda={combo['feature_group_bias_lambda']}",
+        f"feature_group_prior_temperature={combo['feature_group_prior_temperature']}",
         "lr_scheduler_type=none",
         "alpha_warmup_until=0",
         "temperature_warmup_until=0",
@@ -904,7 +951,7 @@ def build_command(combo: dict, gpu_id: str, args) -> list[str]:
         f"++search.eval_batch_size={hydra_literal([combo['eval_batch_size']])}",
         f"++search.embedding_size={hydra_literal([combo['embedding_size']])}",
         f"++search.num_heads={hydra_literal([combo['num_heads']])}",
-        "++search.d_ff=[0]",
+        f"++search.d_ff={hydra_literal([combo['d_ff']])}",
         f"++search.attn_dropout_prob={hydra_literal([combo['attn_dropout_prob']])}",
         f"++search.d_feat_emb={hydra_literal([combo['d_feat_emb']])}",
         f"++search.d_expert_hidden={hydra_literal([combo['d_expert_hidden']])}",
@@ -925,6 +972,8 @@ def build_command(combo: dict, gpu_id: str, args) -> list[str]:
         f"++search.weight_decay={hydra_literal(combo['search_weight_decay'])}",
         f"++search.hidden_dropout_prob={hydra_literal(combo['search_hidden_dropout_prob'])}",
         "++search_space_type_overrides.learning_rate=loguniform",
+        "++search_space_type_overrides.weight_decay=choice",
+        "++search_space_type_overrides.hidden_dropout_prob=choice",
         "++search.lr_scheduler_type=[none]",
     ]
     return cmd
@@ -1031,10 +1080,17 @@ def main():
         try:
             phase_paths = build_fmoe_n3_summaries(AXIS, PHASE)
             axis_path = build_fmoe_n3_axis_summary(AXIS)
+            artifact_paths = build_artifact_views(AXIS)
             last_summary_refresh = now
             if reason:
                 if phase_paths:
                     print(f"[Summary] refreshed ({reason}) -> {axis_path}")
+                    print(
+                        "[Artifacts] "
+                        f"special={artifact_paths['special_summary']} "
+                        f"feature_ablation={artifact_paths['feature_ablation_summary']} "
+                        f"diag={artifact_paths['diag_summary']}"
+                    )
                 else:
                     print(f"[Summary] refreshed ({reason})")
         except Exception as exc:

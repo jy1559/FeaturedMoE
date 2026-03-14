@@ -77,6 +77,60 @@ def family_baseline_delta(row: dict) -> str:
     return f"{row['baseline_recipe']} baseline -> {row['delta_from_base']}"
 
 
+def combo_summary_line(combo: dict) -> str:
+    summary_ko = {
+        "P00": "baseline SASRec C2를 최대한 따라간 1-layer plain 기준선이다.",
+        "P01": "baseline SASRec C4 wide를 최대한 따라간 2-layer wide plain 기준선이다.",
+        "D10": "stage wrapper만 넣고 macro+mid 블록을 dense plain으로 둔 비교군이다.",
+        "D11": "stage wrapper만 넣고 macro+mid+micro 전체를 dense plain으로 둔 비교군이다.",
+        "D12": "dense plain 위에 macro+mid FiLM 주입만 추가한 비교군이다.",
+        "D13": "dense plain 위에 macro+mid+micro 전체 FiLM 주입을 추가한 비교군이다.",
+        "D14": "dense plain 위에 macro+mid gated bias 주입만 추가한 비교군이다.",
+        "D15": "dense plain 위에 macro+mid+micro 전체 gated bias 주입을 추가한 비교군이다.",
+        "M20": "macro stage 하나만 learned MoE로 두고 hidden+feature를 함께 router에 넣는 anchor다.",
+        "M21": "macro+mid 두 stage를 learned MoE로 두고 hidden+feature를 함께 router에 넣는 anchor다.",
+        "M22": "macro+mid+micro 전체를 learned MoE로 두는 핵심 anchor다.",
+        "R30": "세 stage 모두 learned router 대신 rule_soft 가중치를 쓰는 비교군이다.",
+        "R31": "세 stage learned MoE를 유지하되 router 입력을 hidden-only로 제한한 비교군이다.",
+        "R32": "세 stage learned MoE를 유지하되 router 입력을 feature-only로 제한한 비교군이다.",
+        "R33": "hidden-only router에 gated bias feature injection을 추가한 비교군이다.",
+        "R34": "macro만 learned router를 쓰고 mid/micro는 rule_soft를 쓰는 hybrid 비교군이다.",
+        "E40": "세 stage feature encoder를 모두 complex MLP로 바꾼 비교군이다.",
+        "E41": "macro feature encoder만 complex MLP로 바꾼 비교군이다.",
+        "E42": "mid feature encoder만 complex MLP로 바꾼 비교군이다.",
+        "T50": "기본 session routing에서 mid만 token routing으로 확장한 비교군이다.",
+        "T51": "macro와 mid까지 모두 token routing으로 확장한 비교군이다.",
+        "X60": "M22에서 macro history window만 5에서 10으로 늘린 단일 변화다.",
+        "X61": "M22에서 feature family를 Tempo+Memory만 쓰도록 줄인 단일 변화다.",
+        "X62": "M22에서 max sequence length만 30으로 늘린 단일 변화다.",
+        "X63": "M22에서 sparse routing을 보기 위해 top-k를 2로 바꾼 단일 변화다.",
+        "C70": "M22에서 expert capacity만 키우기 위해 expert_scale=3을 적용한 비교군이다.",
+        "C71": "C70과 비슷한 capacity를 dense plain으로 맞춘 control이다.",
+        "C72": "C70과 비슷한 capacity를 dense FiLM으로 맞춘 control이다.",
+    }
+    layout = " -> ".join(combo["layer_layout"])
+    delta = summary_ko.get(combo["combo_id"], combo["delta_from_base"])
+    extras: list[str] = [f"layout=`[{layout}]`"]
+    if combo["combo_id"] == "X62":
+        extras.append("`MAX_ITEM_LIST_LENGTH=30`")
+    if combo["combo_id"] == "X63":
+        extras.append("`top_k=2`")
+    if combo["combo_id"] == "X60":
+        extras.append("`macro_history_window=10`")
+    if combo["combo_id"] == "X61":
+        extras.append("`Tempo+Memory only`")
+    if combo["combo_id"] == "C70":
+        extras.append("`expert_scale=3`")
+    if combo["combo_id"] in {"C71", "C72"}:
+        extras.append("capacity-matched dense control(용량 맞춤 dense 비교군)")
+    if combo["combo_id"] == "T50":
+        extras.append("`macro=session, mid=token, micro=token`")
+    if combo["combo_id"] == "T51":
+        extras.append("`macro=token, mid=token, micro=token`")
+    extras_text = ", ".join(extras)
+    return f"- `{combo['combo_id']}` `{combo['desc']}`: {delta} {extras_text}"
+
+
 def write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fp:
@@ -226,7 +280,7 @@ def main() -> None:
         "- 기존에 남아 있는 예전 smoke 로그는 `observed_*` 컬럼으로만 참고하고, budget 계산에는 직접 쓰지 않는다.",
         "- 현재 기본 실행 정책은 `fmoe_eval_logging_timing=final_only`, `fmoe_feature_ablation_logging=false`다.",
         "- 즉 학습 중 매 epoch마다 diag를 쌓지 않고, best-valid와 test 시점에서만 diag/special을 수집한다.",
-        "- 이번 수정 기준 추천 예산은 `모든 combo 최소 3 eval`이며, 빠른 combo는 그보다 더 많이 돈다.",
+        "- 이번 수정 기준 추천 예산은 `P00/P01=15 eval`, 빠른 dense/control은 `10 eval`, 중간/무거운 combo는 `4 eval`, 아주 무거운 일부만 `3 eval`이다.",
         "- 실제 실행 스크립트 `phase_core_28.sh`도 기본값으로 이 추천 예산을 사용한다.",
         "",
         "## 이번 버전에서 보는 핵심 질문",
@@ -248,8 +302,15 @@ def main() -> None:
         f"- `X` ({family_counts.get('X', 0)}개): 구조/입력 조건 ablation. macro window, feature family subset, len 30, top-k 2 같은 단일 변화다. diag 있음.",
         f"- `C` ({family_counts.get('C', 0)}개): capacity/control 비교. expert_scale을 키운 모델과 이에 대응하는 dense control을 맞춘다. `C70`만 diag 있고 `C71/C72`는 diag 없음.",
         "",
-        "## baseline C3 기준에서 주로 바뀌는 축",
+        "## combo 순서와 각 실험 의미",
         "",
+        "아래는 실제 combo 순서를 유지한 채 family별로 묶어서, 각 실험이 무엇을 의미하고 baseline 대비 무엇을 바꾼 것인지 적어둔 것이다.",
+        "",
+        "## baseline 축과 주로 바뀌는 요소",
+        "",
+        "- `P00`은 baseline `SASRec C2`를 최대한 따라가는 1-layer control이다.",
+        "- `P01`은 baseline `SASRec C4 wide`를 최대한 따라가는 2-layer wide control이다.",
+        "- 나머지 대부분의 combo는 `P01/C4`의 optimization recipe를 기본 바탕으로 하고, 그 위에 stage/MoE/feature 축만 바꾼다.",
         "- layout 축: `[layer]`, `[layer,layer,layer]`, `[macro]`, `[macro,mid]`, `[macro,mid,micro]`",
         "- compute 축: plain dense / dense + FiLM / dense + gated bias / learned MoE / rule_soft",
         "- router 입력 축: hidden-only / feature-only / hidden+feature",
@@ -283,10 +344,14 @@ def main() -> None:
         "",
         "- 기본 환경: `/venv/FMoE/bin/python`",
         "- 기본 데이터셋: `KuaiRecLargeStrictPosV2_0.2`",
-        "- 기본 recipe: `C3` 계열 (`d_model=128`, `num_heads=4`, `attn_dropout=0.15`, `len=10`)",
-        "- 기본 search: `lr=5e-5~3e-3 (loguniform)`, `wd`/`dropout`은 choice",
+        "- plain anchor:"
+        " `P00` = `C2` (`1-layer`, `len=10`, `bs=4096/8192`, `lr=7e-5~5e-3`, `dropout choice=[0.05,0.10,0.15,0.20]`)",
+        "- plain anchor:"
+        " `P01` = `C4 wide` (`2-layer`, `len=20`, `d_model=160`, `bs=2048/4096`, `lr=3e-5~2e-3`, `dropout choice=[0.10,0.15,0.20,0.25]`)",
+        "- 그 외 combo 기본 recipe: `C4` 기반 tuning recipe (`attn_dropout=0.10`, `bs=2048/4096`, `lr=3e-5~2e-3`, `wd/dropout=choice`)를 기본으로 두고, 구조 비교를 위해 `d_model=128`, `len=10`, layout은 combo별로 유지한다.",
+        "- full MoE/rule/complex/token 같이 더 무거운 가족은 lr upper bound만 살짝 보수적으로 줄여 `2e-5~1.2e-3`를 쓴다.",
         "- 기본 budget: `tiered 추천 budget`, `tune_epochs=100`, `tune_patience=10`",
-        "- 추천 eval 수: `fast=6`, `medium=4`, `heavy=4`, `very_heavy=3`",
+        "- 추천 eval 수: `P00/P01=15`, `fast=10`, `medium=4`, `heavy=4`, `very_heavy=3`",
         "- 기본 logging: `special on`, `diag final_only`, `feature ablation logging off`",
         "",
         "## logging 운영 모드 선택지",
@@ -315,18 +380,19 @@ def main() -> None:
         "",
         "### 실전 추천 순서",
         "",
-        "- 1차: 기본값(`final_only`, feature ablation off)으로 전 combo 3 eval",
+        "- 1차: 기본값(`final_only`, feature ablation off)으로 현재 tiered budget 그대로 실행",
         "- 2차: 상위 4~6개 combo만 `final_only + feature_ablation on`으로 재실행",
         "- 3차: 그중 상위 1~2개만 `per_eval`로 다시 돌려 epoch별 router 변화 확인",
         "- 즉, `per_eval`을 전체 sweep에 거는 것보다 `--only`로 소수 combo만 다시 돌리는 쪽이 효율적이다.",
         "",
         "## 현재 추천 budget",
         "",
-        "- 이번 버전 기본 추천은 **최소 3 eval + 빠른 combo 추가 eval** 방식이다.",
+        "- 이번 버전 기본 추천은 **plain은 15 eval, 빠른 combo는 10 eval, 무거운 combo는 4 eval, 일부 초heavy만 3 eval** 방식이다.",
         "- 이유:",
         "  - 1 eval이나 2 eval은 운이 너무 크게 작용한다.",
-        "  - 반대로 지금처럼 final-only면 plain/dense 쪽은 생각보다 빨라서, 일괄 3 eval은 오히려 아깝다.",
-        "  - 그래서 fast는 더 넓게 보고, very heavy만 3 eval로 묶는 tiered budget이 더 효율적이다.",
+        "  - 반대로 지금처럼 final-only면 plain/dense 쪽은 생각보다 빨라서, 일괄 3 eval은 오히려 너무 적다.",
+        "  - 특히 `P01`은 `SASRec C4 wide`를 거의 그대로 따라가는 anchor라서, 여기는 더 충분히 tuning해두는 편이 이후 비교 기준으로 훨씬 중요하다.",
+        "  - 그래서 plain/fast는 더 넓게 보고, very heavy만 3 eval로 묶는 tiered budget이 더 효율적이다.",
         f"- 추정 총 예산: `{total_budget_min:.1f} GPU-min`",
         f"- 4 GPU 기준 추정 wall time: `{wall_hours:.2f} h`",
         "- 즉, 이전의 12시간 목표보다는 늘어나지만, `최소 3회` 조건은 지키면서 빠른 combo는 더 안정적으로 볼 수 있다.",
@@ -372,6 +438,29 @@ def main() -> None:
         "- 즉 순서 감각은 유지하면서도 한 GPU에 heavy combo만 몰리는 상황은 줄이도록 한 절충안이다.",
         "",
     ]
+    family_titles = {
+        "P": "P / Plain 기준선",
+        "D": "D / Dense Wrapper 비교군",
+        "M": "M / Learned MoE Anchor",
+        "R": "R / Routing 방식 비교",
+        "E": "E / Feature Encoder 비교",
+        "T": "T / Token Routing 비교",
+        "X": "X / 단일 축 Ablation",
+        "C": "C / Capacity Control",
+    }
+    combo_section_lines: list[str] = []
+    for family in ["P", "D", "M", "R", "E", "T", "X", "C"]:
+        family_combos = [combo for combo in combos if combo["combo_family"] == family]
+        if not family_combos:
+            continue
+        combo_section_lines.append(f"### {family_titles[family]}")
+        combo_section_lines.append("")
+        for combo in family_combos:
+            combo_section_lines.append(combo_summary_line(combo))
+        combo_section_lines.append("")
+    insert_at = md_lines.index("## baseline 축과 주로 바뀌는 요소")
+    md_lines[insert_at:insert_at] = combo_section_lines
+
     for gpu_id in ["0", "1", "2", "3"]:
         md_lines.append(f"- GPU {gpu_id}: `{gpu_loads[gpu_id]:.1f} GPU-min` 예상")
         for row in planned_bins[gpu_id]:
@@ -383,16 +472,27 @@ def main() -> None:
     md_lines.extend(
         [
             "",
+            "## artifact 구조",
+            "",
+            "- `special/core_ablation_v2/D10/...`처럼 보이는 `D10` 폴더는 combo id 기준 저장 버킷이다. 즉 `run_phase=D10`인 실험 결과를 한곳에 묶는 용도다.",
+            "- 상세 JSON/CSV는 계속 combo 버킷 아래에 저장되지만, 평소에는 아래 축 단위 요약 CSV 3개를 먼저 보는 편이 훨씬 편하다.",
+            "- `special_summary`: combo별 최신 special 결과와 overall slice 요약",
+            "- `feature_ablation_summary`: combo별 최신 feature zero/shuffle 민감도 요약",
+            "- `diag_summary`: diag가 있는 combo만 모아서 best trial scalar metric과 상세 diag 파일 경로를 정리한 표",
+            "",
             "## 파일",
             "",
             f"- combo 상세 표: `{combo_csv.relative_to(REPO_ROOT)}`",
             f"- 4 GPU 분배표: `{gpu_csv.relative_to(REPO_ROOT)}`",
+            f"- special 요약: `{(output_root / f'{TARGET_AXIS}_special_summary.csv').relative_to(REPO_ROOT)}`",
+            f"- feature ablation 요약: `{(output_root / f'{TARGET_AXIS}_feature_ablation_summary.csv').relative_to(REPO_ROOT)}`",
+            f"- diag 요약: `{(output_root / f'{TARGET_AXIS}_diag_summary.csv').relative_to(REPO_ROOT)}`",
             "",
             "## 실행 팁",
             "",
             "- 기본 실행:",
             "  `bash experiments/run/fmoe_n3/phase_core_28.sh`",
-            "- 이 기본 실행은 이미 `추천 budget(전 combo 3 eval)`을 사용한다.",
+        "- 이 기본 실행은 이미 `추천 budget(P00/P01=15, fast=10, heavy 중심 4, 일부 3)`을 사용한다.",
             "- 소수 combo만 feature 민감도를 더 보고 싶을 때:",
             "  `python3 experiments/run/fmoe_n3/run_core_28.py --dataset KuaiRecLargeStrictPosV2_0.2 --gpus 0 --only M22,R30,T50 --use-recommended-budget --feature-ablation-logging`",
             "- 모든 epoch에서 diag를 보고 싶을 때:",

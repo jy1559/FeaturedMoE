@@ -9,6 +9,11 @@ import json
 import hashlib
 from pathlib import Path
 
+_PATCH_DIR = Path(__file__).resolve().parent
+# Ensure custom models under experiments/models are importable regardless of cwd.
+if str(_PATCH_DIR) not in sys.path:
+    sys.path.insert(0, str(_PATCH_DIR))
+
 # Create a complete mock for xgboost module
 class MockBooster:
     def __init__(self, *args, **kwargs):

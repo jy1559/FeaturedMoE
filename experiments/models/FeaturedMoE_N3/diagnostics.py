@@ -37,6 +37,48 @@ def _float_list(tensor: torch.Tensor) -> List[float]:
     return [float(v) for v in tensor.detach().cpu().tolist()]
 
 
+def _build_group_routing_payload(raw: dict) -> dict:
+    """Summarize group-level routing stats from accumulated stage data."""
+    n_groups = int(raw.get("n_groups", 0))
+    if n_groups <= 0:
+        return {}
+    family_names = list(raw.get("family_names", []))
+
+    group_usage_sum = raw["group_usage_sum"]
+    group_top1_count = raw["group_top1_count"]
+    g_total = float(group_usage_sum.sum().item())
+    if g_total > 0:
+        group_share = (group_usage_sum / g_total).tolist()
+        g_cv = float(group_usage_sum.std(unbiased=False).item() / max(group_usage_sum.mean().item(), 1e-8))
+        g_n_eff = float(1.0 / (group_usage_sum / g_total).pow(2).sum().item()) if n_groups > 1 else 1.0
+        g_top1_total = float(group_top1_count.sum().item())
+        g_top1_max = float(group_top1_count.max().item() / max(g_top1_total, 1.0))
+    else:
+        group_share = [0.0] * n_groups
+        g_cv, g_n_eff, g_top1_max = 0.0, 0.0, 0.0
+
+    g_n_tok = max(int(raw.get("group_n_tokens", 0)), 1)
+    group_entropy_mean = float(raw.get("group_entropy_sum", 0.0)) / g_n_tok
+
+    prior_n = max(int(raw.get("group_prior_n", 0)), 1)
+    group_prior_sum = raw["group_prior_sum"]
+    group_prior_mean = (group_prior_sum / prior_n).tolist() if float(group_prior_sum.sum()) > 0 else [0.0] * n_groups
+
+    fg_n_tok = max(int(raw.get("factored_group_n_tokens", 0)), 1)
+    factored_group_entropy_mean = float(raw.get("factored_group_entropy_sum", 0.0)) / fg_n_tok
+
+    return {
+        "group_names": family_names[:n_groups],
+        "group_share": group_share,
+        "group_n_eff": g_n_eff,
+        "group_cv_usage": g_cv,
+        "group_top1_max_frac": g_top1_max,
+        "group_entropy_mean": group_entropy_mean,
+        "group_prior_mean": group_prior_mean,
+        "factored_group_entropy_mean": factored_group_entropy_mean,
+    }
+
+
 class N3DiagnosticCollector:
     """Collect compact routing/conditioning diagnostics over one evaluation split."""
 
@@ -67,6 +109,7 @@ class N3DiagnosticCollector:
         if stage_key not in self._stage_data:
             base_stage = _base_stage_name(stage_key)
             family_names = list(self.stage_family_features.get(base_stage, {}).keys())
+            n_groups = max(len(family_names), 1)
             self._stage_data[stage_key] = {
                 "mode": mode,
                 "n_slots": int(n_slots),
@@ -88,6 +131,17 @@ class N3DiagnosticCollector:
                 "delta_norm_sum": 0.0,
                 "delta_norm_count": 0,
                 "expert_out_sum": torch.zeros(n_slots, 1),
+                # Group-level routing diagnostics
+                "group_usage_sum": torch.zeros(n_groups),
+                "group_top1_count": torch.zeros(n_groups),
+                "group_entropy_sum": 0.0,
+                "group_n_tokens": 0,
+                "group_prior_sum": torch.zeros(n_groups),
+                "group_prior_n": 0,
+                "factored_group_entropy_sum": 0.0,
+                "factored_group_n_tokens": 0,
+                "n_groups": n_groups,
+            }
                 "expert_out_dim": 1,
             }
         return self._stage_data[stage_key]
@@ -195,6 +249,50 @@ class N3DiagnosticCollector:
                 stage_store["expert_out_sum"] += expert_out_mean.detach().cpu()
                 stage_store["expert_out_dim"] = int(expert_out_mean.size(1))
 
+            # --- Group-level routing diagnostics ---
+            # group_weights: actual per-group routing distribution (aggregated from expert weights)
+            group_weights = dict(router_aux.get("group_weights", {}) or {}).get(stage_key)
+            if torch.is_tensor(group_weights) and group_weights.size(-1) >= 1:
+                gw = group_weights.detach()
+                n_grps = gw.size(-1)
+                if stage_store["n_groups"] != n_grps:
+                    # Resize group accumulators if needed (e.g. first time n_groups was unknown)
+                    stage_store["group_usage_sum"] = torch.zeros(n_grps)
+                    stage_store["group_top1_count"] = torch.zeros(n_grps)
+                    stage_store["group_prior_sum"] = torch.zeros(n_grps)
+                    stage_store["n_groups"] = n_grps
+                gvalid = mask.unsqueeze(-1).float()
+                stage_store["group_usage_sum"] += (gw * gvalid).sum(dim=(0, 1)).cpu()
+                g_entropy = -(gw.clamp(min=1e-8) * gw.clamp(min=1e-8).log()).sum(dim=-1)
+                stage_store["group_entropy_sum"] += float((g_entropy * mask.float()).sum().item())
+                g_top1 = gw.argmax(dim=-1)
+                flat_gtop1 = g_top1[mask]
+                stage_store["group_top1_count"] += torch.bincount(flat_gtop1.cpu(), minlength=n_grps).float()
+                stage_store["group_n_tokens"] += n_valid
+
+            # group_prior: feature-derived expected group distribution
+            group_prior = dict(router_aux.get("group_prior", {}) or {}).get(stage_key)
+            if torch.is_tensor(group_prior) and group_prior.size(-1) >= 1:
+                gp = group_prior.detach()
+                gvalid = mask.unsqueeze(-1).float()
+                stage_store["group_prior_sum"] += (gp * gvalid).sum(dim=(0, 1)).cpu()
+                stage_store["group_prior_n"] += n_valid
+
+            # factored_group_logits: raw logits from group_router_net in factored router
+            fgl = dict(router_aux.get("factored_group_logits", {}) or {}).get(stage_key)
+            if torch.is_tensor(fgl) and fgl.size(-1) >= 1:
+                fg_probs = F.softmax(fgl.detach(), dim=-1)
+                # Entropy of factored group logits distribution
+                fg_entropy = -(fg_probs.clamp(min=1e-8) * fg_probs.clamp(min=1e-8).log()).sum(dim=-1)
+                # fgl is (B, S, n_groups) for token-granularity or (B, n_groups) for session
+                if fgl.ndim == 3:
+                    fgl_mask = mask.float()
+                    stage_store["factored_group_entropy_sum"] += float((fg_entropy * fgl_mask).sum().item())
+                    stage_store["factored_group_n_tokens"] += n_valid
+                elif fgl.ndim == 2:
+                    stage_store["factored_group_entropy_sum"] += float(fg_entropy.sum().item())
+                    stage_store["factored_group_n_tokens"] += int(fg_entropy.numel())
+
         for stage_key, cond in dense_aux.items():
             stage_store = self._ensure_stage(stage_key, n_slots=1, mode="dense")
             delta_norm = cond.get("delta_norm")
@@ -282,6 +380,8 @@ class N3DiagnosticCollector:
                 "route_transition_matrix": {
                     "values": raw["transition"].tolist(),
                 },
+                # Group-level routing metrics
+                "group_routing": _build_group_routing_payload(raw),
                 **sim_payload,
             }
             prefix = stage_key.replace("@", "_")
@@ -296,6 +396,13 @@ class N3DiagnosticCollector:
             flat_scalars[f"{prefix}.stage_delta_norm"] = delta_norm
             flat_scalars[f"{prefix}.expert_similarity_mean"] = sim_payload["expert_similarity_mean"]
             flat_scalars[f"{prefix}.expert_similarity_max"] = sim_payload["expert_similarity_max"]
+            grp_payload = stage_payload[stage_key].get("group_routing", {})
+            if grp_payload:
+                flat_scalars[f"{prefix}.group_n_eff"] = float(grp_payload.get("group_n_eff", 0.0))
+                flat_scalars[f"{prefix}.group_cv_usage"] = float(grp_payload.get("group_cv_usage", 0.0))
+                flat_scalars[f"{prefix}.group_top1_max_frac"] = float(grp_payload.get("group_top1_max_frac", 0.0))
+                flat_scalars[f"{prefix}.group_entropy_mean"] = float(grp_payload.get("group_entropy_mean", 0.0))
+                flat_scalars[f"{prefix}.factored_group_entropy_mean"] = float(grp_payload.get("factored_group_entropy_mean", 0.0))
 
         return {
             "split": self.split_name,

@@ -92,6 +92,7 @@ import io
 import json
 import gzip
 import csv
+import shutil
 import time
 import argparse
 import warnings
@@ -1135,6 +1136,7 @@ def _diag_artifact_paths(
     return {
         "trial_summary": diag_root / "trial_summary.csv",
         "best_valid_diag": diag_root / "best_valid_diag.json.gz",
+        "early_valid_diag": diag_root / "early_valid_diag.json.gz",
         "test_diag": diag_root / "test_diag.json.gz",
         "collapse_diag": diag_root / "collapse_diag.json.gz",
         "epoch_trace": diag_root / "epoch_trace.csv.gz",
@@ -1208,6 +1210,7 @@ def _build_special_metrics_payload(
                 "params": trial.get("params", {}),
                 "valid_special_metrics": valid_special or {},
                 "test_special_metrics": test_special or {},
+                "early_valid_special_metrics": trial.get("early_valid_special_metrics") or {},
             }
         )
     if not rows:
@@ -1232,6 +1235,7 @@ def _build_special_metrics_payload(
             "params": best_row.get("params", {}),
         },
         "best_valid_special_metrics": best_row.get("valid_special_metrics", {}) or {},
+        "early_valid_special_metrics": best_row.get("early_valid_special_metrics", {}) or {},
         "test_special_metrics": best_row.get("test_special_metrics", {}) or {},
         "trials": rows,
     }
@@ -1521,6 +1525,297 @@ def configure_data_cache(cfg_dict: dict):
     cfg_dict["dataloaders_save_path"] = str(dl_file)
 
 
+def _trial_artifact_stage_path(cfg_dict: dict, *, trial_num: int, tag: str) -> Path:
+    tmp_dir = Path(__file__).resolve().parent / "run" / "artifacts" / "tmp" / "trial_stage"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    dataset = _safe_slug(_canonical_dataset_name(cfg_dict.get("dataset", "")))
+    model = _safe_slug(str(cfg_dict.get("model", "")))
+    phase = _safe_slug(str(cfg_dict.get("run_phase", "")))
+    tag_slug = _safe_slug(tag)
+    return tmp_dir / f"pid{os.getpid()}_{dataset}_{model}_{phase}_T{int(trial_num):03d}_{tag_slug}.pth"
+
+
+def _copy_stage_file(src: Path, dst: Path | str) -> str:
+    target = Path(dst)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, target)
+    _register_temp_path(target)
+    return str(target.resolve())
+
+
+def _run_trainer_eval(trainer, data_loader, *, split_name: str, show_progress: bool, collect_special: bool, collect_diag: bool):
+    eval_special = None
+    eval_diag = None
+    if collect_special:
+        from recbole_patch import begin_special_eval
+        begin_special_eval(trainer, data_loader, split_name=split_name)
+    if collect_diag:
+        from recbole_patch import begin_diagnostic_eval
+        begin_diagnostic_eval(trainer, split_name=split_name)
+    eval_result = trainer._valid_epoch(data_loader, show_progress=show_progress)
+    if collect_special:
+        from recbole_patch import end_special_eval
+        eval_special = end_special_eval(trainer)
+    if collect_diag:
+        from recbole_patch import end_diagnostic_eval
+        eval_diag = end_diagnostic_eval(trainer)
+    if isinstance(eval_result, tuple):
+        eval_result = next((x for x in eval_result if isinstance(x, dict)), eval_result[0])
+    return eval_result, eval_special, eval_diag
+
+
+def _collect_feature_ablation_metrics(
+    *,
+    trainer,
+    model,
+    valid_data,
+    reference_mrr20: float,
+    reference_diag: dict | None,
+    show_progress: bool,
+    enable_global: bool,
+    enable_family: bool,
+    split_prefix: str,
+) -> dict:
+    metrics = {}
+    if not hasattr(model, "set_feature_ablation_mode"):
+        return metrics
+
+    def _eval(mode: str, *, family: str | None = None, split_name: str):
+        model.set_feature_ablation_mode(mode, family)
+        return _run_trainer_eval(
+            trainer,
+            valid_data,
+            split_name=split_name,
+            show_progress=show_progress,
+            collect_special=False,
+            collect_diag=True,
+        )
+
+    if enable_global:
+        zero_result, _zero_special, valid_zero_diag = _eval("zero", split_name=f"{split_prefix}_zero")
+        shuffle_result, _shuffle_special, valid_shuffle_diag = _eval("shuffle", split_name=f"{split_prefix}_shuffle")
+        metrics.update(
+            {
+                "feature_zero_delta_mrr": float(reference_mrr20 - float((zero_result or {}).get("mrr@20", 0.0) or 0.0)),
+                "feature_shuffle_delta_mrr": float(reference_mrr20 - float((shuffle_result or {}).get("mrr@20", 0.0) or 0.0)),
+                "route_change_under_feature_shuffle": _compute_route_change_metric(reference_diag, valid_shuffle_diag),
+                "route_change_under_feature_zero": _compute_route_change_metric(reference_diag, valid_zero_diag),
+            }
+        )
+
+    if enable_family:
+        for family_name in list(getattr(model, "feature_family_names", []) or []):
+            family_slug = _safe_slug(str(family_name).lower())
+            fam_zero_result, _fam_zero_special, fam_zero_diag = _eval(
+                "zero",
+                family=family_name,
+                split_name=f"{split_prefix}_{family_slug}_zero",
+            )
+            fam_shuffle_result, _fam_shuffle_special, fam_shuffle_diag = _eval(
+                "shuffle",
+                family=family_name,
+                split_name=f"{split_prefix}_{family_slug}_shuffle",
+            )
+            metrics.update(
+                {
+                    f"family_{family_slug}_zero_delta_mrr": float(
+                        reference_mrr20 - float((fam_zero_result or {}).get("mrr@20", 0.0) or 0.0)
+                    ),
+                    f"family_{family_slug}_shuffle_delta_mrr": float(
+                        reference_mrr20 - float((fam_shuffle_result or {}).get("mrr@20", 0.0) or 0.0)
+                    ),
+                    f"family_{family_slug}_route_change_under_zero": _compute_route_change_metric(reference_diag, fam_zero_diag),
+                    f"family_{family_slug}_route_change_under_shuffle": _compute_route_change_metric(reference_diag, fam_shuffle_diag),
+                }
+            )
+
+    model.set_feature_ablation_mode("none")
+    return metrics
+
+
+def _build_eval_runtime(cfg_dict: dict):
+    cfg = copy.deepcopy(cfg_dict)
+    cfg["log_wandb"] = False
+    model_name = str(cfg.get("model", "")).lower()
+    if model_name in _FEATURE_AWARE_MOE_MODELS and "fmoe_special_logging" not in cfg:
+        cfg["fmoe_special_logging"] = True
+    cfg["show_progress"] = bool(cfg.get("show_progress", True))
+    for drop in ("search", "search_stages", "search_strategy", "max_search"):
+        cfg.pop(drop, None)
+    cfg["valid_metric"] = "MRR@20"
+    _sync_model_dimensions(cfg)
+    if cfg.get("loss_type", "CE").upper() == "CE":
+        cfg["train_neg_sample_args"] = None
+    configure_runtime_acceleration(cfg)
+    configure_data_cache(cfg)
+
+    _argv = sys.argv
+    sys.argv = sys.argv[:1]
+    try:
+        config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
+    finally:
+        sys.argv = _argv
+
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    init_seed(config["seed"], config["reproducibility"])
+
+    cache_key = _make_data_cache_key(cfg)
+    use_mem_cache = bool(cfg.get("in_memory_data_cache", True))
+    max_mem_cache = max(1, int(cfg.get("max_in_memory_data_cache", 1)))
+    if use_mem_cache and cache_key in _DATA_BUNDLE_CACHE:
+        dataset, train_data, valid_data, test_data = _DATA_BUNDLE_CACHE[cache_key]
+        _DATA_BUNDLE_CACHE.move_to_end(cache_key, last=True)
+        _reset_loader_seed(train_data, int(config["seed"]))
+        _reset_loader_seed(valid_data, int(config["seed"]))
+        _reset_loader_seed(test_data, int(config["seed"]))
+    else:
+        dataset = create_dataset(config)
+        train_data, valid_data, test_data = data_preparation(config, dataset)
+        if use_mem_cache:
+            _put_data_cache(
+                cache_key,
+                (dataset, train_data, valid_data, test_data),
+                max_entries=max_mem_cache,
+            )
+
+    model_cls = get_model(config["model"])
+    model = model_cls(config, train_data.dataset).to(config["device"])
+    trainer_cls = get_trainer(config["MODEL_TYPE"], config["model"])
+    trainer = trainer_cls(config, model)
+    setattr(trainer, "_disable_patch_logging", True)
+    return cfg, config, dataset, train_data, valid_data, test_data, model, trainer
+
+
+def _collect_deferred_combo_best_artifacts(
+    *,
+    base_cfg: dict,
+    sampled_params: dict,
+    checkpoint_path: str,
+    probe_checkpoint_path: str,
+    trial_num: int,
+) -> dict:
+    if not checkpoint_path or not Path(checkpoint_path).exists():
+        return {}
+
+    cfg_trial = copy.deepcopy(base_cfg)
+    cfg_trial.pop("search", None)
+    for k, v in sampled_params.items():
+        _apply_runtime_param(cfg_trial, str(k), _ser(v))
+
+    runtime = _build_eval_runtime(cfg_trial)
+    cfg_eval, config, dataset, train_data, valid_data, test_data, model, trainer = runtime
+    show_progress = bool(cfg_eval.get("show_progress", True))
+    model_name = str(cfg_eval.get("model", "")).lower()
+    special_logging_enabled = model_name in _FEATURE_AWARE_MOE_MODELS and bool(
+        _config_get(config, "fmoe_special_logging", cfg_eval.get("fmoe_special_logging", True))
+    )
+    diag_logging_enabled = model_name in _FEATURE_AWARE_MOE_MODELS and bool(
+        _config_get(config, "fmoe_diag_logging", cfg_eval.get("fmoe_diag_logging", True))
+    )
+    feature_ablation_logging_enabled = model_name in _FEATURE_AWARE_MOE_MODELS and bool(
+        _config_get(config, "fmoe_feature_ablation_logging", cfg_eval.get("fmoe_feature_ablation_logging", False))
+    )
+    family_ablation_logging_enabled = model_name in _FEATURE_AWARE_MOE_MODELS and bool(
+        _config_get(
+            config,
+            "fmoe_feature_family_ablation_logging",
+            cfg_eval.get("fmoe_feature_family_ablation_logging", feature_ablation_logging_enabled),
+        )
+    )
+
+    try:
+        best_state = torch.load(checkpoint_path, map_location="cpu")
+        trainer.model.load_state_dict(best_state)
+        del best_state
+        gc.collect()
+
+        trainer.model.set_feature_ablation_mode("none")
+        best_valid_result, best_valid_special_metrics, best_valid_diag = _run_trainer_eval(
+            trainer,
+            valid_data,
+            split_name="best_valid",
+            show_progress=show_progress,
+            collect_special=special_logging_enabled,
+            collect_diag=diag_logging_enabled,
+        )
+        test_result, test_special_metrics, test_diag = _run_trainer_eval(
+            trainer,
+            test_data,
+            split_name="test",
+            show_progress=show_progress,
+            collect_special=special_logging_enabled,
+            collect_diag=diag_logging_enabled,
+        )
+
+        feature_ablation_metrics = {}
+        if feature_ablation_logging_enabled:
+            feature_ablation_metrics = _collect_feature_ablation_metrics(
+                trainer=trainer,
+                model=trainer.model,
+                valid_data=valid_data,
+                reference_mrr20=float((best_valid_result or {}).get("mrr@20", 0.0) or 0.0),
+                reference_diag=best_valid_diag,
+                show_progress=show_progress,
+                enable_global=True,
+                enable_family=family_ablation_logging_enabled,
+                split_prefix="valid",
+            )
+            if isinstance(best_valid_diag, dict):
+                best_valid_diag["feature_ablation"] = feature_ablation_metrics
+
+        early_valid_result = {}
+        early_valid_special_metrics = {}
+        early_valid_diag = {}
+        if probe_checkpoint_path and Path(probe_checkpoint_path).exists():
+            probe_state = torch.load(probe_checkpoint_path, map_location="cpu")
+            trainer.model.load_state_dict(probe_state)
+            del probe_state
+            gc.collect()
+            trainer.model.set_feature_ablation_mode("none")
+            early_valid_result, early_valid_special_metrics, early_valid_diag = _run_trainer_eval(
+                trainer,
+                valid_data,
+                split_name="early_valid",
+                show_progress=show_progress,
+                collect_special=special_logging_enabled,
+                collect_diag=diag_logging_enabled,
+            )
+            if feature_ablation_logging_enabled:
+                early_feature_metrics = _collect_feature_ablation_metrics(
+                    trainer=trainer,
+                    model=trainer.model,
+                    valid_data=valid_data,
+                    reference_mrr20=float((early_valid_result or {}).get("mrr@20", 0.0) or 0.0),
+                    reference_diag=early_valid_diag,
+                    show_progress=show_progress,
+                    enable_global=True,
+                    enable_family=family_ablation_logging_enabled,
+                    split_prefix="early_valid",
+                )
+                feature_ablation_metrics.update({f"early_{k}": v for k, v in early_feature_metrics.items()})
+                if isinstance(early_valid_diag, dict):
+                    early_valid_diag["feature_ablation"] = early_feature_metrics
+
+        return {
+            "valid_result": {k: float(v) for k, v in (best_valid_result or {}).items()},
+            "test_result": {k: float(v) for k, v in (test_result or {}).items()},
+            "valid_special_metrics": best_valid_special_metrics or {},
+            "test_special_metrics": test_special_metrics or {},
+            "valid_diag": best_valid_diag or {},
+            "test_diag": test_diag or {},
+            "feature_ablation_metrics": feature_ablation_metrics or {},
+            "early_valid_result": {k: float(v) for k, v in (early_valid_result or {}).items()} if early_valid_result else {},
+            "early_valid_special_metrics": early_valid_special_metrics or {},
+            "early_valid_diag": early_valid_diag or {},
+            "artifact_trial_num": int(trial_num),
+        }
+    finally:
+        for obj in (model, trainer, train_data, valid_data, test_data, dataset, config):
+            del obj
+        gc.collect()
+        torch.cuda.empty_cache()
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  Single-trial training
 # ═══════════════════════════════════════════════════════════════════
@@ -1597,6 +1892,9 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     diag_logging_enabled = False
     eval_logging_timing = "per_eval"
     feature_ablation_logging_enabled = False
+    family_ablation_logging_enabled = False
+    artifact_logging_policy = "per_trial"
+    probe_snapshot_enabled = False
     if model_name in _FEATURE_AWARE_MOE_MODELS:
         special_logging_enabled = special_logging_enabled or bool(
             _config_get(config, "fmoe_special_logging", cfg.get("fmoe_special_logging", True))
@@ -1616,6 +1914,34 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 cfg.get("fmoe_feature_ablation_logging", False),
             )
         )
+        family_ablation_logging_enabled = bool(
+            _config_get(
+                config,
+                "fmoe_feature_family_ablation_logging",
+                cfg.get("fmoe_feature_family_ablation_logging", feature_ablation_logging_enabled),
+            )
+        )
+        artifact_logging_policy = str(
+            _config_get(
+                config,
+                "fmoe_artifact_logging_policy",
+                cfg.get("fmoe_artifact_logging_policy", "combo_best"),
+            )
+        ).strip().lower() or "combo_best"
+        if artifact_logging_policy not in {"per_trial", "combo_best"}:
+            artifact_logging_policy = "combo_best"
+        probe_snapshot_enabled = bool(
+            _config_get(
+                config,
+                "fmoe_probe_snapshot_enable",
+                cfg.get("fmoe_probe_snapshot_enable", True),
+            )
+        )
+    defer_detailed_artifacts = bool(
+        model_name in _FEATURE_AWARE_MOE_MODELS
+        and artifact_logging_policy != "per_trial"
+        and (special_logging_enabled or diag_logging_enabled or feature_ablation_logging_enabled)
+    )
     best_valid_special_metrics = None
     test_special_metrics = None
     best_valid_diag = None
@@ -1650,6 +1976,13 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     except Exception:
         pass
     _register_temp_path(best_stage_path)
+    probe_stage_path = _trial_artifact_stage_path(cfg, trial_num=trial_num or 0, tag="probe_local")
+    try:
+        probe_stage_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    _register_temp_path(probe_stage_path)
+    probe_stage_saved = False
     best_mrr20 = float("-inf")
     best_result: dict = {}
     test_result: dict = {}
@@ -1666,24 +1999,14 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     lr_scheduler, lr_scheduler_type = _build_lr_scheduler(cfg, trainer, max_epochs=max_epochs)
 
     def _run_eval(data_loader, *, split_name: str, collect_special: bool = True, collect_diag: bool = True):
-        eval_special = None
-        eval_diag = None
-        if collect_special and special_logging_enabled:
-            from recbole_patch import begin_special_eval
-            begin_special_eval(trainer, data_loader, split_name=split_name)
-        if collect_diag and diag_logging_enabled:
-            from recbole_patch import begin_diagnostic_eval
-            begin_diagnostic_eval(trainer, split_name=split_name)
-        eval_result = trainer._valid_epoch(data_loader, show_progress=show_progress)
-        if collect_special and special_logging_enabled:
-            from recbole_patch import end_special_eval
-            eval_special = end_special_eval(trainer)
-        if collect_diag and diag_logging_enabled:
-            from recbole_patch import end_diagnostic_eval
-            eval_diag = end_diagnostic_eval(trainer)
-        if isinstance(eval_result, tuple):
-            eval_result = next((x for x in eval_result if isinstance(x, dict)), eval_result[0])
-        return eval_result, eval_special, eval_diag
+        return _run_trainer_eval(
+            trainer,
+            data_loader,
+            split_name=split_name,
+            show_progress=show_progress,
+            collect_special=bool(collect_special and special_logging_enabled),
+            collect_diag=bool(collect_diag and diag_logging_enabled),
+        )
 
     t0 = time.time()
     try:
@@ -1769,7 +2092,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 )
                 continue
 
-            collect_epoch_logging = eval_logging_timing == "per_eval"
+            collect_epoch_logging = eval_logging_timing == "per_eval" and not defer_detailed_artifacts
             vr, epoch_valid_special, epoch_valid_diag = _run_eval(
                 valid_data,
                 split_name="valid",
@@ -1789,6 +2112,9 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 best_epoch = epoch + 1
             else:
                 no_improve += 1
+            if probe_snapshot_enabled and not probe_stage_saved:
+                _save_best_stage(trainer.model, probe_stage_path)
+                probe_stage_saved = True
 
             if lr_scheduler is not None:
                 if lr_scheduler_type == "plateau":
@@ -1856,45 +2182,41 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
         else:
             print(f"[WARN] Missing best-stage checkpoint before test: {best_stage_path}")
 
+        collect_final_artifacts = not defer_detailed_artifacts
         best_valid_eval_result, best_valid_special_metrics, best_valid_diag = _run_eval(
             valid_data,
             split_name="best_valid",
-            collect_special=True,
-            collect_diag=True,
+            collect_special=collect_final_artifacts,
+            collect_diag=collect_final_artifacts,
         )
         if best_valid_eval_result:
             best_result = {k: float(v) for k, v in best_valid_eval_result.items()}
             best_mrr20 = float(best_result.get("mrr@20", best_mrr20) or best_mrr20)
 
-        if feature_ablation_logging_enabled and hasattr(trainer.model, "set_feature_ablation_mode"):
-            trainer.model.set_feature_ablation_mode("none")
-            zero_result, _zero_special, valid_zero_diag = _run_eval(
-                valid_data,
-                split_name="valid_zero",
-                collect_special=False,
-                collect_diag=True,
+        if (
+            feature_ablation_logging_enabled
+            and not defer_detailed_artifacts
+            and hasattr(trainer.model, "set_feature_ablation_mode")
+        ):
+            feature_ablation_metrics = _collect_feature_ablation_metrics(
+                trainer=trainer,
+                model=trainer.model,
+                valid_data=valid_data,
+                reference_mrr20=float(best_mrr20),
+                reference_diag=best_valid_diag,
+                show_progress=show_progress,
+                enable_global=True,
+                enable_family=family_ablation_logging_enabled,
+                split_prefix="valid",
             )
-            trainer.model.set_feature_ablation_mode("shuffle")
-            shuffle_result, _shuffle_special, valid_shuffle_diag = _run_eval(
-                valid_data,
-                split_name="valid_shuffle",
-                collect_special=False,
-                collect_diag=True,
-            )
-            trainer.model.set_feature_ablation_mode("none")
-            feature_ablation_metrics = {
-                "feature_zero_delta_mrr": float(best_mrr20 - float((zero_result or {}).get("mrr@20", 0.0) or 0.0)),
-                "feature_shuffle_delta_mrr": float(best_mrr20 - float((shuffle_result or {}).get("mrr@20", 0.0) or 0.0)),
-                "route_change_under_feature_shuffle": _compute_route_change_metric(best_valid_diag, valid_shuffle_diag),
-            }
             if isinstance(best_valid_diag, dict):
                 best_valid_diag["feature_ablation"] = feature_ablation_metrics
 
         tr, test_special_metrics, test_diag = _run_eval(
             test_data,
             split_name="test",
-            collect_special=True,
-            collect_diag=True,
+            collect_special=collect_final_artifacts,
+            collect_diag=collect_final_artifacts,
         )
         test_result = {k: float(v) for k, v in tr.items()}
 
@@ -1907,6 +2229,16 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 fmoe_arch = _extract_featured_moe_arch(model, cfg)
         except Exception:
             fmoe_arch = {}
+
+        artifact_best_checkpoint = ""
+        artifact_probe_checkpoint = ""
+        if defer_detailed_artifacts:
+            staged_best_path = str(cfg.get("__artifact_trial_best_path", "") or "").strip()
+            staged_probe_path = str(cfg.get("__artifact_trial_probe_path", "") or "").strip()
+            if staged_best_path and best_stage_path.exists():
+                artifact_best_checkpoint = _copy_stage_file(best_stage_path, staged_best_path)
+            if staged_probe_path and probe_stage_saved and probe_stage_path.exists():
+                artifact_probe_checkpoint = _copy_stage_file(probe_stage_path, staged_probe_path)
 
         return {
             "mrr@20": float(best_mrr20),
@@ -1927,9 +2259,13 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "lr_scheduler_type": lr_scheduler_type,
             "elapsed": elapsed,
             "fmoe_arch": fmoe_arch,
+            "artifact_best_checkpoint": artifact_best_checkpoint,
+            "artifact_probe_checkpoint": artifact_probe_checkpoint,
+            "artifact_logging_policy": artifact_logging_policy,
         }
     finally:
         _cleanup_temp_path(best_stage_path)
+        _cleanup_temp_path(probe_stage_path)
         del model, trainer, train_data, valid_data, test_data, dataset, config
         gc.collect()
         torch.cuda.empty_cache()
@@ -1999,13 +2335,18 @@ def _save_results(
                 if k
                 not in {
                     "valid_special_metrics",
+                    "early_valid_result",
+                    "early_valid_special_metrics",
                     "test_special_metrics",
                     "valid_diag",
+                    "early_valid_diag",
                     "test_diag",
                     "valid_zero_diag",
                     "valid_shuffle_diag",
                     "feature_ablation_metrics",
                     "epoch_trace",
+                    "artifact_best_checkpoint",
+                    "artifact_probe_checkpoint",
                 }
             }
             for trial in normalized_trials
@@ -2049,6 +2390,8 @@ def _save_results(
         data["best_valid_result"] = best_valid_result
         data["test_result"] = test_result
         data["best_valid_special_metrics"] = bt.get("valid_special_metrics") or {}
+        data["early_valid_result"] = bt.get("early_valid_result") or {}
+        data["early_valid_special_metrics"] = bt.get("early_valid_special_metrics") or {}
         data["test_special_metrics"] = bt.get("test_special_metrics") or {}
         if bt.get("feature_ablation_metrics"):
             data["feature_ablation_metrics"] = bt.get("feature_ablation_metrics") or {}
@@ -2082,7 +2425,7 @@ def _save_results(
             epoch_trace_rows.append({"trial": trial.get("trial"), **row})
 
     has_any_diag = any(
-        bool(trial.get("valid_diag") or trial.get("test_diag"))
+        bool(trial.get("valid_diag") or trial.get("early_valid_diag") or trial.get("test_diag"))
         for trial in normalized_trials
     )
 
@@ -2095,6 +2438,8 @@ def _save_results(
         collapse_row = min(ok, key=lambda x: float(x.get("mrr@20", 0.0) or 0.0))
         if bt.get("valid_diag"):
             _write_json_gz_file(diag_paths["best_valid_diag"], bt.get("valid_diag") or {})
+        if bt.get("early_valid_diag"):
+            _write_json_gz_file(diag_paths["early_valid_diag"], bt.get("early_valid_diag") or {})
         if bt.get("test_diag"):
             _write_json_gz_file(diag_paths["test_diag"], bt.get("test_diag") or {})
         if collapse_row.get("valid_diag"):
@@ -2104,6 +2449,7 @@ def _save_results(
             _write_json_gz_file(diag_paths["collapse_diag"], collapse_payload)
     data["diag_trial_summary_file"] = str(diag_paths["trial_summary"].resolve()) if has_any_diag and trial_summary_rows else ""
     data["diag_best_valid_file"] = str(diag_paths["best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else ""
+    data["diag_early_valid_file"] = str(diag_paths["early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else ""
     data["diag_test_file"] = str(diag_paths["test_diag"].resolve()) if ok and bt.get("test_diag") else ""
     data["diag_collapse_file"] = str(diag_paths["collapse_diag"].resolve()) if ok and collapse_row.get("valid_diag") else ""
     data["diag_epoch_trace_file"] = str(diag_paths["epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else ""
@@ -2116,6 +2462,7 @@ def _save_results(
         "special_log_file": str(mirror_paths["special_log"].resolve()) if special_payload else "",
         "diag_trial_summary_file": str(diag_paths["trial_summary"].resolve()) if has_any_diag and trial_summary_rows else "",
         "diag_best_valid_file": str(diag_paths["best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else "",
+        "diag_early_valid_file": str(diag_paths["early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else "",
         "diag_test_file": str(diag_paths["test_diag"].resolve()) if ok and bt.get("test_diag") else "",
         "diag_collapse_file": str(diag_paths["collapse_diag"].resolve()) if ok and collapse_row.get("valid_diag") else "",
         "diag_epoch_trace_file": str(diag_paths["epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else "",
@@ -2668,10 +3015,21 @@ def main():
         "special_result_file": "",
         "special_log_file": "",
     }
+    artifact_logging_policy = str(cfg.get("fmoe_artifact_logging_policy", "combo_best") or "combo_best").strip().lower()
+    if artifact_logging_policy not in {"per_trial", "combo_best"}:
+        artifact_logging_policy = "combo_best"
+    defer_detailed_artifacts = bool(str(model).strip().lower() in _FEATURE_AWARE_MOE_MODELS and artifact_logging_policy != "per_trial")
+    combo_best_artifact_state = {
+        "trial": None,
+        "mrr20": float("-inf"),
+        "params": {},
+        "best_checkpoint": "",
+        "probe_checkpoint": "",
+    }
 
     # Objective function
     def objective(params):
-        nonlocal best_so_far, interrupted, interrupted_at
+        nonlocal best_so_far, interrupted, interrupted_at, combo_best_artifact_state
         trial_num = len(all_trials_data) + 1
         sampled_params = {k: v for k, v in params.items() if k != "__single_run__"}
 
@@ -2684,6 +3042,9 @@ def main():
         cfg_trial["parent_result"] = parent_result
         for k, v in sampled_params.items():
             _apply_runtime_param(cfg_trial, str(k), _ser(v))
+        if defer_detailed_artifacts:
+            cfg_trial["__artifact_trial_best_path"] = str(_trial_artifact_stage_path(cfg_trial, trial_num=trial_num, tag="combo_best"))
+            cfg_trial["__artifact_trial_probe_path"] = str(_trial_artifact_stage_path(cfg_trial, trial_num=trial_num, tag="combo_probe"))
 
         # Compact trial header
         parts = []
@@ -2713,6 +3074,26 @@ def main():
             mrr20 = result["mrr@20"]
             if mrr20 > best_so_far:
                 best_so_far = mrr20
+            current_artifact_best = str(result.get("artifact_best_checkpoint", "") or "").strip()
+            current_artifact_probe = str(result.get("artifact_probe_checkpoint", "") or "").strip()
+            if defer_detailed_artifacts:
+                is_combo_best = (
+                    combo_best_artifact_state["trial"] is None
+                    or float(mrr20) > float(combo_best_artifact_state["mrr20"])
+                )
+                if is_combo_best:
+                    _cleanup_temp_path(combo_best_artifact_state.get("best_checkpoint"))
+                    _cleanup_temp_path(combo_best_artifact_state.get("probe_checkpoint"))
+                    combo_best_artifact_state = {
+                        "trial": int(trial_num),
+                        "mrr20": float(mrr20),
+                        "params": {k: _ser(v) for k, v in sampled_params.items()},
+                        "best_checkpoint": current_artifact_best,
+                        "probe_checkpoint": current_artifact_probe,
+                    }
+                else:
+                    _cleanup_temp_path(current_artifact_best)
+                    _cleanup_temp_path(current_artifact_probe)
             current_best_hr10 = float((result.get("valid_result", {}) or {}).get("hit@10", 0.0) or 0.0)
             current_test_mrr20 = float((result.get("test_result", {}) or {}).get("mrr@20", 0.0) or 0.0)
             current_test_hr10 = float((result.get("test_result", {}) or {}).get("hit@10", 0.0) or 0.0)
@@ -2785,6 +3166,8 @@ def main():
                 "early_stopped": bool(result.get("early_stopped", False)),
                 "elapsed": round(result["elapsed"], 1),
                 "status": "ok",
+                "artifact_best_checkpoint": current_artifact_best,
+                "artifact_probe_checkpoint": current_artifact_probe,
             }
             trial_record.update(_diag_scalar_metrics(trial_record.get("valid_diag")))
             trial_record.update({f"feature_ablation.{k}": v for k, v in (trial_record.get("feature_ablation_metrics") or {}).items()})
@@ -2837,6 +3220,8 @@ def main():
         except KeyboardInterrupt:
             interrupted = True
             interrupted_at = datetime.now().isoformat()
+            _cleanup_temp_path(cfg_trial.get("__artifact_trial_best_path"))
+            _cleanup_temp_path(cfg_trial.get("__artifact_trial_probe_path"))
             _wandb_log_trial(
                 trial_num,
                 sampled_params,
@@ -2882,6 +3267,8 @@ def main():
             traceback.print_exc()
             gc.collect()
             torch.cuda.empty_cache()
+            _cleanup_temp_path(cfg_trial.get("__artifact_trial_best_path"))
+            _cleanup_temp_path(cfg_trial.get("__artifact_trial_probe_path"))
             _wandb_log_trial(
                 trial_num,
                 sampled_params,
@@ -2960,6 +3347,50 @@ def main():
     if not best_params and ok_trials:
         best_params = max(ok_trials, key=lambda x: x["mrr@20"]).get("params", {})
 
+    should_collect_deferred_artifacts = bool(
+        defer_detailed_artifacts
+        and best_trial is not None
+        and combo_best_artifact_state.get("best_checkpoint")
+    )
+    if should_collect_deferred_artifacts:
+        deferred_payload = _collect_deferred_combo_best_artifacts(
+            base_cfg=cfg,
+            sampled_params=combo_best_artifact_state.get("params") or {},
+            checkpoint_path=str(combo_best_artifact_state.get("best_checkpoint") or ""),
+            probe_checkpoint_path=str(combo_best_artifact_state.get("probe_checkpoint") or ""),
+            trial_num=int(combo_best_artifact_state.get("trial") or 0),
+        )
+        if deferred_payload:
+            target_trial_num = int(combo_best_artifact_state.get("trial") or 0)
+            for row in all_trials_data:
+                if int(row.get("trial") or 0) != target_trial_num:
+                    continue
+                for key in list(row.keys()):
+                    if str(key).startswith("feature_ablation."):
+                        row.pop(key, None)
+                row["valid_result"] = deferred_payload.get("valid_result") or row.get("valid_result", {})
+                row["test_result"] = deferred_payload.get("test_result") or row.get("test_result", {})
+                row["valid_special_metrics"] = deferred_payload.get("valid_special_metrics") or {}
+                row["early_valid_result"] = deferred_payload.get("early_valid_result") or {}
+                row["early_valid_special_metrics"] = deferred_payload.get("early_valid_special_metrics") or {}
+                row["test_special_metrics"] = deferred_payload.get("test_special_metrics") or {}
+                row["valid_diag"] = deferred_payload.get("valid_diag") or {}
+                row["early_valid_diag"] = deferred_payload.get("early_valid_diag") or {}
+                row["test_diag"] = deferred_payload.get("test_diag") or {}
+                row["feature_ablation_metrics"] = deferred_payload.get("feature_ablation_metrics") or {}
+                row["best_hr@10"] = float((row.get("valid_result", {}) or {}).get("hit@10", 0.0) or 0.0)
+                row["test_mrr@20"] = float((row.get("test_result", {}) or {}).get("mrr@20", 0.0) or 0.0)
+                row["test_hr@10"] = float((row.get("test_result", {}) or {}).get("hit@10", 0.0) or 0.0)
+                row.update(_diag_scalar_metrics(row.get("valid_diag")))
+                row.update({f"feature_ablation.{k}": v for k, v in (row.get("feature_ablation_metrics") or {}).items()})
+                break
+            best_trial = max(ok_trials, key=lambda x: x.get("mrr@20", 0.0)) if ok_trials else None
+            best_valid_result = (best_trial or {}).get("valid_result", {}) or {}
+            best_test_result = (best_trial or {}).get("test_result", {}) or {}
+            best_hr10 = float(best_valid_result.get("hit@10", 0.0) or 0.0)
+            test_mrr20 = float(best_test_result.get("mrr@20", 0.0) or 0.0)
+            test_hr10 = float(best_test_result.get("hit@10", 0.0) or 0.0)
+
     # Summary
     total_time = time.time() - global_t0
     print(f"\n{'=' * 65}")
@@ -3008,6 +3439,8 @@ def main():
     _maybe_update_active_tracker_result(result_file)
     _maybe_update_baseline_phase_summary(dataset_canonical, run_phase)
     _maybe_update_fmoe_n_phase_summary(run_group, run_axis, run_phase)
+    _cleanup_temp_path(combo_best_artifact_state.get("best_checkpoint"))
+    _cleanup_temp_path(combo_best_artifact_state.get("probe_checkpoint"))
 
 
 if __name__ == "__main__":

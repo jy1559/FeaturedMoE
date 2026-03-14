@@ -18,6 +18,7 @@ from ..FeaturedMoE_v2.losses import compute_expert_aux_loss, compute_stage_merge
 from .diagnostics import N3DiagnosticCollector
 from .feature_config import (
     ALL_FEATURE_COLUMNS,
+    GROUP_ORDER,
     STAGE_NAMES,
     build_column_to_index,
     build_stage_feature_spec,
@@ -131,14 +132,23 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             resolver.get("stage_feature_injection", None),
             default_value="none",
         )
+        self.stage_router_type = _parse_stage_str_map(
+            resolver.get("stage_router_type", None),
+            default_value="standard",
+        )
         self.stage_feature_family_mask = resolver.get("stage_feature_family_mask", {}) or {}
         self.dense_hidden_scale = float(resolver.get("dense_hidden_scale", 1.0))
         self.rule_agreement_lambda = float(resolver.get("rule_agreement_lambda", 0.0))
         self.group_coverage_lambda = float(resolver.get("group_coverage_lambda", 0.0))
+        self.group_prior_align_lambda = float(resolver.get("group_prior_align_lambda", 0.0))
+        self.feature_group_bias_lambda = float(resolver.get("feature_group_bias_lambda", 0.0))
+        self.feature_group_prior_temperature = float(resolver.get("feature_group_prior_temperature", 1.0))
+        self.factored_group_balance_lambda = float(resolver.get("factored_group_balance_lambda", 0.0))
         self.fmoe_diag_logging = bool(resolver.get("fmoe_diag_logging", True))
         self.fmoe_diag_sample_sessions = max(int(resolver.get("fmoe_diag_sample_sessions", 256)), 0)
 
         self._feature_ablation_mode = "none"
+        self._feature_ablation_family: Optional[str] = None
         self._diag_collector: Optional[N3DiagnosticCollector] = None
 
         meta = load_feature_meta_v3(
@@ -158,6 +168,16 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         self._scalar_fallback_field_once: set[str] = set()
 
         col2idx = build_column_to_index(ALL_FEATURE_COLUMNS)
+        self._feature_family_ablation_indices = {}
+        for family_name in GROUP_ORDER:
+            family_cols = []
+            for stage_name in STAGE_NAMES:
+                family_cols.extend(
+                    list((self.feature_spec["stage_family_features"].get(stage_name, {}) or {}).get(family_name, []) or [])
+                )
+            self._feature_family_ablation_indices[family_name.lower()] = sorted(
+                {int(col2idx[col]) for col in family_cols if col in col2idx}
+            )
         expert_hidden_by_stage = self._parse_stage_int_map(
             resolver.get("expert_hidden_by_stage", {}),
             default_value=self.d_expert_hidden,
@@ -196,6 +216,9 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             stage_feature_injection=self.stage_feature_injection,
             rule_router_cfg=self.rule_router_cfg,
             rule_bias_scale=self.rule_bias_scale,
+            feature_group_bias_lambda=self.feature_group_bias_lambda,
+            feature_group_prior_temperature=self.feature_group_prior_temperature,
+            stage_router_type=self.stage_router_type,
             mid_router_temperature=self.mid_router_temperature,
             micro_router_temperature=self.micro_router_temperature,
             dense_hidden_scale=self.dense_hidden_scale,
@@ -230,9 +253,14 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "stage_router_mode": dict(self.stage_router_mode),
             "stage_router_source": dict(self.stage_router_source),
             "stage_feature_injection": dict(self.stage_feature_injection),
+            "stage_router_type": dict(self.stage_router_type),
             "macro_history_window": self.macro_history_window,
             "stage_feature_family_mask": self.stage_feature_family_mask,
             "dense_hidden_scale": self.dense_hidden_scale,
+            "group_prior_align_lambda": self.group_prior_align_lambda,
+            "feature_group_bias_lambda": self.feature_group_bias_lambda,
+            "feature_group_prior_temperature": self.feature_group_prior_temperature,
+            "factored_group_balance_lambda": self.factored_group_balance_lambda,
             "hidden_act": self.hidden_act,
             "layer_norm_eps": self.layer_norm_eps,
             "fmoe_special_logging": bool(self.fmoe_special_logging),
@@ -255,11 +283,24 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             bool(self.feature_meta_v3),
         )
 
-    def set_feature_ablation_mode(self, mode: str = "none") -> None:
+    def set_feature_ablation_mode(self, mode: str = "none", family: Optional[str] = None) -> None:
         normalized = str(mode or "none").lower().strip()
         if normalized not in {"none", "zero", "shuffle"}:
             normalized = "none"
         self._feature_ablation_mode = normalized
+        family_name = str(family or "").strip().lower()
+        self._feature_ablation_family = family_name if family_name in self._feature_family_ablation_indices else None
+
+    def _feature_ablation_tag(self) -> str:
+        if self._feature_ablation_mode == "none":
+            return "none"
+        if self._feature_ablation_family:
+            return f"{self._feature_ablation_mode}:{self._feature_ablation_family}"
+        return self._feature_ablation_mode
+
+    @property
+    def feature_family_names(self) -> List[str]:
+        return list(GROUP_ORDER)
 
     def begin_diagnostic_eval(self, *, split_name: str) -> None:
         if not self.fmoe_diag_logging or not self._supports_diag:
@@ -271,7 +312,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             stage_expert_names=self._stage_expert_names,
             all_feature_columns=ALL_FEATURE_COLUMNS,
             max_positions=int(self.max_seq_length),
-            feature_mode=self._feature_ablation_mode,
+            feature_mode=self._feature_ablation_tag(),
         )
 
     def end_diagnostic_eval(self) -> Optional[dict]:
@@ -282,10 +323,24 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         return payload
 
     def _apply_feature_ablation(self, feat: torch.Tensor) -> torch.Tensor:
+        family_indices = []
+        if self._feature_ablation_family:
+            family_indices = list(self._feature_family_ablation_indices.get(self._feature_ablation_family, []) or [])
+            if not family_indices:
+                return feat
         if self._feature_ablation_mode == "zero":
+            if family_indices:
+                out = feat.clone()
+                out[..., family_indices] = 0.0
+                return out
             return torch.zeros_like(feat)
         if self._feature_ablation_mode == "shuffle" and feat.size(0) > 1:
             perm = torch.randperm(feat.size(0), device=feat.device)
+            if family_indices:
+                out = feat.clone()
+                shuffled = feat.index_select(0, perm)
+                out[..., family_indices] = shuffled[..., family_indices]
+                return out
             return feat.index_select(0, perm)
         return feat
 
@@ -379,6 +434,64 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             rewards.append(entropy / math.log(float(group_weights.size(-1))))
         return torch.stack(rewards).mean() if rewards else self.item_embedding.weight.new_tensor(0.0)
 
+    def _compute_group_prior_alignment_loss(
+        self,
+        router_aux: Dict[str, Dict[str, torch.Tensor]],
+        item_seq_len: torch.Tensor,
+    ) -> torch.Tensor:
+        group_map = dict((router_aux or {}).get("group_weights", {}) or {})
+        prior_map = dict((router_aux or {}).get("group_prior", {}) or {})
+        if not group_map or not prior_map:
+            return self.item_embedding.weight.new_tensor(0.0)
+        losses = []
+        for stage_key in sorted(set(group_map) & set(prior_map)):
+            student = group_map.get(stage_key)
+            teacher = prior_map.get(stage_key)
+            if student is None or teacher is None:
+                continue
+            if student.size(-1) <= 1 or teacher.size(-1) != student.size(-1):
+                continue
+            mask = self._sequence_valid_mask(item_seq_len, student.size(1), student.device).float()
+            teacher_prob = teacher.detach()
+            teacher_prob = teacher_prob / teacher_prob.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+            student_prob = student / student.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+            kl = (teacher_prob * (teacher_prob.clamp(min=1e-8).log() - student_prob.clamp(min=1e-8).log())).sum(dim=-1)
+            denom = mask.sum().clamp(min=1.0)
+            losses.append((kl * mask).sum() / denom)
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
+    def _compute_factored_group_balance_loss(
+        self,
+        router_aux: Dict[str, Dict[str, torch.Tensor]],
+        item_seq_len: torch.Tensor,
+    ) -> torch.Tensor:
+        """Load balance loss applied to factored group router logits.
+
+        Penalizes collapse of group-level routing (when the factored router always
+        sends everything to one group). Applied only when factored_group_logits are present.
+        Uses the same mean-prob * mean-prob-softmax formulation as standard balance loss.
+        """
+        fgl_map = dict((router_aux or {}).get("factored_group_logits", {}) or {})
+        if not fgl_map:
+            return self.item_embedding.weight.new_tensor(0.0)
+        losses = []
+        for stage_key, fgl in fgl_map.items():
+            if not torch.is_tensor(fgl) or fgl.size(-1) <= 1:
+                continue
+            group_probs = F.softmax(fgl, dim=-1)  # (..., n_groups)
+            seq_len = fgl.size(1) if fgl.ndim == 3 else 1
+            mask = self._sequence_valid_mask(item_seq_len, seq_len, fgl.device).float()
+            if fgl.ndim == 3:
+                valid_unsq = mask.unsqueeze(-1)
+                denom = mask.sum().clamp(min=1.0)
+                mean_prob = (group_probs * valid_unsq).sum(dim=(0, 1)) / denom
+            else:
+                mean_prob = group_probs.mean(dim=0)
+            n_grps = float(mean_prob.size(-1))
+            # balance_loss = n_groups * sum(mean_prob_i * mean_prob_i)  [encourages uniform distribution]
+            losses.append(n_grps * (mean_prob * mean_prob).sum())
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
     def forward(self, item_seq, item_seq_len, feat=None):
         batch_size, seq_len = item_seq.shape
         item_emb = self.item_embedding(item_seq)
@@ -471,6 +584,16 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             )
         if self.group_coverage_lambda > 0:
             aux_loss = aux_loss - self.group_coverage_lambda * self._compute_group_coverage_reward(
+                router_aux,
+                item_seq_len,
+            )
+        if self.group_prior_align_lambda > 0:
+            aux_loss = aux_loss + self.group_prior_align_lambda * self._compute_group_prior_alignment_loss(
+                router_aux,
+                item_seq_len,
+            )
+        if self.factored_group_balance_lambda > 0:
+            aux_loss = aux_loss + self.factored_group_balance_lambda * self._compute_factored_group_balance_loss(
                 router_aux,
                 item_seq_len,
             )
