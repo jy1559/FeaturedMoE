@@ -1,44 +1,41 @@
-"""
-Custom sequential recommendation models for FMoE experiments.
-All models inherit from RecBole's AbstractRecommender for compatibility.
+"""Custom sequential recommendation models for FMoE experiments.
+
+Use lazy loading so a single optional dependency/import failure in one model
+does not prevent all other custom models from being discoverable.
 """
 
-from .bilstm import BiLSTM
-from .clrec import CLRec
-from .bsarec import BSARec
-from .fame import FAME
-from .sigma import SIGMA
-from .difsr import DIFSR
-from .mssr import MSSR
-from .patt import PAtt
-from .fenrec import FENRec
-from .FeaturedMoE import FeaturedMoE
-from .FeaturedMoE_HGR import FeaturedMoE_HGR
-from .FeaturedMoE_HGRv4 import FeaturedMoE_HGRv4
-from .FeaturedMoE_v2 import FeaturedMoE_V2
-from .FeaturedMoE_v3 import FeaturedMoE_V3
-from .FeaturedMoE_v4_Distillation import FeaturedMoE_V4_Distillation
-from .FeaturedMoE_N import FeaturedMoE_N
-from .FeaturedMoE_N2 import FeaturedMoE_N2
-from .FeaturedMoE_N3 import FeaturedMoE_N3
+from importlib import import_module
 
-__all__ = [
-	"BiLSTM",
-	"CLRec",
-	"BSARec",
-	"FAME",
-	"SIGMA",
-	"DIFSR",
-	"MSSR",
-	"PAtt",
-	"FENRec",
-	"FeaturedMoE",
-	"FeaturedMoE_HGR",
-	"FeaturedMoE_HGRv4",
-	"FeaturedMoE_V2",
-	"FeaturedMoE_V3",
-	"FeaturedMoE_V4_Distillation",
-	"FeaturedMoE_N",
-	"FeaturedMoE_N2",
-	"FeaturedMoE_N3",
-]
+_MODEL_MODULES = {
+	"BiLSTM": "bilstm",
+	"CLRec": "clrec",
+	"BSARec": "bsarec",
+	"FAME": "fame",
+	"SIGMA": "sigma",
+	"DIFSR": "difsr",
+	"MSSR": "mssr",
+	"PAtt": "patt",
+	"FENRec": "fenrec",
+	"FeaturedMoE": "FeaturedMoE",
+	"FeaturedMoE_HGR": "FeaturedMoE_HGR",
+	"FeaturedMoE_HGRv4": "FeaturedMoE_HGRv4",
+	"FeaturedMoE_V2": "FeaturedMoE_v2",
+	"FeaturedMoE_V3": "FeaturedMoE_v3",
+	"FeaturedMoE_V4_Distillation": "FeaturedMoE_v4_Distillation",
+	"FeaturedMoE_N": "FeaturedMoE_N",
+	"FeaturedMoE_N2": "FeaturedMoE_N2",
+	"FeaturedMoE_N3": "FeaturedMoE_N3",
+}
+
+__all__ = list(_MODEL_MODULES.keys())
+
+
+def __getattr__(name):
+	module_name = _MODEL_MODULES.get(name)
+	if module_name is None:
+		raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+	module = import_module(f".{module_name}", __name__)
+	value = getattr(module, name)
+	globals()[name] = value
+	return value

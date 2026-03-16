@@ -130,6 +130,16 @@ class N3DiagnosticCollector:
                 "cond_norm_count": 0,
                 "delta_norm_sum": 0.0,
                 "delta_norm_count": 0,
+                "shared_delta_norm_sum": 0.0,
+                "shared_delta_norm_count": 0,
+                "moe_delta_norm_sum": 0.0,
+                "moe_delta_norm_count": 0,
+                "residual_delta_norm_sum": 0.0,
+                "residual_delta_norm_count": 0,
+                "alpha_value_sum": 0.0,
+                "alpha_value_count": 0,
+                "alpha_effective_sum": 0.0,
+                "alpha_effective_count": 0,
                 "expert_out_sum": torch.zeros(n_slots, 1),
                 # Group-level routing diagnostics
                 "group_usage_sum": torch.zeros(n_groups),
@@ -141,8 +151,6 @@ class N3DiagnosticCollector:
                 "factored_group_entropy_sum": 0.0,
                 "factored_group_n_tokens": 0,
                 "n_groups": n_groups,
-            }
-                "expert_out_dim": 1,
             }
         return self._stage_data[stage_key]
 
@@ -242,6 +250,26 @@ class N3DiagnosticCollector:
                 if torch.is_tensor(cond_norm):
                     stage_store["cond_norm_sum"] += float(cond_norm.detach().sum().item())
                     stage_store["cond_norm_count"] += int(cond_norm.numel())
+                shared_delta_norm = cond.get("shared_delta_norm")
+                if torch.is_tensor(shared_delta_norm):
+                    stage_store["shared_delta_norm_sum"] += float(shared_delta_norm.detach().sum().item())
+                    stage_store["shared_delta_norm_count"] += int(shared_delta_norm.numel())
+                moe_delta_norm = cond.get("moe_delta_norm")
+                if torch.is_tensor(moe_delta_norm):
+                    stage_store["moe_delta_norm_sum"] += float(moe_delta_norm.detach().sum().item())
+                    stage_store["moe_delta_norm_count"] += int(moe_delta_norm.numel())
+                residual_delta_norm = cond.get("residual_delta_norm")
+                if torch.is_tensor(residual_delta_norm):
+                    stage_store["residual_delta_norm_sum"] += float(residual_delta_norm.detach().sum().item())
+                    stage_store["residual_delta_norm_count"] += int(residual_delta_norm.numel())
+                alpha_value = cond.get("alpha_value")
+                if torch.is_tensor(alpha_value):
+                    stage_store["alpha_value_sum"] += float(alpha_value.detach().sum().item())
+                    stage_store["alpha_value_count"] += int(alpha_value.numel())
+                alpha_effective = cond.get("alpha_effective")
+                if torch.is_tensor(alpha_effective):
+                    stage_store["alpha_effective_sum"] += float(alpha_effective.detach().sum().item())
+                    stage_store["alpha_effective_count"] += int(alpha_effective.numel())
 
             expert_out_mean = dict(router_aux.get("expert_output_mean", {}) or {}).get(stage_key)
             if torch.is_tensor(expert_out_mean) and expert_out_mean.ndim == 2:
@@ -303,6 +331,26 @@ class N3DiagnosticCollector:
             if torch.is_tensor(cond_norm):
                 stage_store["cond_norm_sum"] += float(cond_norm.detach().sum().item())
                 stage_store["cond_norm_count"] += int(cond_norm.numel())
+            shared_delta_norm = cond.get("shared_delta_norm")
+            if torch.is_tensor(shared_delta_norm):
+                stage_store["shared_delta_norm_sum"] += float(shared_delta_norm.detach().sum().item())
+                stage_store["shared_delta_norm_count"] += int(shared_delta_norm.numel())
+            moe_delta_norm = cond.get("moe_delta_norm")
+            if torch.is_tensor(moe_delta_norm):
+                stage_store["moe_delta_norm_sum"] += float(moe_delta_norm.detach().sum().item())
+                stage_store["moe_delta_norm_count"] += int(moe_delta_norm.numel())
+            residual_delta_norm = cond.get("residual_delta_norm")
+            if torch.is_tensor(residual_delta_norm):
+                stage_store["residual_delta_norm_sum"] += float(residual_delta_norm.detach().sum().item())
+                stage_store["residual_delta_norm_count"] += int(residual_delta_norm.numel())
+            alpha_value = cond.get("alpha_value")
+            if torch.is_tensor(alpha_value):
+                stage_store["alpha_value_sum"] += float(alpha_value.detach().sum().item())
+                stage_store["alpha_value_count"] += int(alpha_value.numel())
+            alpha_effective = cond.get("alpha_effective")
+            if torch.is_tensor(alpha_effective):
+                stage_store["alpha_effective_sum"] += float(alpha_effective.detach().sum().item())
+                stage_store["alpha_effective_count"] += int(alpha_effective.numel())
 
     @staticmethod
     def _usage_scalars(usage_sum: torch.Tensor, top1_count: torch.Tensor) -> dict:
@@ -352,6 +400,11 @@ class N3DiagnosticCollector:
             jitter_session = float(raw["jitter_session_sum"] / max(raw["n_sessions"], 1))
             condition_norm = float(raw["cond_norm_sum"] / max(raw["cond_norm_count"], 1))
             delta_norm = float(raw["delta_norm_sum"] / max(raw["delta_norm_count"], 1))
+            shared_delta_norm = float(raw["shared_delta_norm_sum"] / max(raw["shared_delta_norm_count"], 1))
+            moe_delta_norm = float(raw["moe_delta_norm_sum"] / max(raw["moe_delta_norm_count"], 1))
+            residual_delta_norm = float(raw["residual_delta_norm_sum"] / max(raw["residual_delta_norm_count"], 1))
+            alpha_value = float(raw["alpha_value_sum"] / max(raw["alpha_value_count"], 1))
+            alpha_effective = float(raw["alpha_effective_sum"] / max(raw["alpha_effective_count"], 1))
             sim_payload = self._expert_similarity(raw["expert_out_sum"])
             stage_payload[stage_key] = {
                 "mode": raw["mode"],
@@ -365,6 +418,11 @@ class N3DiagnosticCollector:
                 "route_jitter_session": jitter_session,
                 "condition_norm": condition_norm,
                 "stage_delta_norm": delta_norm,
+                "shared_delta_norm": shared_delta_norm,
+                "moe_delta_norm": moe_delta_norm,
+                "residual_delta_norm": residual_delta_norm,
+                "alpha_value": alpha_value,
+                "alpha_effective": alpha_effective,
                 "usage_share": usage_scalars["usage_share"],
                 "n_eff": usage_scalars["n_eff"],
                 "cv_usage": usage_scalars["cv_usage"],
@@ -394,6 +452,11 @@ class N3DiagnosticCollector:
             flat_scalars[f"{prefix}.route_jitter_session"] = jitter_session
             flat_scalars[f"{prefix}.condition_norm"] = condition_norm
             flat_scalars[f"{prefix}.stage_delta_norm"] = delta_norm
+            flat_scalars[f"{prefix}.shared_delta_norm"] = shared_delta_norm
+            flat_scalars[f"{prefix}.moe_delta_norm"] = moe_delta_norm
+            flat_scalars[f"{prefix}.residual_delta_norm"] = residual_delta_norm
+            flat_scalars[f"{prefix}.alpha_value"] = alpha_value
+            flat_scalars[f"{prefix}.alpha_effective"] = alpha_effective
             flat_scalars[f"{prefix}.expert_similarity_mean"] = sim_payload["expert_similarity_mean"]
             flat_scalars[f"{prefix}.expert_similarity_max"] = sim_payload["expert_similarity_max"]
             grp_payload = stage_payload[stage_key].get("group_routing", {})

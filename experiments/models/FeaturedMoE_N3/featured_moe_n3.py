@@ -76,6 +76,25 @@ def _parse_stage_str_map(raw_value, *, default_value: str) -> Dict[str, str]:
     return out
 
 
+def _parse_stage_float_map(raw_value, *, default_value: float) -> Dict[str, float]:
+    default = {stage: float(default_value) for stage in STAGE_NAMES}
+    if raw_value is None:
+        return default
+    if isinstance(raw_value, (int, float)):
+        value = float(raw_value)
+        return {stage: value for stage in STAGE_NAMES}
+    if not isinstance(raw_value, dict):
+        return default
+    out = dict(default)
+    for stage in STAGE_NAMES:
+        value = raw_value.get(stage, raw_value.get(stage.capitalize(), default_value))
+        try:
+            out[stage] = float(value)
+        except Exception:
+            out[stage] = float(default_value)
+    return out
+
+
 class FeaturedMoE_N3(FeaturedMoE_N):
     """N3 branch with explicit layer_layout and stage-wise controls."""
 
@@ -136,6 +155,19 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             resolver.get("stage_router_type", None),
             default_value="standard",
         )
+        self.stage_residual_mode = _parse_stage_str_map(
+            resolver.get("stage_residual_mode", None),
+            default_value="base",
+        )
+        self.residual_alpha_fixed = _parse_stage_float_map(
+            resolver.get("residual_alpha_fixed", None),
+            default_value=0.5,
+        )
+        self.residual_alpha_init = _parse_stage_float_map(
+            resolver.get("residual_alpha_init", None),
+            default_value=0.0,
+        )
+        self.residual_shared_ffn_scale = float(resolver.get("residual_shared_ffn_scale", 1.0))
         self.stage_feature_family_mask = resolver.get("stage_feature_family_mask", {}) or {}
         self.dense_hidden_scale = float(resolver.get("dense_hidden_scale", 1.0))
         self.rule_agreement_lambda = float(resolver.get("rule_agreement_lambda", 0.0))
@@ -156,18 +188,36 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             dataset=str(resolver.get("dataset", "")),
         )
         self.feature_meta_v3 = validate_feature_meta_v3(meta) if meta else {}
+        requested_feature_mode = str(resolver.get("feature_mode", "")).strip().lower()
         self.feature_spec = build_stage_feature_spec(
             macro_history_window=self.macro_history_window,
             stage_feature_family_mask=self.stage_feature_family_mask,
         )
 
-        self.feature_base_fields = list(ALL_FEATURE_COLUMNS)
-        self.feature_fields = [feature_list_field(col) for col in ALL_FEATURE_COLUMNS]
+        # If feature_meta_v3 is unavailable (common on datasets without v3 engineering),
+        # disable engineered feature columns for this run to avoid noisy missing-field fallbacks.
+        meta_feature_list = list((self.feature_meta_v3 or {}).get("all_features", []) or [])
+        if meta_feature_list:
+            meta_feature_set = set(str(name) for name in meta_feature_list)
+            effective_feature_columns = [col for col in ALL_FEATURE_COLUMNS if col in meta_feature_set]
+        else:
+            effective_feature_columns = list(ALL_FEATURE_COLUMNS)
+            if requested_feature_mode == "full_v3":
+                effective_feature_columns = []
+                logger.warning(
+                    "feature_meta_v3 not found for dataset=%s (feature_mode=%s) - "
+                    "engineered feature columns disabled for this run.",
+                    str(resolver.get("dataset", "")),
+                    requested_feature_mode,
+                )
+
+        self.feature_base_fields = list(effective_feature_columns)
+        self.feature_fields = [feature_list_field(col) for col in self.feature_base_fields]
         self.n_features = len(self.feature_fields)
         self._missing_feature_field_once: set[str] = set()
         self._scalar_fallback_field_once: set[str] = set()
 
-        col2idx = build_column_to_index(ALL_FEATURE_COLUMNS)
+        col2idx = build_column_to_index(self.feature_base_fields)
         self._feature_family_ablation_indices = {}
         for family_name in GROUP_ORDER:
             family_cols = []
@@ -222,6 +272,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             mid_router_temperature=self.mid_router_temperature,
             micro_router_temperature=self.micro_router_temperature,
             dense_hidden_scale=self.dense_hidden_scale,
+            stage_residual_mode=self.stage_residual_mode,
+            residual_alpha_fixed=self.residual_alpha_fixed,
+            residual_alpha_init=self.residual_alpha_init,
+            residual_shared_ffn_scale=self.residual_shared_ffn_scale,
             col2idx=col2idx,
         )
         self.stage_executor.apply(self._init_weights)
@@ -254,6 +308,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "stage_router_source": dict(self.stage_router_source),
             "stage_feature_injection": dict(self.stage_feature_injection),
             "stage_router_type": dict(self.stage_router_type),
+            "stage_residual_mode": dict(self.stage_residual_mode),
+            "residual_alpha_fixed": dict(self.residual_alpha_fixed),
+            "residual_alpha_init": dict(self.residual_alpha_init),
+            "residual_shared_ffn_scale": self.residual_shared_ffn_scale,
             "macro_history_window": self.macro_history_window,
             "stage_feature_family_mask": self.stage_feature_family_mask,
             "dense_hidden_scale": self.dense_hidden_scale,
@@ -310,7 +368,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             split_name=split_name,
             stage_family_features=self.feature_spec["stage_family_features"],
             stage_expert_names=self._stage_expert_names,
-            all_feature_columns=ALL_FEATURE_COLUMNS,
+            all_feature_columns=self.feature_base_fields,
             max_positions=int(self.max_seq_length),
             feature_mode=self._feature_ablation_tag(),
         )

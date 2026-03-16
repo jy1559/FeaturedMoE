@@ -8,7 +8,7 @@ source "${RUN_DIR}/common/run_metadata.sh"
 
 DATASET="KuaiRecLargeStrictPosV2_0.2"
 GPU_LIST="0,1,2,3"
-MAX_EVALS="20"
+MAX_EVALS="10"
 TUNE_EPOCHS="100"
 TUNE_PATIENCE="10"
 SEED_BASE="8300"
@@ -16,6 +16,7 @@ DRY_RUN="${DRY_RUN:-false}"
 USE_RECOMMENDED_BUDGET="${USE_RECOMMENDED_BUDGET:-true}"
 EVAL_LOGGING_TIMING="${EVAL_LOGGING_TIMING:-final_only}"
 FEATURE_ABLATION_LOGGING="${FEATURE_ABLATION_LOGGING:-false}"
+ONLY_COMBOS=""
 MANIFEST_OUT=""
 
 usage() {
@@ -23,6 +24,7 @@ usage() {
 Usage: $0 [--dataset KuaiRecLargeStrictPosV2_0.2|lastfm0.03] [--gpus 0,1,2,3]
           [--max-evals 20] [--tune-epochs 100] [--tune-patience 10]
           [--seed-base 8300] [--manifest-out path] [--dry-run]
+          [--only P00,D10,R30]
           [--use-recommended-budget]
           [--eval-logging-timing final_only|per_eval]
           [--feature-ablation-logging]
@@ -62,6 +64,10 @@ while [ $# -gt 0 ]; do
       ;;
     --manifest-out)
       MANIFEST_OUT="$2"
+      shift 2
+      ;;
+    --only)
+      ONLY_COMBOS="$2"
       shift 2
       ;;
     --dry-run)
@@ -111,6 +117,9 @@ CMD=(
 
 if [ -n "${MANIFEST_OUT}" ]; then
   CMD+=(--manifest-out "${MANIFEST_OUT}")
+fi
+if [ -n "${ONLY_COMBOS}" ]; then
+  CMD+=(--only "${ONLY_COMBOS}")
 fi
 if [ "${DRY_RUN}" = "true" ]; then
   CMD+=(--dry-run)

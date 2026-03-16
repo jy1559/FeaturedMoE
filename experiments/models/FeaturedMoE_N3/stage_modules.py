@@ -23,6 +23,14 @@ _VALID_ROUTER_SOURCE = {"hidden", "feature", "both"}
 _VALID_FEATURE_ENCODER = {"linear", "complex"}
 _VALID_FEATURE_INJECTION = {"none", "film", "gated_bias", "group_gated_bias"}
 _VALID_ROUTER_TYPE = {"standard", "factored"}
+_VALID_RESIDUAL_MODE = {
+    "base",
+    "shared_only",
+    "shared_moe_fixed",
+    "shared_moe_learned",
+    "shared_moe_global",
+    "shared_moe_learned_warmup",
+}
 
 
 def _get_activation(name: str):
@@ -70,6 +78,10 @@ class StageRuntimeConfigN3:
     stage_router_type: str
     router_temperature: float
     dense_hidden_scale: float
+    stage_residual_mode: str
+    residual_alpha_fixed: float
+    residual_alpha_init: float
+    shared_ffn_scale: float
 
 
 class SASRecStyleAttentionBlock(nn.Module):
@@ -270,8 +282,21 @@ class N3StageBlock(nn.Module):
         self.activation = _get_activation(cfg.hidden_act)
         self.current_top_k = _normalize_top_k(cfg.top_k, n_experts=1_000_000)
         self.current_router_temperature = max(float(cfg.router_temperature), 1e-6)
+        self.current_alpha_scale = 1.0
         self.d_model = int(cfg.d_model)
         self.d_feat_emb = int(cfg.d_feat_emb)
+        self.stage_residual_mode = str(cfg.stage_residual_mode).lower().strip()
+        if self.stage_residual_mode not in _VALID_RESIDUAL_MODE:
+            raise ValueError(f"Unsupported stage_residual_mode: {cfg.stage_residual_mode}")
+        self.residual_alpha_fixed = float(cfg.residual_alpha_fixed)
+        self.shared_ffn_scale = float(cfg.shared_ffn_scale)
+        self.pre_residual_ln = nn.LayerNorm(int(cfg.d_model), eps=float(cfg.layer_norm_eps))
+        self.shared_fc1 = nn.Linear(int(cfg.d_model), int(max(round(cfg.d_ff * self.shared_ffn_scale), cfg.d_model)))
+        self.shared_fc2 = nn.Linear(int(max(round(cfg.d_ff * self.shared_ffn_scale), cfg.d_model)), int(cfg.d_model))
+        self.shared_drop = nn.Dropout(float(cfg.dropout))
+        self.residual_alpha = None
+        if self.stage_residual_mode in {"shared_moe_learned", "shared_moe_global", "shared_moe_learned_warmup"}:
+            self.residual_alpha = nn.Parameter(torch.tensor(float(cfg.residual_alpha_init)))
         self.stage_feature_names = list(cfg.stage_feature_names)
         self.stage_family_features = {
             str(name): list(cols) for name, cols in dict(cfg.stage_family_features or {}).items()
@@ -440,13 +465,73 @@ class N3StageBlock(nn.Module):
     def set_schedule_state(
         self,
         *,
+        alpha_scale: Optional[float] = None,
         router_temperature: Optional[float] = None,
         top_k: Optional[int] = None,
     ) -> None:
+        if alpha_scale is not None:
+            self.current_alpha_scale = max(float(alpha_scale), 0.0)
         if router_temperature is not None and self.stage_compute_mode == "moe":
             self.current_router_temperature = max(float(router_temperature), 1e-6)
         if top_k is not None and self.stage_compute_mode == "moe":
             self.current_top_k = _normalize_top_k(top_k, n_experts=self.n_experts)
+
+    def _shared_delta(self, hidden: torch.Tensor) -> torch.Tensor:
+        shared_hidden = self.pre_residual_ln(hidden)
+        delta = self.shared_fc1(shared_hidden)
+        delta = self.activation(delta)
+        delta = self.shared_fc2(delta)
+        return self.shared_drop(delta)
+
+    def _resolve_alpha(
+        self,
+        *,
+        alpha_override: Optional[torch.Tensor],
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        if self.stage_residual_mode == "shared_moe_fixed":
+            alpha = torch.tensor(self.residual_alpha_fixed, device=device, dtype=dtype)
+        elif self.stage_residual_mode == "shared_moe_global":
+            if alpha_override is None:
+                alpha = torch.sigmoid(self.residual_alpha) if self.residual_alpha is not None else torch.tensor(0.5, device=device, dtype=dtype)
+            else:
+                alpha = torch.sigmoid(alpha_override.to(device=device, dtype=dtype))
+        elif self.stage_residual_mode in {"shared_moe_learned", "shared_moe_learned_warmup"}:
+            alpha = torch.sigmoid(self.residual_alpha) if self.residual_alpha is not None else torch.tensor(0.5, device=device, dtype=dtype)
+        else:
+            alpha = torch.tensor(1.0, device=device, dtype=dtype)
+
+        if self.stage_residual_mode == "shared_moe_learned_warmup":
+            alpha = alpha * float(self.current_alpha_scale)
+        return alpha
+
+    def _merge_residual(
+        self,
+        *,
+        hidden: torch.Tensor,
+        moe_delta: torch.Tensor,
+        alpha_override: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        shared_delta = self._shared_delta(hidden)
+        if self.stage_residual_mode == "base":
+            merged_delta = moe_delta
+            alpha_value = torch.tensor(1.0, device=hidden.device, dtype=hidden.dtype)
+        elif self.stage_residual_mode == "shared_only":
+            merged_delta = shared_delta
+            alpha_value = torch.tensor(0.0, device=hidden.device, dtype=hidden.dtype)
+        else:
+            alpha_value = self._resolve_alpha(alpha_override=alpha_override, device=hidden.device, dtype=hidden.dtype)
+            merged_delta = shared_delta + alpha_value * moe_delta
+
+        aux = {
+            "shared_delta_norm": shared_delta.norm(dim=-1).detach(),
+            "moe_delta_norm": moe_delta.norm(dim=-1).detach(),
+            "residual_delta_norm": merged_delta.norm(dim=-1).detach(),
+            "alpha_value": hidden.new_full((hidden.size(0), hidden.size(1)), float(alpha_value.detach().cpu().item())),
+            "alpha_effective": hidden.new_full((hidden.size(0), hidden.size(1)), float(alpha_value.detach().cpu().item())),
+        }
+        return merged_delta, aux
 
     @staticmethod
     def _build_valid_mask(
@@ -752,6 +837,7 @@ class N3StageBlock(nn.Module):
         hidden: torch.Tensor,
         feat: Optional[torch.Tensor],
         item_seq_len: Optional[torch.Tensor] = None,
+        alpha_override: Optional[torch.Tensor] = None,
     ) -> Tuple[
         torch.Tensor,
         Optional[torch.Tensor],
@@ -793,6 +879,11 @@ class N3StageBlock(nn.Module):
             dense_aux = {
                 "condition_norm": cond_norm.detach(),
                 "delta_norm": delta.norm(dim=-1).detach(),
+                "shared_delta_norm": hidden.new_zeros(hidden.size(0), hidden.size(1)),
+                "moe_delta_norm": delta.norm(dim=-1).detach(),
+                "residual_delta_norm": delta.norm(dim=-1).detach(),
+                "alpha_value": hidden.new_ones(hidden.size(0), hidden.size(1)),
+                "alpha_effective": hidden.new_ones(hidden.size(0), hidden.size(1)),
             }
             return next_hidden, None, None, {}, dense_aux
 
@@ -808,7 +899,12 @@ class N3StageBlock(nn.Module):
             delta, expert_outputs = self._expert_delta_group_hidden(group_hiddens, gate_weights)
         else:
             delta, expert_outputs = self._expert_delta(hidden_in, gate_weights)
-        next_hidden = self.layer_norm(hidden + delta)
+        residual_delta, residual_aux = self._merge_residual(
+            hidden=hidden,
+            moe_delta=delta,
+            alpha_override=alpha_override,
+        )
+        next_hidden = self.layer_norm(hidden + residual_delta)
 
         router_aux = dict(router_aux)
         router_aux["group_weights"] = self._aggregate_group_weights(gate_weights)
@@ -816,5 +912,10 @@ class N3StageBlock(nn.Module):
         dense_aux = {
             "condition_norm": cond_norm.detach(),
             "delta_norm": delta.norm(dim=-1).detach(),
+            "shared_delta_norm": residual_aux["shared_delta_norm"],
+            "moe_delta_norm": residual_aux["moe_delta_norm"],
+            "residual_delta_norm": residual_aux["residual_delta_norm"],
+            "alpha_value": residual_aux["alpha_value"],
+            "alpha_effective": residual_aux["alpha_effective"],
         }
         return next_hidden, gate_weights, gate_logits, router_aux, dense_aux

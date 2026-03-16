@@ -7,6 +7,7 @@ import sys
 import pickle
 import json
 import hashlib
+import importlib
 from pathlib import Path
 
 _PATCH_DIR = Path(__file__).resolve().parent
@@ -47,76 +48,97 @@ def _config_get(config_obj, key, default=None):
         return getattr(config_obj, key, default)
 
 
+def _dataset_file_signature(config_obj, dataset_name: str) -> dict:
+    """Build a lightweight signature for source .inter/.item files.
+
+    This prevents stale split caches when data files are regenerated in-place.
+    """
+    data_path = str(_config_get(config_obj, "data_path", "") or "")
+    ds_name = str(dataset_name or "").strip()
+    sig = {"data_path": data_path, "dataset": ds_name}
+    if not data_path or not ds_name:
+        return sig
+
+    root = Path(data_path) / ds_name
+    for suffix in ("inter", "item"):
+        fp = root / f"{ds_name}.{suffix}"
+        key = f"{suffix}_file"
+        if fp.exists():
+            st = fp.stat()
+            sig[key] = {
+                "path": str(fp),
+                "size": int(st.st_size),
+                "mtime_ns": int(st.st_mtime_ns),
+            }
+        else:
+            sig[key] = None
+    return sig
+
+
 # ============ Patch: get_model to support custom models ============
 _original_get_model = recbole_utils.get_model
 
 
+_CUSTOM_MODEL_SPECS = {
+    'BiLSTM': ('bilstm', 'BiLSTM'),
+    'CLRec': ('clrec', 'CLRec'),
+    'BSARec': ('bsarec', 'BSARec'),
+    'FAME': ('fame', 'FAME'),
+    'SIGMA': ('sigma', 'SIGMA'),
+    'DIFSR': ('difsr', 'DIFSR'),
+    'MSSR': ('mssr', 'MSSR'),
+    'PAtt': ('patt', 'PAtt'),
+    'FENRec': ('fenrec', 'FENRec'),
+    'FeaturedMoE': ('FeaturedMoE', 'FeaturedMoE'),
+    'FeaturedMoE_HGR': ('FeaturedMoE_HGR', 'FeaturedMoE_HGR'),
+    'featured_moe_hgr': ('FeaturedMoE_HGR', 'FeaturedMoE_HGR'),
+    'featuredmoe_hgr': ('FeaturedMoE_HGR', 'FeaturedMoE_HGR'),
+    'FeaturedMoE_HGRv4': ('FeaturedMoE_HGRv4', 'FeaturedMoE_HGRv4'),
+    'featured_moe_hgr_v4': ('FeaturedMoE_HGRv4', 'FeaturedMoE_HGRv4'),
+    'featuredmoe_hgr_v4': ('FeaturedMoE_HGRv4', 'FeaturedMoE_HGRv4'),
+    'featuredmoe_hgrv4': ('FeaturedMoE_HGRv4', 'FeaturedMoE_HGRv4'),
+    'FeaturedMoE_v2': ('FeaturedMoE_v2', 'FeaturedMoE_V2'),
+    'FeaturedMoE_V2': ('FeaturedMoE_v2', 'FeaturedMoE_V2'),
+    'featured_moe_v2': ('FeaturedMoE_v2', 'FeaturedMoE_V2'),
+    'featuredmoe_v2': ('FeaturedMoE_v2', 'FeaturedMoE_V2'),
+    'FeaturedMoE_v3': ('FeaturedMoE_v3', 'FeaturedMoE_V3'),
+    'FeaturedMoE_V3': ('FeaturedMoE_v3', 'FeaturedMoE_V3'),
+    'featured_moe_v3': ('FeaturedMoE_v3', 'FeaturedMoE_V3'),
+    'featuredmoe_v3': ('FeaturedMoE_v3', 'FeaturedMoE_V3'),
+    'FeaturedMoE_v4_Distillation': ('FeaturedMoE_v4_Distillation', 'FeaturedMoE_V4_Distillation'),
+    'FeaturedMoE_V4_Distillation': ('FeaturedMoE_v4_Distillation', 'FeaturedMoE_V4_Distillation'),
+    'featured_moe_v4_distillation': ('FeaturedMoE_v4_Distillation', 'FeaturedMoE_V4_Distillation'),
+    'featuredmoe_v4_distillation': ('FeaturedMoE_v4_Distillation', 'FeaturedMoE_V4_Distillation'),
+    'FeaturedMoE_N': ('FeaturedMoE_N', 'FeaturedMoE_N'),
+    'featured_moe_n': ('FeaturedMoE_N', 'FeaturedMoE_N'),
+    'featuredmoe_n': ('FeaturedMoE_N', 'FeaturedMoE_N'),
+    'FeaturedMoE_N2': ('FeaturedMoE_N2', 'FeaturedMoE_N2'),
+    'featured_moe_n2': ('FeaturedMoE_N2', 'FeaturedMoE_N2'),
+    'featuredmoe_n2': ('FeaturedMoE_N2', 'FeaturedMoE_N2'),
+    'FeaturedMoE_N3': ('FeaturedMoE_N3', 'FeaturedMoE_N3'),
+    'featured_moe_n3': ('FeaturedMoE_N3', 'FeaturedMoE_N3'),
+    'featuredmoe_n3': ('FeaturedMoE_N3', 'FeaturedMoE_N3'),
+}
+
+_CUSTOM_MODEL_CACHE = {}
+
+
 def _get_custom_model(model_name):
-    """Try to load custom model."""
+    """Try to load requested custom model only."""
+    if model_name in _CUSTOM_MODEL_CACHE:
+        return _CUSTOM_MODEL_CACHE[model_name]
+
+    spec = _CUSTOM_MODEL_SPECS.get(model_name)
+    if spec is None:
+        return None
+
+    module_name, class_name = spec
     try:
-        # Import after patching is complete
-        from models import (
-            BiLSTM,
-            CLRec,
-            BSARec,
-            FAME,
-            SIGMA,
-            DIFSR,
-            MSSR,
-            PAtt,
-            FENRec,
-            FeaturedMoE,
-            FeaturedMoE_HGR,
-            FeaturedMoE_HGRv4,
-            FeaturedMoE_V2,
-            FeaturedMoE_V3,
-            FeaturedMoE_V4_Distillation,
-            FeaturedMoE_N,
-            FeaturedMoE_N2,
-            FeaturedMoE_N3,
-        )
-        custom_models = {
-            'BiLSTM': BiLSTM, 
-            'CLRec': CLRec, 
-            'BSARec': BSARec, 
-            'FAME': FAME,
-            'SIGMA': SIGMA,
-            'DIFSR': DIFSR,
-            'MSSR': MSSR,
-            'PAtt': PAtt,
-            'FENRec': FENRec,
-            'FeaturedMoE': FeaturedMoE,
-            'FeaturedMoE_HGR': FeaturedMoE_HGR,
-            'featured_moe_hgr': FeaturedMoE_HGR,
-            'featuredmoe_hgr': FeaturedMoE_HGR,
-            'FeaturedMoE_HGRv4': FeaturedMoE_HGRv4,
-            'featured_moe_hgr_v4': FeaturedMoE_HGRv4,
-            'featuredmoe_hgr_v4': FeaturedMoE_HGRv4,
-            'featuredmoe_hgrv4': FeaturedMoE_HGRv4,
-            'FeaturedMoE_v2': FeaturedMoE_V2,
-            'FeaturedMoE_V2': FeaturedMoE_V2,
-            'featured_moe_v2': FeaturedMoE_V2,
-            'featuredmoe_v2': FeaturedMoE_V2,
-            'FeaturedMoE_v3': FeaturedMoE_V3,
-            'FeaturedMoE_V3': FeaturedMoE_V3,
-            'featured_moe_v3': FeaturedMoE_V3,
-            'featuredmoe_v3': FeaturedMoE_V3,
-            'FeaturedMoE_v4_Distillation': FeaturedMoE_V4_Distillation,
-            'FeaturedMoE_V4_Distillation': FeaturedMoE_V4_Distillation,
-            'featured_moe_v4_distillation': FeaturedMoE_V4_Distillation,
-            'featuredmoe_v4_distillation': FeaturedMoE_V4_Distillation,
-            'FeaturedMoE_N': FeaturedMoE_N,
-            'featured_moe_n': FeaturedMoE_N,
-            'featuredmoe_n': FeaturedMoE_N,
-            'FeaturedMoE_N2': FeaturedMoE_N2,
-            'featured_moe_n2': FeaturedMoE_N2,
-            'featuredmoe_n2': FeaturedMoE_N2,
-            'FeaturedMoE_N3': FeaturedMoE_N3,
-            'featured_moe_n3': FeaturedMoE_N3,
-            'featuredmoe_n3': FeaturedMoE_N3,
-        }
-        return custom_models.get(model_name)
-    except:
+        module = importlib.import_module(f"models.{module_name}")
+        cls = getattr(module, class_name)
+        _CUSTOM_MODEL_CACHE[model_name] = cls
+        return cls
+    except Exception:
         return None
 
 
@@ -576,7 +598,22 @@ def _patched_build(self):
                 ckpt_dir = Path(self.config["checkpoint_dir"])
                 ckpt_dir.mkdir(parents=True, exist_ok=True)
                 ds_name = getattr(self, "dataset_name", "dataset")
-                split_cache_file = ckpt_dir / f"{ds_name}-session-split-len{max_len}.pth"
+                data_path = str(self.config["data_path"]) if "data_path" in self.config else ""
+                feature_mode = str(self.config["feature_mode"]) if "feature_mode" in self.config else ""
+                load_col = self.config["load_col"] if "load_col" in self.config else {}
+                data_sig = _dataset_file_signature(self.config, ds_name)
+                cache_key = json.dumps(
+                    {
+                        "data_path": data_path,
+                        "feature_mode": feature_mode,
+                        "load_col": load_col,
+                        "data_sig": data_sig,
+                    },
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
+                cache_sig = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:10]
+                split_cache_file = ckpt_dir / f"{ds_name}-session-split-len{max_len}-{cache_sig}.pth"
                 if split_cache_file.exists():
                     with open(split_cache_file, "rb") as f:
                         cached_splits = pickle.load(f)
@@ -670,7 +707,21 @@ def _patched_build(self):
                 ds_name = getattr(self, "dataset_name", "dataset")
                 max_len = self.config['MAX_ITEM_LIST_LENGTH'] if 'MAX_ITEM_LIST_LENGTH' in self.config else "na"
                 eval_args = self.config["eval_args"] if "eval_args" in self.config else {}
-                eval_key = json.dumps(eval_args, sort_keys=True, ensure_ascii=True)
+                data_path = str(self.config["data_path"]) if "data_path" in self.config else ""
+                feature_mode = str(self.config["feature_mode"]) if "feature_mode" in self.config else ""
+                load_col = self.config["load_col"] if "load_col" in self.config else {}
+                data_sig = _dataset_file_signature(self.config, ds_name)
+                eval_key = json.dumps(
+                    {
+                        "eval_args": eval_args,
+                        "data_path": data_path,
+                        "feature_mode": feature_mode,
+                        "load_col": load_col,
+                        "data_sig": data_sig,
+                    },
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
                 eval_hash = hashlib.md5(eval_key.encode("utf-8")).hexdigest()[:10]
                 split_cache_file = ckpt_dir / f"{ds_name}-split-cache-len{max_len}-{eval_hash}.pth"
 

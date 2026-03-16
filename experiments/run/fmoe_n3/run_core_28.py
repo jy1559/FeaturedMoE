@@ -349,9 +349,17 @@ def base_combo(
 
 def build_combos(dataset: str) -> list[dict]:
     prof = dataset_profile(dataset)
-    c2_lr = (7e-5, 5e-3)
-    c4_lr = (3e-5, 2e-3)
-    conservative_c4_lr = (2e-5, 1.2e-3)
+    # LFM: SASRec baseline best at lr≈3.86e-4; collapses observed at <1e-4.
+    # Narrow the search window relative to KuaiRec to avoid wasted trials in
+    # confirmed dead zones (< 8e-5) and diminishing-return high end (> 1.2e-3).
+    if dataset.lower() == "lastfm0.03":
+        c2_lr = (1.5e-4, 2.5e-3)
+        c4_lr = (1e-4, 1.2e-3)
+        conservative_c4_lr = (8e-5, 8e-4)
+    else:
+        c2_lr = (7e-5, 5e-3)
+        c4_lr = (3e-5, 2e-3)
+        conservative_c4_lr = (2e-5, 1.2e-3)
     all_linear = _default_encoder_mode()
     all_both = _default_router_source()
     all_none_inj = _default_feature_injection()

@@ -68,6 +68,10 @@ class StageExecutorN3(nn.Module):
         mid_router_temperature: float,
         micro_router_temperature: float,
         dense_hidden_scale: float,
+        stage_residual_mode: Dict[str, str],
+        residual_alpha_fixed: Dict[str, float],
+        residual_alpha_init: Dict[str, float],
+        residual_shared_ffn_scale: float,
         col2idx: Dict[str, int],
     ):
         super().__init__()
@@ -83,6 +87,7 @@ class StageExecutorN3(nn.Module):
         self.ffn_blocks = nn.ModuleList()
         self.stage_attn_blocks = nn.ModuleList()
         self.stage_blocks = nn.ModuleDict()
+        self.global_residual_alpha = nn.Parameter(torch.tensor(0.0))
         self.compiled_ops: List[dict] = []
 
         self._stage_counts = defaultdict(int)
@@ -133,6 +138,10 @@ class StageExecutorN3(nn.Module):
                     stage_router_type=str(stage_router_type.get(stage_name, "standard")),
                     router_temperature=router_temperature,
                     dense_hidden_scale=float(dense_hidden_scale),
+                    stage_residual_mode=str(stage_residual_mode.get(stage_name, "base")),
+                    residual_alpha_fixed=float(residual_alpha_fixed.get(stage_name, 0.5)),
+                    residual_alpha_init=float(residual_alpha_init.get(stage_name, 0.0)),
+                    shared_ffn_scale=float(residual_shared_ffn_scale),
                 )
                 self.stage_blocks[stage_name] = N3StageBlock(cfg)
 
@@ -247,6 +256,7 @@ class StageExecutorN3(nn.Module):
         stage_temperatures = dict(stage_temperatures or {})
         for stage_name in _STAGE_NAMES:
             self.stage_blocks[stage_name].set_schedule_state(
+                alpha_scale=alpha_scale,
                 router_temperature=stage_temperatures.get(stage_name),
                 top_k=top_k,
             )
@@ -293,6 +303,7 @@ class StageExecutorN3(nn.Module):
                 out,
                 feat,
                 item_seq_len=item_seq_len,
+                alpha_override=self.global_residual_alpha,
             )
             out = next_hidden
             if weights is not None:

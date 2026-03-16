@@ -68,7 +68,7 @@ runtime_bucket=heavy est_50ep_single_eval_min=80.4
 - /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 10 --tune-epochs 100 --tune-patience 10 --seed 9905 --run-group fmoe_n3 --run-axis phase2_router_v1 --run-phase PA_X65 model=featured_moe_n3_tune dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session feature_mode=full_v3 gpu_id=5 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_eval_logging_timing=final_only fmoe_feature_ablation_logging=false fmoe_special_logging=true MAX_ITEM_LIST_LENGTH=20 train_batch_size=2048 eval_batch_size=4096 embedding_size=256 num_heads=4 attn_dropout_prob=0.1 d_ff=512 d_feat_emb=24 d_expert_hidden=192 d_router_hidden=96 expert_scale=3 ++layer_layout=["macro","mid","micro"] ++stage_feature_encoder_mode={macro:"linear",mid:"linear",micro:"linear"} ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++stage_router_type={macro:"standard",mid:"standard",micro:"standard"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_feature_family_mask={} macro_history_window=5 moe_top_k=0 moe_top_k_policy=auto moe_top_k_ratio=0.5 macro_session_pooling=mean balance_loss_lambda=0.006 z_loss_lambda=0.0003 gate_entropy_lambda=0.0 gate_entropy_until=0.0 rule_agreement_lambda=0.0 group_coverage_lambda=0.0 group_prior_align_lambda=0.0 feature_group_bias_lambda=0.0 feature_group_prior_temperature=1.0 factored_group_balance_lambda=0.0 lr_scheduler_type=warmup_cosine lr_scheduler_warmup_ratio=0.1 lr_scheduler_min_lr_ratio=0.1 lr_scheduler_plateau_factor=0.5 lr_scheduler_plateau_patience=3 ++combo_family="A" ++combo_role="scale" ++combo_desc="embed256_large_model" ++search.learning_rate=[0.00015,0.01] ++search.weight_decay=[0.0,1e-07,1e-06,5e-05,0.0001] ++search.hidden_dropout_prob=[0.1,0.15,0.2,0.25] ++search.lr_scheduler_type=["warmup_cosine"] ++search_space_type_overrides.learning_rate=loguniform ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice
 /venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
   import pkg_resources
-[RUN_STATUS] START pid=376722 ts=2026-03-14T17:44:02
+[RUN_STATUS] START pid=387987 ts=2026-03-14T19:26:58
 
 =================================================================
   Hyperopt TPE  |  FeaturedMoE_N3 x KuaiRecLargeStrictPosV2_0.2
@@ -92,217 +92,71 @@ Fixed groups: 1
 
 [1/10] hidden_dropout_prob=0.15, learning_rate=0.001082, weight_decay=0.0001
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0793  best=0.0793  (early_stop@17, trial=3.9min, avg=4.3min/trial, total=4.3min, ETA=39.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.0793 cur_best_hr10=0.1119 cur_test_mrr20=0.1618 cur_test_hr10=0.1888 run_best_mrr20=0.0793 run_best_hr10=0.1119 run_test_mrr20=0.1618 run_test_hr10=0.1888
 
 [2/10] hidden_dropout_prob=0.2, learning_rate=0.001553, weight_decay=0.0001
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0795  best=0.0795  (early_stop@17, trial=3.9min, avg=4.1min/trial, total=8.3min, ETA=33.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.0795 cur_best_hr10=0.1128 cur_test_mrr20=0.1613 cur_test_hr10=0.1892 run_best_mrr20=0.0795 run_best_hr10=0.1128 run_test_mrr20=0.1613 run_test_hr10=0.1892
 
 [3/10] hidden_dropout_prob=0.15, learning_rate=0.004619, weight_decay=5e-05
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0789  best=0.0795  (early_stop@15, trial=3.5min, avg=3.9min/trial, total=11.8min, ETA=27.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.0789 cur_best_hr10=0.1090 cur_test_mrr20=0.1602 cur_test_hr10=0.1847 run_best_mrr20=0.0795 run_best_hr10=0.1128 run_test_mrr20=0.1613 run_test_hr10=0.1892
 
 [4/10] hidden_dropout_prob=0.1, learning_rate=0.0002551, weight_decay=0.0001
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0795  best=0.0795  (early_stop@25, trial=5.8min, avg=4.4min/trial, total=17.6min, ETA=26.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.0795 cur_best_hr10=0.1121 cur_test_mrr20=0.1621 cur_test_hr10=0.1904 run_best_mrr20=0.0795 run_best_hr10=0.1121 run_test_mrr20=0.1621 run_test_hr10=0.1904
 
 [5/10] hidden_dropout_prob=0.15, learning_rate=0.001163, weight_decay=0.0001
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0793  best=0.0795  (early_stop@17, trial=4.0min, avg=4.3min/trial, total=21.5min, ETA=21.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.0793 cur_best_hr10=0.1121 cur_test_mrr20=0.1617 cur_test_hr10=0.1889 run_best_mrr20=0.0795 run_best_hr10=0.1128 run_test_mrr20=0.1613 run_test_hr10=0.1892
 
 [6/10] hidden_dropout_prob=0.25, learning_rate=0.003019, weight_decay=0.0001
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0795  best=0.0795  (early_stop@15, trial=3.5min, avg=4.2min/trial, total=25.0min, ETA=16.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.0795 cur_best_hr10=0.1116 cur_test_mrr20=0.1607 cur_test_hr10=0.1875 run_best_mrr20=0.0795 run_best_hr10=0.1116 run_test_mrr20=0.1607 run_test_hr10=0.1875
 
 [7/10] hidden_dropout_prob=0.2, learning_rate=0.0002701, weight_decay=0.0001
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0798  best=0.0798  (early_stop@28, trial=6.5min, avg=4.5min/trial, total=31.5min, ETA=13.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.0798 cur_best_hr10=0.1140 cur_test_mrr20=0.1618 cur_test_hr10=0.1916 run_best_mrr20=0.0798 run_best_hr10=0.1140 run_test_mrr20=0.1618 run_test_hr10=0.1916
 
 [8/10] hidden_dropout_prob=0.1, learning_rate=0.0001528, weight_decay=0.0001
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0797  best=0.0798  (early_stop@35, trial=8.1min, avg=4.9min/trial, total=39.6min, ETA=9.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.0797 cur_best_hr10=0.1129 cur_test_mrr20=0.1618 cur_test_hr10=0.1893 run_best_mrr20=0.0798 run_best_hr10=0.1140 run_test_mrr20=0.1618 run_test_hr10=0.1916
 
 [9/10] hidden_dropout_prob=0.2, learning_rate=0.000332, weight_decay=5e-05
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+  -> MRR@20=0.0798  best=0.0798  (early_stop@28, trial=6.5min, avg=5.1min/trial, total=46.0min, ETA=5.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.0798 cur_best_hr10=0.1138 cur_test_mrr20=0.1615 cur_test_hr10=0.1897 run_best_mrr20=0.0798 run_best_hr10=0.1138 run_test_mrr20=0.1615 run_test_hr10=0.1897
 
 [10/10] hidden_dropout_prob=0.25, learning_rate=0.007119, weight_decay=1e-07
 [CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
-  -> FAILED: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-Traceback (most recent call last):
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3073, in objective
-    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
-  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1849, in train_and_evaluate
-    config = Config(model=cfg["model"], dataset=cfg["dataset"], config_dict=cfg)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 88, in __init__
-    self.model, self.model_class, self.dataset = self._get_model_and_dataset(
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/config/configurator.py", line 216, in _get_model_and_dataset
-    final_model_class = get_model(final_model)
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 137, in _patched_get_model
-    raise e
-  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 131, in _patched_get_model
-    return _original_get_model(model_name)
-  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
-    raise ValueError(
-ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
-
-[WARN] fmin ended with: 
-
+  -> MRR@20=0.0800  best=0.0800  (early_stop@23, trial=5.3min, avg=5.1min/trial, total=51.4min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.0800 cur_best_hr10=0.1115 cur_test_mrr20=0.1593 cur_test_hr10=0.1847 run_best_mrr20=0.0800 run_best_hr10=0.1115 run_test_mrr20=0.1593 run_test_hr10=0.1847
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+[1;35mEvaluate   [0m:   0%|                                                           | 0/10 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/10 [00:03<?, ?it/s, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:03<00:30,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:06<00:30,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:06<00:27,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:10<00:27,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:10<00:23,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:13<00:23,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:13<00:20,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:16<00:20,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:16<00:16,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:20<00:16,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:20<00:13,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:23<00:13,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:23<00:10,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:27<00:10,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:27<00:06,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:30<00:06,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:30<00:03,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:31<00:03,  3.39s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m: 100%|█████████████████████████| 10/10 [00:31<00:00,  2.62s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                           | 0/10 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/10 [00:03<?, ?it/s, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:03<00:30,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:06<00:30,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:06<00:27,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:10<00:27,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:10<00:23,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:13<00:23,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:13<00:20,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:17<00:20,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:17<00:17,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:20<00:17,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:20<00:13,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:23<00:13,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:23<00:10,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:27<00:10,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:27<00:06,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:30<00:06,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:30<00:03,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:31<00:03,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m: 100%|█████████████████████████| 10/10 [00:31<00:00,  2.64s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                           | 0/10 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/10 [00:03<?, ?it/s, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:03<00:31,  3.46s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:06<00:31,  3.46s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:06<00:27,  3.43s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:10<00:27,  3.43s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:10<00:23,  3.42s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:13<00:23,  3.42s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:13<00:20,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:17<00:20,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:17<00:17,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:20<00:17,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:20<00:13,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:23<00:13,  3.41s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:23<00:10,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:27<00:10,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:27<00:06,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:30<00:06,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:30<00:03,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:31<00:03,  3.40s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m[1;35mEvaluate   [0m: 100%|█████████████████████████| 10/10 [00:31<00:00,  2.63s/it, [1;33mGPU RAM: 8.58 G/23.67 G[0m][0m                                                                                                    
 =================================================================
   DONE  |  FeaturedMoE_N3 x KuaiRecLargeStrictPosV2_0.2
-  Best MRR@20 = 0.0000  |  0/10 trials OK
-  Best HR@10  = 0.0000
-  Test MRR@20 = 0.0000  (best-valid checkpoint)
-  Test HR@10  = 0.0000  (best-valid checkpoint)
-[RUN_METRICS] best_valid_mrr20=0.0000 best_valid_hr10=0.0000 test_mrr20=0.0000 test_hr10=0.0000
-  Total time: 0.0 min
+  Best MRR@20 = 0.0800  |  10/10 trials OK
+  Best HR@10  = 0.1115
+  Test MRR@20 = 0.1593  (best-valid checkpoint)
+  Test HR@10  = 0.1847  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.0800 best_valid_hr10=0.1115 test_mrr20=0.1593 test_hr10=0.1847
+  Total time: 53.0 min
   Best params:
-  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_pa_x65_20260314_174402_856901_pid376722.json
-  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/normal/phase2_router_v1/PA/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_pa_x65_20260314_174402_856901_pid376722.json
+    hidden_dropout_prob: 0.25
+    learning_rate: 0.00711871
+    weight_decay: 1e-07
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_pa_x65_20260314_192658_528192_pid387987.json
+  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/normal/phase2_router_v1/PA/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_pa_x65_20260314_192658_528192_pid387987.json
+  Special result -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/special/phase2_router_v1/PA/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_pa_x65_20260314_192658_528192_pid387987_special_metrics.json
+  Special log -> /workspace/jy1559/FMoE/experiments/run/artifacts/logs/fmoe_n3/special/phase2_router_v1/PA/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_pa_x65_20260314_192658_528192_pid387987_special_metrics.json
 =================================================================
 
-[RUN_STATUS] END status=normal pid=376722 start=2026-03-14T17:44:02 end=2026-03-14T17:44:04
+[RUN_STATUS] END status=normal pid=387987 start=2026-03-14T19:26:58 end=2026-03-14T20:19:55

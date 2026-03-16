@@ -117,6 +117,11 @@ get_model = _rbu.get_model
 from hydra_utils import load_hydra_config, configure_eval_sampling
 from omegaconf import OmegaConf
 
+try:
+    from models.FeaturedMoE_N3.feature_config import ALL_FEATURE_COLUMNS as _N3_ALL_FEATURE_COLUMNS
+except Exception:
+    _N3_ALL_FEATURE_COLUMNS = []
+
 _FEATURE_AWARE_MOE_MODELS = {
     "featured_moe",
     "featuredmoe",
@@ -186,6 +191,45 @@ def _sync_model_dimensions(cfg_dict: dict) -> None:
             cfg_dict["embedding_size"] = hid
             cfg_dict["inner_size"] = hid * 2
         return
+
+
+def _ensure_feature_load_columns(cfg_dict: dict) -> None:
+    """Guarantee engineered feature columns are loaded for feature-aware MoE models.
+
+    Some launch paths can accidentally keep a minimal `load_col.inter` and silently drop
+    engineered feature fields, which then forces zero-filled feature fallbacks.
+    """
+    model_name = str(cfg_dict.get("model", "")).strip().lower()
+    if model_name not in _FEATURE_AWARE_MOE_MODELS:
+        return
+
+    feature_mode = str(cfg_dict.get("feature_mode", "")).strip().lower()
+    data_path = str(cfg_dict.get("data_path", "")).strip().lower()
+    uses_feature_added = ("feature_added" in data_path) or (feature_mode in {"full", "full_v2", "full_v3", "feature_added"})
+    if not uses_feature_added:
+        return
+
+    feature_cols = list(_N3_ALL_FEATURE_COLUMNS or [])
+    if not feature_cols:
+        return
+
+    load_col = cfg_dict.get("load_col")
+    if not isinstance(load_col, dict):
+        load_col = {}
+
+    inter_cols = load_col.get("inter", [])
+    if not isinstance(inter_cols, list):
+        inter_cols = []
+
+    mandatory = ["session_id", "item_id", "timestamp"]
+    merged = []
+    for col in list(inter_cols) + mandatory + feature_cols:
+        name = str(col).strip()
+        if name and name not in merged:
+            merged.append(name)
+
+    load_col["inter"] = merged
+    cfg_dict["load_col"] = load_col
 
     # Legacy behavior for v1/baseline models.
     if "hidden_size" in cfg_dict:
@@ -1644,6 +1688,7 @@ def _build_eval_runtime(cfg_dict: dict):
         cfg.pop(drop, None)
     cfg["valid_metric"] = "MRR@20"
     _sync_model_dimensions(cfg)
+    _ensure_feature_load_columns(cfg)
     if cfg.get("loss_type", "CE").upper() == "CE":
         cfg["train_neg_sample_args"] = None
     configure_runtime_acceleration(cfg)
@@ -1834,6 +1879,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     cfg["valid_metric"] = "MRR@20"
 
     _sync_model_dimensions(cfg)
+    _ensure_feature_load_columns(cfg)
 
     # CE loss → disable negative sampling
     if cfg.get("loss_type", "CE").upper() == "CE":
@@ -2863,6 +2909,8 @@ def main():
         print(f"[Dataset] normalize dataset name: {cfg.get('dataset')} -> {resolved_dataset}")
         cfg["dataset"] = resolved_dataset
 
+    _ensure_feature_load_columns(cfg)
+
     # Optional epoch / patience overrides
     if args.tune_epochs is not None:
         cfg["epochs"] = args.tune_epochs
@@ -2879,6 +2927,14 @@ def main():
     run_group = str(args.run_group or "").strip().lower()
     run_axis = str(args.run_axis or "").strip().lower()
     run_phase = str(args.run_phase or "").strip()
+
+    # Fail fast before hyperopt loop if model registration/import is broken.
+    try:
+        _ = get_model(model)
+    except Exception as e:
+        print(f"[ERROR] model precheck failed for model={model}: {e}")
+        print("[HINT] check custom model imports under experiments/models and recbole_patch.py")
+        raise
 
     # Build search space (tuned vs fixed split)
     search = cfg.get("search", {})

@@ -24,6 +24,10 @@ WAVE2_COMBOS=("C5" "C6" "C7" "C8")
 
 declare -ag WORKER_PIDS=()
 
+phase_token_lc() {
+  printf '%s' "$PHASE" | tr '[:upper:]' '[:lower:]'
+}
+
 auto_trim() {
   echo "$1" | xargs
 }
@@ -159,10 +163,10 @@ combo_struct_overrides() {
   local combo="$2"
 
   case "${model}:${combo}" in
-    bsarec:C1) printf '%s\n' "hidden_size=128" "num_layers=1" "num_heads=4" "++MAX_ITEM_LIST_LENGTH=10" ;;
+    bsarec:C1) printf '%s\n' "hidden_size=160" "num_layers=1" "num_heads=2" "++MAX_ITEM_LIST_LENGTH=20" ;;
     bsarec:C2) printf '%s\n' "hidden_size=128" "num_layers=2" "num_heads=4" "++MAX_ITEM_LIST_LENGTH=10" ;;
-    bsarec:C3) printf '%s\n' "hidden_size=128" "num_layers=2" "num_heads=8" "++MAX_ITEM_LIST_LENGTH=10" ;;
-    bsarec:C4) printf '%s\n' "hidden_size=192" "num_layers=2" "num_heads=8" "++MAX_ITEM_LIST_LENGTH=20" ;;
+    bsarec:C3) printf '%s\n' "hidden_size=192" "num_layers=3" "num_heads=4" "++MAX_ITEM_LIST_LENGTH=20" ;;
+    bsarec:C4) printf '%s\n' "hidden_size=256" "num_layers=2" "num_heads=8" "++MAX_ITEM_LIST_LENGTH=30" ;;
     bsarec:C5) printf '%s\n' "hidden_size=160" "num_layers=3" "num_heads=4" "++MAX_ITEM_LIST_LENGTH=20" ;;
     bsarec:C6) printf '%s\n' "hidden_size=160" "num_layers=1" "num_heads=8" "++MAX_ITEM_LIST_LENGTH=20" ;;
     bsarec:C7) printf '%s\n' "hidden_size=128" "num_layers=3" "num_heads=4" "++MAX_ITEM_LIST_LENGTH=30" ;;
@@ -216,9 +220,9 @@ combo_search_fix_overrides() {
   local combo="$2"
 
   case "${model}:${combo}" in
-    bsarec:C1) printf '%s\n' "++search.num_layers=[1]" "++search.num_heads=[4]" ;;
+    bsarec:C1) printf '%s\n' "++search.num_layers=[1]" "++search.num_heads=[2]" ;;
     bsarec:C2) printf '%s\n' "++search.num_layers=[2]" "++search.num_heads=[4]" ;;
-    bsarec:C3) printf '%s\n' "++search.num_layers=[2]" "++search.num_heads=[8]" ;;
+    bsarec:C3) printf '%s\n' "++search.num_layers=[3]" "++search.num_heads=[4]" ;;
     bsarec:C4) printf '%s\n' "++search.num_layers=[2]" "++search.num_heads=[8]" ;;
     bsarec:C5) printf '%s\n' "++search.num_layers=[3]" "++search.num_heads=[4]" ;;
     bsarec:C6) printf '%s\n' "++search.num_layers=[1]" "++search.num_heads=[8]" ;;
@@ -280,6 +284,134 @@ make_log_path() {
   dir="${RUN_DIR}/artifacts/logs/baseline/${dataset}/${phase}"
   mkdir -p "$dir"
   echo "${dir}/${model}_${combo}_g${gpu}_${ts}_${rid}.log"
+}
+
+cleanup_incomplete_artifacts_for_dataset() {
+  local dataset="$1"
+  local results_root logs_dir phase_lc
+  results_root="${RUN_DIR}/artifacts/results/baseline"
+  logs_dir="${RUN_DIR}/artifacts/logs/baseline/${dataset}/${PHASE}"
+  phase_lc="$(phase_token_lc)"
+
+  "$PYTHON_BIN" - "$results_root" "$logs_dir" "$dataset" "$phase_lc" <<'PY'
+import glob
+import json
+import os
+import sys
+
+results_root, logs_dir, dataset, phase_lc = sys.argv[1:5]
+
+deleted_results = []
+deleted_refs = []
+deleted_logs = []
+
+pattern = os.path.join(results_root, f"{dataset}_*_{phase_lc}_*.json")
+for path in sorted(glob.glob(pattern)):
+  data = None
+  try:
+    with open(path, "r", encoding="utf-8") as f:
+      data = json.load(f)
+  except Exception:
+    data = None
+
+  should_delete = False
+  refs = []
+  if data is None:
+    should_delete = True
+  else:
+    n_completed = int(data.get("n_completed", -1) or -1)
+    max_evals = int(data.get("max_evals", 0) or 0)
+    interrupted = bool(data.get("interrupted", False))
+    should_delete = interrupted or max_evals <= 0 or n_completed < max_evals
+    refs = [
+      data.get("normal_result_mirror_file", ""),
+      data.get("special_result_file", ""),
+      data.get("special_log_file", ""),
+    ]
+
+  if not should_delete:
+    continue
+
+  if os.path.exists(path):
+    os.remove(path)
+    deleted_results.append(path)
+
+  for ref in refs:
+    if ref and os.path.exists(ref):
+      os.remove(ref)
+      deleted_refs.append(ref)
+
+if os.path.isdir(logs_dir):
+  for log_path in sorted(glob.glob(os.path.join(logs_dir, "*.log"))):
+    try:
+      with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+        txt = f.read()
+    except Exception:
+      txt = ""
+    if "[RUN_STATUS] END status=terminated" in txt or "[RUN_STATUS] TERMINATED signal=" in txt:
+      os.remove(log_path)
+      deleted_logs.append(log_path)
+
+print(
+  f"[CLEANUP] dataset={dataset} phase={phase_lc} "
+  f"deleted_results={len(deleted_results)} deleted_refs={len(deleted_refs)} deleted_logs={len(deleted_logs)}"
+)
+PY
+}
+
+find_completed_result_for_task() {
+  local dataset="$1"
+  local model="$2"
+  local combo="$3"
+  local run_phase="$4"
+  local required_evals="$5"
+  local results_root phase_lc
+  results_root="${RUN_DIR}/artifacts/results/baseline"
+  phase_lc="$(phase_token_lc)"
+
+  "$PYTHON_BIN" - "$results_root" "$dataset" "$phase_lc" "$model" "$combo" "$run_phase" "$required_evals" <<'PY'
+import glob
+import json
+import os
+import sys
+
+results_root, dataset, phase_lc, model, combo, run_phase, required_evals = sys.argv[1:8]
+required_evals = int(required_evals)
+combo_lc = combo.lower()
+best_path = ""
+best_mtime = -1.0
+
+pattern = os.path.join(results_root, f"{dataset}_*_{phase_lc}_*_{model}_{combo_lc}_*.json")
+for path in glob.glob(pattern):
+  try:
+    with open(path, "r", encoding="utf-8") as f:
+      data = json.load(f)
+  except Exception:
+    continue
+
+  if str(data.get("run_phase", "")).upper() != run_phase.upper():
+    continue
+
+  interrupted = bool(data.get("interrupted", False))
+  n_completed = int(data.get("n_completed", 0) or 0)
+  max_evals = int(data.get("max_evals", 0) or 0)
+  if interrupted:
+    continue
+  if n_completed < required_evals:
+    continue
+  if max_evals < required_evals:
+    continue
+
+  mtime = os.path.getmtime(path)
+  if mtime > best_mtime:
+    best_mtime = mtime
+    best_path = path
+
+if best_path:
+  print(best_path)
+  sys.exit(0)
+sys.exit(1)
+PY
 }
 
 run_combo_job() {
@@ -457,6 +589,16 @@ for name in must_have:
         missing.append(name)
 if missing:
     raise SystemExit("missing_python_packages=" + ",".join(missing))
+
+# Verify custom model registration end-to-end.
+import recbole_patch  # noqa: F401
+from recbole.utils import utils as rbu
+for model_name in ["BSARec", "PAtt", "FAME", "FENRec", "SIGMA", "FeaturedMoE_N3"]:
+  try:
+    _ = rbu.get_model(model_name)
+  except Exception as e:
+    raise SystemExit(f"missing_or_broken_model={model_name}: {e}")
+
 print("[ENV_CHECK] python and core packages OK")
 PY
 then
@@ -469,6 +611,14 @@ IFS=',' read -r -a DATASET_ARR <<< "$DATASETS"
 if [ "${#DATASET_ARR[@]}" -eq 0 ]; then
   echo "Empty datasets" >&2
   exit 1
+fi
+
+if [ "$DRY_RUN" = "false" ]; then
+  for dataset_raw in "${DATASET_ARR[@]}"; do
+    dataset="$(auto_trim "$dataset_raw")"
+    [ -z "$dataset" ] && continue
+    cleanup_incomplete_artifacts_for_dataset "$dataset"
+  done
 fi
 
 IFS=',' read -r -a GPUS <<< "$GPU_LIST"
@@ -518,6 +668,11 @@ for wave_idx in 0 1; do
         gpu="${ACTIVE_GPUS[$slot_idx]}"
         seed=$((SEED_BASE + wave_idx * 100000 + dataset_idx * 10000 + model_idx * 100 + slot_idx))
         run_phase="${PHASE}_${wave_name}_D$(printf '%02d' "$dataset_idx")_${model^^}_${combo}"
+
+        if completed_path="$(find_completed_result_for_task "$dataset" "$model" "$combo" "$run_phase" "$evals")"; then
+          echo "[SKIP] dataset=${dataset} model=${model} combo=${combo} phase=${run_phase} (completed: ${completed_path##*/})"
+          continue
+        fi
 
         line="${wave_name}|${dataset}|${cfg}|${model}|${combo}|${evals}|${seed}|${lr_lo}|${lr_hi}|${drop}|${wd}|${run_phase}"
         QUEUES[$slot_idx]="${QUEUES[$slot_idx]}${line}"$'\n'
