@@ -1,0 +1,48 @@
+[LFMFAST12_2_COMBO_HEADER]
+run_phase=LFMFAST_C5 category=transfer_candidate combo=C5 desc=cand_A_standard_gated
+dataset=lastfm0.03 gpu=5 order=6
+max_evals=10 tune_epochs=100 tune_patience=10
+seed=19006
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 10 --tune-epochs 100 --tune-patience 10 --seed 19006 --run-group fmoe_n3 --run-axis phaseX_lfm_fast_v1 --run-phase LFMFAST_C5 model=featured_moe_n3_tune dataset=lastfm0.03 eval_mode=session feature_mode=full_v3 gpu_id=5 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_artifact_logging_policy=final_only fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_phase="LFMFAST12_2" MAX_ITEM_LIST_LENGTH=20 train_batch_size=2048 eval_batch_size=2048 embedding_size=128 num_heads=4 hidden_dropout_prob=0.15 attn_dropout_prob=0.1 d_ff=256 d_feat_emb=16 d_expert_hidden=128 d_router_hidden=64 ++search_space_type_overrides.learning_rate=loguniform ++lfm_fast_combo_id="C5" ++lfm_fast_combo_desc="cand_A_standard_gated" ++lfm_fast_category="transfer_candidate" ++layer_layout=["macro","mid","micro"] ++search.learning_rate=[0.0003,0.006] ++search.weight_decay=[1e-06] ++search.hidden_dropout_prob=[0.15] ++search.lr_scheduler_type=["warmup_cosine"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"gated_bias",mid:"gated_bias",micro:"gated_bias"} ++stage_router_type={macro:"standard",mid:"standard",micro:"standard"} ++stage_residual_mode={macro:"base",mid:"base",micro:"base"} ++topk_scope_mode="global_flat" moe_top_k=0 expert_scale=3 route_smoothness_lambda=0.01 balance_loss_lambda=0.002 z_loss_lambda=0.0001
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=60715 ts=2026-03-18T17:01:41
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x lastfm0.03
+  max_evals=10  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=2048/2048/2048
+  track=fmoe_n3  axis=phasex_lfm_fast_v1  phase=LFMFAST_C5
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.0003, 0.006]                           -> loguniform
+Fixed params(singleton/non-list): 3
+Fixed groups: 3
+  [optimization]
+    hidden_dropout_prob             0.15                                    
+    weight_decay                    1e-06                                   
+  [other]
+    lr_scheduler_type               warmup_cosine                           
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] learning_rate=0.0006579
+  -> MRR@20=0.4014  best=0.4014  (early_stop@34, trial=13.5min, avg=13.6min/trial, total=13.6min, ETA=2.04h)
+[TRIAL_METRICS] cur_best_mrr20=0.4014 cur_best_hr10=0.4733 cur_test_mrr20=0.3792 cur_test_hr10=0.4483 run_best_mrr20=0.4014 run_best_hr10=0.4733 run_test_mrr20=0.3792 run_test_hr10=0.4483
+
+[2/10] learning_rate=0.0005917
+  -> MRR@20=0.4016  best=0.4016  (early_stop@37, trial=14.7min, avg=14.1min/trial, total=28.3min, ETA=1.89h)
+[TRIAL_METRICS] cur_best_mrr20=0.4016 cur_best_hr10=0.4734 cur_test_mrr20=0.3800 cur_test_hr10=0.4478 run_best_mrr20=0.4016 run_best_hr10=0.4734 run_test_mrr20=0.3800 run_test_hr10=0.4478
+
+[3/10] learning_rate=0.001896
+  -> MRR@20=0.3898  best=0.4016  (early_stop@19, trial=7.7min, avg=12.0min/trial, total=36.0min, ETA=1.40h)
+[TRIAL_METRICS] cur_best_mrr20=0.3898 cur_best_hr10=0.4672 cur_test_mrr20=0.3675 cur_test_hr10=0.4424 run_best_mrr20=0.4016 run_best_hr10=0.4734 run_test_mrr20=0.3800 run_test_hr10=0.4478
+
+[4/10] learning_rate=0.0003269
+[RUN_STATUS] TERMINATED signal=SIGINT(2) pid=60715 ts=2026-03-18T17:56:08
+[RUN_STATUS] END status=terminated signal=SIGINT(2) pid=60715 start=2026-03-18T17:01:41 end=2026-03-18T17:56:08

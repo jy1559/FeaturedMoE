@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Default output root (relative to experiments/ working directory)
-_DEFAULT_OUTPUT_ROOT = "outputs/FMoE"
+_DEFAULT_OUTPUT_ROOT = "run/artifacts/logging"
 
 
 class RunLogger:
@@ -62,22 +62,34 @@ class RunLogger:
     ):
         self.run_name = run_name
         self.debug_logging = bool(debug_logging)
+        self.config = dict(config or {})
         root = Path(output_root or _DEFAULT_OUTPUT_ROOT)
-        self.run_dir = root / run_name
+
+        model_scope = _derive_model_scope(self.config)
+        dataset = _sanitize_token(str(self.config.get("dataset", "")))
+        phase = _sanitize_token(str(self.config.get("fmoe_phase", self.config.get("phase", "P0"))))
+        run_id = _sanitize_token(str(self.config.get("fmoe_run_id", "")))
+        if model_scope and dataset and phase and run_id:
+            self.run_dir = root / model_scope / dataset / phase / run_id
+        else:
+            self.run_dir = root / run_name
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
         # File paths
         self._config_path = self.run_dir / "config.json"
-        self._epoch_csv = self.run_dir / "epoch_metrics.csv"
+        self._run_meta_path = self.run_dir / "run_meta.json"
+        self._epoch_csv = self.run_dir / "metrics_epoch.csv"
         self._expert_csv = self.run_dir / "expert_weights.csv"
         self._perf_csv = self.run_dir / "expert_performance.csv"
         self._bias_csv = self.run_dir / "feature_bias.csv"
-        self._summary_path = self.run_dir / "summary.json"
+        self._summary_path = self.run_dir / "metrics_summary.json"
         self._special_metrics_path = self.run_dir / "special_metrics.json"
+        self._router_diag_path = self.run_dir / "router_diag.json"
 
         # Write config
         if config is not None:
             self._write_config(config)
+        self._write_run_meta(status="started")
 
         # Init CSV files (write headers)
         self._init_epoch_csv()
@@ -92,6 +104,24 @@ class RunLogger:
         logger.info(
             f"RunLogger: saving to {self.run_dir} (debug_logging={self.debug_logging})"
         )
+
+    def _write_run_meta(self, *, status: str, extra: Optional[Dict[str, Any]] = None):
+        payload = {
+            "run_name": self.run_name,
+            "run_id": str(self.config.get("fmoe_run_id", "")),
+            "model_scope": _derive_model_scope(self.config),
+            "model": str(self.config.get("model", "")),
+            "dataset": str(self.config.get("dataset", "")),
+            "phase": str(self.config.get("fmoe_phase", self.config.get("phase", ""))),
+            "run_phase": str(self.config.get("run_phase", "")),
+            "seed": self.config.get("seed", None),
+            "status": status,
+            "updated_at": datetime.now().isoformat(),
+        }
+        if extra:
+            payload.update(_make_serializable(extra))
+        with open(self._run_meta_path, "w") as f:
+            json.dump(_make_serializable(payload), f, indent=2, ensure_ascii=False)
 
     # ------------------------------------------------------------------
     # Config
@@ -349,6 +379,16 @@ class RunLogger:
         with open(self._summary_path, "w") as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
 
+        self._write_run_meta(
+            status="finished",
+            extra={
+                "elapsed_time_sec": elapsed_time,
+                "n_epochs_run": len(self._epoch_data),
+                "best_valid_mrr20": best_valid_result.get("mrr@20", None),
+                "test_mrr20": test_result.get("mrr@20", None),
+            },
+        )
+
         logger.info(f"RunLogger: summary saved to {self._summary_path}")
 
     def log_special_metrics(
@@ -386,6 +426,23 @@ class RunLogger:
 
         logger.info(f"RunLogger: special metrics saved to {self._special_metrics_path}")
 
+    def log_router_diagnostics(
+        self,
+        *,
+        valid_diag: Optional[Dict[str, Any]],
+        test_diag: Optional[Dict[str, Any]],
+    ):
+        if valid_diag is None and test_diag is None:
+            return
+        payload = {
+            "valid": _make_serializable(valid_diag or {}),
+            "test": _make_serializable(test_diag or {}),
+            "created_at": datetime.now().isoformat(),
+        }
+        with open(self._router_diag_path, "w") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+        logger.info(f"RunLogger: router diagnostics saved to {self._router_diag_path}")
+
     # ------------------------------------------------------------------
     # Utility
     # ------------------------------------------------------------------
@@ -410,3 +467,31 @@ def _make_serializable(obj: Any) -> Any:
         return obj.tolist()
     else:
         return str(obj)
+
+
+def _sanitize_token(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    out = []
+    for ch in raw:
+        if ch.isalnum() or ch in {"-", "_", "."}:
+            out.append(ch)
+        else:
+            out.append("_")
+    token = "".join(out).strip("_")
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token
+
+
+def _derive_model_scope(config: Dict[str, Any]) -> str:
+    key = str((config or {}).get("fmoe_logging_model_scope", "")).strip()
+    if key:
+        return _sanitize_token(key)
+    model = str((config or {}).get("model", "")).lower()
+    if "featuredmoe_n3" in model or "featured_moe_n3" in model:
+        return "fmoe_n3"
+    if "featuredmoe" in model or "featured_moe" in model:
+        return "fmoe"
+    return ""

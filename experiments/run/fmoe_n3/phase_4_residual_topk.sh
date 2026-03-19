@@ -8,7 +8,7 @@ source "${RUN_DIR}/common/run_metadata.sh"
 
 DATASETS="KuaiRecLargeStrictPosV2_0.2"
 GPU_LIST="0,1,2,3"
-MAX_EVALS="10"
+MAX_EVALS="7"
 TUNE_EPOCHS="100"
 TUNE_PATIENCE="10"
 SEED_BASE="12000"

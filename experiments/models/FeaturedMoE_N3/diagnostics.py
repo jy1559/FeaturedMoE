@@ -37,6 +37,24 @@ def _float_list(tensor: torch.Tensor) -> List[float]:
     return [float(v) for v in tensor.detach().cpu().tolist()]
 
 
+def _metric_name_token(name: str) -> str:
+    text = str(name or "").strip().lower()
+    if not text:
+        return "group"
+    out = []
+    prev_us = False
+    for ch in text:
+        if ch.isalnum():
+            out.append(ch)
+            prev_us = False
+        else:
+            if not prev_us:
+                out.append("_")
+                prev_us = True
+    token = "".join(out).strip("_")
+    return token or "group"
+
+
 def _build_group_routing_payload(raw: dict) -> dict:
     """Summarize group-level routing stats from accumulated stage data."""
     n_groups = int(raw.get("n_groups", 0))
@@ -91,6 +109,7 @@ class N3DiagnosticCollector:
         all_feature_columns: List[str],
         max_positions: int,
         feature_mode: str = "none",
+        consistency_pairs: int = 4,
     ):
         self.split_name = str(split_name)
         self.stage_family_features = {
@@ -103,6 +122,7 @@ class N3DiagnosticCollector:
         self.col2idx = {name: idx for idx, name in enumerate(list(all_feature_columns or []))}
         self.max_positions = max(int(max_positions), 1)
         self.feature_mode = str(feature_mode or "none")
+        self.consistency_pairs = max(int(consistency_pairs), 1)
         self._stage_data: Dict[str, dict] = {}
 
     def _ensure_stage(self, stage_key: str, *, n_slots: int, mode: str) -> dict:
@@ -151,6 +171,15 @@ class N3DiagnosticCollector:
                 "factored_group_entropy_sum": 0.0,
                 "factored_group_n_tokens": 0,
                 "n_groups": n_groups,
+                # KNN feature-route consistency diagnostics
+                "consistency_js_sum": 0.0,
+                "consistency_js_count": 0,
+                "group_consistency_js_sum": 0.0,
+                "group_consistency_js_count": 0,
+                "intra_group_consistency_js_sum": torch.zeros(n_groups),
+                "intra_group_consistency_js_count": torch.zeros(n_groups),
+                "feature_group_consistency_js_sum": torch.zeros(n_groups),
+                "feature_group_consistency_js_count": torch.zeros(n_groups),
             }
         return self._stage_data[stage_key]
 
@@ -177,6 +206,17 @@ class N3DiagnosticCollector:
         if device is None:
             return
 
+        neigh_idx = None
+        neigh_k = 0
+        if torch.is_tensor(feat) and feat.ndim == 3 and feat.size(0) > 1:
+            feat_repr = feat.to(device=device).mean(dim=1)
+            feat_norm = F.normalize(feat_repr, p=2, dim=-1)
+            sim = feat_norm @ feat_norm.transpose(0, 1)
+            sim.fill_diagonal_(-1e9)
+            neigh_k = min(int(self.consistency_pairs), int(feat.size(0)) - 1)
+            if neigh_k > 0:
+                neigh_idx = sim.topk(k=neigh_k, dim=1).indices
+
         for stage_key, weights in gate_weights.items():
             if not torch.is_tensor(weights):
                 continue
@@ -200,6 +240,21 @@ class N3DiagnosticCollector:
             top1 = w.argmax(dim=-1)
             flat_top1 = top1[mask]
             stage_store["top1_count"] += torch.bincount(flat_top1.cpu(), minlength=weights.size(-1)).float()
+
+            session_prob = None
+
+            if neigh_idx is not None and neigh_k > 0 and int(weights.size(0)) > 1:
+                session_prob = (w * mask.unsqueeze(-1).float()).sum(dim=1) / mask.float().sum(dim=1, keepdim=True).clamp(min=1.0)
+                session_prob = session_prob.clamp(min=1e-8)
+                pi = session_prob.unsqueeze(1).expand(-1, neigh_k, -1)
+                pj = session_prob.index_select(0, neigh_idx.reshape(-1)).reshape(int(weights.size(0)), neigh_k, -1).clamp(min=1e-8)
+                mix = 0.5 * (pi + pj)
+                js = 0.5 * (
+                    (pi * (pi.log() - mix.log())).sum(dim=-1)
+                    + (pj * (pj.log() - mix.log())).sum(dim=-1)
+                )
+                stage_store["consistency_js_sum"] += float(js.sum().item())
+                stage_store["consistency_js_count"] += int(js.numel())
 
             for b_idx in range(weights.size(0)):
                 valid_pos = mask[b_idx].nonzero(as_tuple=False).view(-1)
@@ -288,6 +343,10 @@ class N3DiagnosticCollector:
                     stage_store["group_usage_sum"] = torch.zeros(n_grps)
                     stage_store["group_top1_count"] = torch.zeros(n_grps)
                     stage_store["group_prior_sum"] = torch.zeros(n_grps)
+                    stage_store["intra_group_consistency_js_sum"] = torch.zeros(n_grps)
+                    stage_store["intra_group_consistency_js_count"] = torch.zeros(n_grps)
+                    stage_store["feature_group_consistency_js_sum"] = torch.zeros(n_grps)
+                    stage_store["feature_group_consistency_js_count"] = torch.zeros(n_grps)
                     stage_store["n_groups"] = n_grps
                 gvalid = mask.unsqueeze(-1).float()
                 stage_store["group_usage_sum"] += (gw * gvalid).sum(dim=(0, 1)).cpu()
@@ -297,6 +356,72 @@ class N3DiagnosticCollector:
                 flat_gtop1 = g_top1[mask]
                 stage_store["group_top1_count"] += torch.bincount(flat_gtop1.cpu(), minlength=n_grps).float()
                 stage_store["group_n_tokens"] += n_valid
+
+                if neigh_idx is not None and neigh_k > 0 and int(weights.size(0)) > 1:
+                    group_session_prob = (gw * mask.unsqueeze(-1).float()).sum(dim=1) / mask.float().sum(dim=1, keepdim=True).clamp(min=1.0)
+                    group_session_prob = group_session_prob.clamp(min=1e-8)
+                    g_pi = group_session_prob.unsqueeze(1).expand(-1, neigh_k, -1)
+                    g_pj = group_session_prob.index_select(0, neigh_idx.reshape(-1)).reshape(int(weights.size(0)), neigh_k, -1).clamp(min=1e-8)
+                    g_mix = 0.5 * (g_pi + g_pj)
+                    g_js = 0.5 * (
+                        (g_pi * (g_pi.log() - g_mix.log())).sum(dim=-1)
+                        + (g_pj * (g_pj.log() - g_mix.log())).sum(dim=-1)
+                    )
+                    stage_store["group_consistency_js_sum"] += float(g_js.sum().item())
+                    stage_store["group_consistency_js_count"] += int(g_js.numel())
+
+                    expert_group_idx = dict(router_aux.get("expert_group_idx", {}) or {}).get(stage_key)
+                    if torch.is_tensor(expert_group_idx) and expert_group_idx.numel() >= int(weights.size(-1)):
+                        eg = expert_group_idx[: int(weights.size(-1))].to(device=weights.device, dtype=torch.long)
+                        for grp_idx in range(int(n_grps)):
+                            grp_members = (eg == grp_idx).nonzero(as_tuple=False).view(-1)
+                            if grp_members.numel() <= 1:
+                                continue
+                            grp_weight = w.index_select(-1, grp_members)
+                            grp_session_prob = (grp_weight * mask.unsqueeze(-1).float()).sum(dim=1)
+                            grp_session_prob = grp_session_prob / grp_session_prob.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+                            grp_session_prob = grp_session_prob.clamp(min=1e-8)
+                            gi = grp_session_prob.unsqueeze(1).expand(-1, neigh_k, -1)
+                            gj = grp_session_prob.index_select(0, neigh_idx.reshape(-1)).reshape(int(weights.size(0)), neigh_k, -1).clamp(min=1e-8)
+                            gmix = 0.5 * (gi + gj)
+                            gjs = 0.5 * (
+                                (gi * (gi.log() - gmix.log())).sum(dim=-1)
+                                + (gj * (gj.log() - gmix.log())).sum(dim=-1)
+                            )
+                            stage_store["intra_group_consistency_js_sum"][grp_idx] += float(gjs.sum().item())
+                            stage_store["intra_group_consistency_js_count"][grp_idx] += float(gjs.numel())
+
+            # Feature-group-specific KNN consistency:
+            # neighbors are built per family feature subset, but JS is measured on full expert routing.
+            family_map = self.stage_family_features.get(_base_stage_name(stage_key), {})
+            if feat is not None and family_map:
+                raw_feat = feat.to(device=weights.device)
+                if neigh_k > 0 and int(weights.size(0)) > 1:
+                    if session_prob is None:
+                        session_prob = (w * mask.unsqueeze(-1).float()).sum(dim=1) / mask.float().sum(dim=1, keepdim=True).clamp(min=1.0)
+                        session_prob = session_prob.clamp(min=1e-8)
+                    for fam_idx, family_name in enumerate(stage_store["family_names"]):
+                        cols = [self.col2idx[col] for col in family_map.get(family_name, []) if col in self.col2idx]
+                        if not cols:
+                            continue
+                        fam_idx_tensor = torch.tensor(cols, device=raw_feat.device, dtype=torch.long)
+                        fam_feat = raw_feat.index_select(-1, fam_idx_tensor).mean(dim=1)
+                        if fam_feat.ndim != 2 or int(fam_feat.size(0)) <= 1:
+                            continue
+                        fam_norm = F.normalize(fam_feat, p=2, dim=-1)
+                        fam_sim = fam_norm @ fam_norm.transpose(0, 1)
+                        fam_sim.fill_diagonal_(-1e9)
+                        fam_neigh_idx = fam_sim.topk(k=neigh_k, dim=1).indices
+                        fi = session_prob.unsqueeze(1).expand(-1, neigh_k, -1)
+                        fj = session_prob.index_select(0, fam_neigh_idx.reshape(-1)).reshape(int(weights.size(0)), neigh_k, -1).clamp(min=1e-8)
+                        fmix = 0.5 * (fi + fj)
+                        fjs = 0.5 * (
+                            (fi * (fi.log() - fmix.log())).sum(dim=-1)
+                            + (fj * (fj.log() - fmix.log())).sum(dim=-1)
+                        )
+                        if fam_idx < int(stage_store["feature_group_consistency_js_sum"].numel()):
+                            stage_store["feature_group_consistency_js_sum"][fam_idx] += float(fjs.sum().item())
+                            stage_store["feature_group_consistency_js_count"][fam_idx] += float(fjs.numel())
 
             # group_prior: feature-derived expected group distribution
             group_prior = dict(router_aux.get("group_prior", {}) or {}).get(stage_key)
@@ -406,6 +531,73 @@ class N3DiagnosticCollector:
             alpha_value = float(raw["alpha_value_sum"] / max(raw["alpha_value_count"], 1))
             alpha_effective = float(raw["alpha_effective_sum"] / max(raw["alpha_effective_count"], 1))
             sim_payload = self._expert_similarity(raw["expert_out_sum"])
+            consistency_js = float(raw["consistency_js_sum"] / max(raw["consistency_js_count"], 1))
+            consistency_score = float(math.exp(-consistency_js))
+            group_consistency_js = float(raw["group_consistency_js_sum"] / max(raw["group_consistency_js_count"], 1))
+            group_consistency_score = float(math.exp(-group_consistency_js))
+            group_names = list(raw.get("family_names", []) or [])
+            n_groups = int(raw.get("n_groups", len(group_names) or 0))
+            if len(group_names) < n_groups:
+                group_names = group_names + [f"group_{i}" for i in range(len(group_names), n_groups)]
+            intra_js_sum = raw.get("intra_group_consistency_js_sum")
+            intra_js_count = raw.get("intra_group_consistency_js_count")
+            intra_js_by_group: List[float] = []
+            intra_score_by_group: List[float] = []
+            if torch.is_tensor(intra_js_sum) and torch.is_tensor(intra_js_count):
+                limit = min(int(intra_js_sum.numel()), int(intra_js_count.numel()), max(n_groups, 0))
+                for idx in range(limit):
+                    denom = float(max(intra_js_count[idx].item(), 1.0))
+                    js_val = float(intra_js_sum[idx].item() / denom)
+                    intra_js_by_group.append(js_val)
+                    intra_score_by_group.append(float(math.exp(-js_val)))
+            if not intra_js_by_group and n_groups > 0:
+                intra_js_by_group = [0.0] * n_groups
+                intra_score_by_group = [1.0] * n_groups
+            intra_mean_js = float(sum(intra_js_by_group) / max(len(intra_js_by_group), 1))
+            intra_mean_score = float(sum(intra_score_by_group) / max(len(intra_score_by_group), 1))
+            feature_js_sum = raw.get("feature_group_consistency_js_sum")
+            feature_js_count = raw.get("feature_group_consistency_js_count")
+            feature_js_by_group: List[float] = []
+            feature_score_by_group: List[float] = []
+            if torch.is_tensor(feature_js_sum) and torch.is_tensor(feature_js_count):
+                limit = min(int(feature_js_sum.numel()), int(feature_js_count.numel()), max(n_groups, 0))
+                for idx in range(limit):
+                    denom = float(max(feature_js_count[idx].item(), 1.0))
+                    js_val = float(feature_js_sum[idx].item() / denom)
+                    feature_js_by_group.append(js_val)
+                    feature_score_by_group.append(float(math.exp(-js_val)))
+            if not feature_js_by_group and n_groups > 0:
+                feature_js_by_group = [0.0] * n_groups
+                feature_score_by_group = [1.0] * n_groups
+            feature_mean_js = float(sum(feature_js_by_group) / max(len(feature_js_by_group), 1))
+            feature_mean_score = float(sum(feature_score_by_group) / max(len(feature_score_by_group), 1))
+            family_payload = {
+                "mean_top_expert_share": 0.0,
+                "family_top_expert": [],
+            }
+            fam = raw.get("family_expert")
+            if torch.is_tensor(fam) and fam.ndim == 2 and fam.numel() > 0:
+                row_sum = fam.sum(dim=1, keepdim=True).clamp(min=1e-8)
+                fam_share = fam / row_sum
+                top_share, top_idx = fam_share.max(dim=1)
+                fam_names = list(raw.get("family_names", []) or [])
+                exp_names = list(self.stage_expert_names.get(_base_stage_name(stage_key), []))
+                entries = []
+                for i in range(fam_share.size(0)):
+                    fam_name = fam_names[i] if i < len(fam_names) else f"family_{i}"
+                    exp_i = int(top_idx[i].item())
+                    exp_name = exp_names[exp_i] if exp_i < len(exp_names) else f"expert_{exp_i}"
+                    entries.append(
+                        {
+                            "family": str(fam_name),
+                            "expert": str(exp_name),
+                            "top_share": float(top_share[i].item()),
+                        }
+                    )
+                family_payload = {
+                    "mean_top_expert_share": float(top_share.mean().item()),
+                    "family_top_expert": entries,
+                }
             stage_payload[stage_key] = {
                 "mode": raw["mode"],
                 "n_slots": raw["n_slots"],
@@ -416,6 +608,24 @@ class N3DiagnosticCollector:
                 "entropy_mean": entropy_mean,
                 "route_jitter_adjacent": jitter_adj,
                 "route_jitter_session": jitter_session,
+                "route_consistency_knn_js": consistency_js,
+                "route_consistency_knn_score": consistency_score,
+                "route_consistency_group_knn_js": group_consistency_js,
+                "route_consistency_group_knn_score": group_consistency_score,
+                "route_consistency_intra_group_knn": {
+                    "group_names": group_names[: len(intra_js_by_group)],
+                    "js_by_group": intra_js_by_group,
+                    "score_by_group": intra_score_by_group,
+                    "mean_js": intra_mean_js,
+                    "mean_score": intra_mean_score,
+                },
+                "route_consistency_feature_group_knn": {
+                    "group_names": group_names[: len(feature_js_by_group)],
+                    "js_by_group": feature_js_by_group,
+                    "score_by_group": feature_score_by_group,
+                    "mean_js": feature_mean_js,
+                    "mean_score": feature_mean_score,
+                },
                 "condition_norm": condition_norm,
                 "stage_delta_norm": delta_norm,
                 "shared_delta_norm": shared_delta_norm,
@@ -440,6 +650,7 @@ class N3DiagnosticCollector:
                 },
                 # Group-level routing metrics
                 "group_routing": _build_group_routing_payload(raw),
+                "specialization_summary": family_payload,
                 **sim_payload,
             }
             prefix = stage_key.replace("@", "_")
@@ -450,6 +661,18 @@ class N3DiagnosticCollector:
             flat_scalars[f"{prefix}.top1_max_frac"] = usage_scalars["top1_max_frac"]
             flat_scalars[f"{prefix}.route_jitter_adjacent"] = jitter_adj
             flat_scalars[f"{prefix}.route_jitter_session"] = jitter_session
+            flat_scalars[f"{prefix}.route_consistency_knn_js"] = consistency_js
+            flat_scalars[f"{prefix}.route_consistency_knn_score"] = consistency_score
+            flat_scalars[f"{prefix}.route_consistency_group_knn_js"] = group_consistency_js
+            flat_scalars[f"{prefix}.route_consistency_group_knn_score"] = group_consistency_score
+            flat_scalars[f"{prefix}.route_consistency_intra_group_knn_mean_js"] = intra_mean_js
+            flat_scalars[f"{prefix}.route_consistency_intra_group_knn_mean_score"] = intra_mean_score
+            flat_scalars[f"{prefix}.route_consistency_feature_group_knn_mean_js"] = feature_mean_js
+            flat_scalars[f"{prefix}.route_consistency_feature_group_knn_mean_score"] = feature_mean_score
+            for idx, name in enumerate(group_names[: len(feature_js_by_group)]):
+                token = _metric_name_token(name)
+                flat_scalars[f"{prefix}.route_consistency_feature_group_knn_{token}_js"] = float(feature_js_by_group[idx])
+                flat_scalars[f"{prefix}.route_consistency_feature_group_knn_{token}_score"] = float(feature_score_by_group[idx])
             flat_scalars[f"{prefix}.condition_norm"] = condition_norm
             flat_scalars[f"{prefix}.stage_delta_norm"] = delta_norm
             flat_scalars[f"{prefix}.shared_delta_norm"] = shared_delta_norm
@@ -467,9 +690,39 @@ class N3DiagnosticCollector:
                 flat_scalars[f"{prefix}.group_entropy_mean"] = float(grp_payload.get("group_entropy_mean", 0.0))
                 flat_scalars[f"{prefix}.factored_group_entropy_mean"] = float(grp_payload.get("factored_group_entropy_mean", 0.0))
 
+        readable_stages = []
+        for stage_key in sorted(stage_payload.keys()):
+            st = stage_payload[stage_key]
+            readable_stages.append(
+                {
+                    "stage": stage_key,
+                    "n_eff": float(st.get("n_eff", 0.0)),
+                    "cv_usage": float(st.get("cv_usage", 0.0)),
+                    "top1_max_frac": float(st.get("top1_max_frac", 0.0)),
+                    "entropy_mean": float(st.get("entropy_mean", 0.0)),
+                    "jitter_adj": float(st.get("route_jitter_adjacent", 0.0)),
+                    "consistency_knn_js": float(st.get("route_consistency_knn_js", 0.0)),
+                    "consistency_knn_score": float(st.get("route_consistency_knn_score", 0.0)),
+                    "consistency_group_knn_js": float(st.get("route_consistency_group_knn_js", 0.0)),
+                    "consistency_group_knn_score": float(st.get("route_consistency_group_knn_score", 0.0)),
+                    "consistency_intra_group_knn_mean_score": float(
+                        ((st.get("route_consistency_intra_group_knn") or {}).get("mean_score", 0.0))
+                    ),
+                    "consistency_feature_group_knn_mean_score": float(
+                        ((st.get("route_consistency_feature_group_knn") or {}).get("mean_score", 0.0))
+                    ),
+                    "family_top_share_mean": float(
+                        ((st.get("specialization_summary") or {}).get("mean_top_expert_share", 0.0))
+                    ),
+                }
+            )
+
         return {
             "split": self.split_name,
             "feature_mode": self.feature_mode,
             "stage_metrics": stage_payload,
             "scalar_metrics": flat_scalars,
+            "readable_summary": {
+                "stages": readable_stages,
+            },
         }

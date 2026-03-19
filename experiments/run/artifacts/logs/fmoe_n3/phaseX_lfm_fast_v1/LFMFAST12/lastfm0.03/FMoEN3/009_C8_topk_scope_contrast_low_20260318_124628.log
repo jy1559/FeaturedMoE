@@ -1,0 +1,39 @@
+[LFMFAST12_COMBO_HEADER]
+run_phase=LFMFAST_C8 category=contrast combo=C8 desc=topk_scope_contrast_low
+dataset=lastfm0.03 gpu=4 order=9
+max_evals=5 tune_epochs=100 tune_patience=10
+seed=19009
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 5 --tune-epochs 100 --tune-patience 10 --seed 19009 --run-group fmoe_n3 --run-axis phaseX_lfm_fast_v1 --run-phase LFMFAST_C8 model=featured_moe_n3_tune dataset=lastfm0.03 eval_mode=session feature_mode=full_v3 gpu_id=4 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_artifact_logging_policy=final_only fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_phase="LFMFAST12" MAX_ITEM_LIST_LENGTH=20 train_batch_size=2048 eval_batch_size=2048 embedding_size=128 num_heads=4 attn_dropout_prob=0.1 d_ff=256 d_feat_emb=16 d_expert_hidden=128 d_router_hidden=64 ++search_space_type_overrides.learning_rate=loguniform ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice ++lfm_fast_combo_id="C8" ++lfm_fast_combo_desc="topk_scope_contrast_low" ++lfm_fast_category="contrast" ++layer_layout=["macro","mid","micro"] ++search.learning_rate=[0.00015,0.0012] ++search.weight_decay=[0.0,1e-07,1e-06,1e-05,5e-05] ++search.hidden_dropout_prob=[0.1,0.15,0.2] ++search.lr_scheduler_type=["warmup_cosine"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"group_gated_bias",mid:"group_gated_bias",micro:"group_gated_bias"} ++stage_router_type={macro:"factored",mid:"factored",micro:"factored"} ++topk_scope_mode="group_top1_pergroup" moe_top_k=1 expert_scale=3 group_prior_align_lambda=0.0005 factored_group_balance_lambda=0.001 balance_loss_lambda=0.004 z_loss_lambda=0.0001
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=474006 ts=2026-03-18T12:46:32
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x lastfm0.03
+  max_evals=5  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=2048/2048/2048
+  track=fmoe_n3  axis=phasex_lfm_fast_v1  phase=LFMFAST_C8
+=================================================================
+Changed knobs: hidden_dropout_prob, learning_rate, weight_decay
+Tuned params(len>1): 3  (~15 discrete combos)
+Tuned groups: 3
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.15, 0.2]                          -> choice
+    learning_rate                   [0.00015, 0.0012]                         -> loguniform
+    weight_decay                    [0.0, 1e-07, 1e-06, 1e-05, 5e-05]         -> choice
+Fixed params(singleton/non-list): 1
+Fixed groups: 1
+  [other]
+    lr_scheduler_type               warmup_cosine                           
+
+[Wandb] disabled for this hyperopt run
+
+[1/5] hidden_dropout_prob=0.1, learning_rate=0.001006, weight_decay=5e-05
+  -> MRR@20=0.3915  best=0.3915  (early_stop@28, trial=13.9min, avg=14.0min/trial, total=14.0min, ETA=55.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.3915 cur_best_hr10=0.4688 cur_test_mrr20=0.3689 cur_test_hr10=0.4421 run_best_mrr20=0.3915 run_best_hr10=0.4688 run_test_mrr20=0.3689 run_test_hr10=0.4421
+
+[2/5] hidden_dropout_prob=0.1, learning_rate=0.0002032, weight_decay=0
+[RUN_STATUS] TERMINATED signal=SIGINT(2) pid=474006 ts=2026-03-18T13:05:04
+[RUN_STATUS] END status=terminated signal=SIGINT(2) pid=474006 start=2026-03-18T12:46:32 end=2026-03-18T13:05:05

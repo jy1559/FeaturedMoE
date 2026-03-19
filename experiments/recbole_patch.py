@@ -8,12 +8,40 @@ import pickle
 import json
 import hashlib
 import importlib
+import importlib.util
 from pathlib import Path
 
 _PATCH_DIR = Path(__file__).resolve().parent
 # Ensure custom models under experiments/models are importable regardless of cwd.
 if str(_PATCH_DIR) not in sys.path:
     sys.path.insert(0, str(_PATCH_DIR))
+
+
+def _ensure_local_models_package() -> None:
+    """Bind top-level 'models' to experiments/models to avoid name collisions."""
+    models_dir = _PATCH_DIR / "models"
+    init_file = models_dir / "__init__.py"
+    if not init_file.exists():
+        return
+
+    loaded = sys.modules.get("models")
+    loaded_file = str(getattr(loaded, "__file__", "") or "")
+    if loaded is not None and loaded_file.startswith(str(models_dir)):
+        return
+
+    spec = importlib.util.spec_from_file_location(
+        "models",
+        str(init_file),
+        submodule_search_locations=[str(models_dir)],
+    )
+    if spec is None or spec.loader is None:
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["models"] = module
+    spec.loader.exec_module(module)
+
+
+_ensure_local_models_package()
 
 # Create a complete mock for xgboost module
 class MockBooster:

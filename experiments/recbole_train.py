@@ -955,13 +955,41 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     if best_model_state is not None:
         trainer.model.load_state_dict(best_model_state)
 
+    diag_logging_enabled = bool(config.get("fmoe_diag_logging", cfg_i.get("fmoe_diag_logging", False)))
+    best_only_logging = bool(config.get("fmoe_best_only_logging", cfg_i.get("fmoe_best_only_logging", True)))
+    valid_diag_metrics = None
+    test_diag_metrics = None
+
+    if best_only_logging and (special_logging_enabled or diag_logging_enabled):
+        if special_logging_enabled:
+            from recbole_patch import begin_special_eval
+            begin_special_eval(trainer, valid_data, split_name="valid")
+        if diag_logging_enabled:
+            from recbole_patch import begin_diagnostic_eval
+            begin_diagnostic_eval(trainer, split_name="valid")
+        _ = trainer._valid_epoch(valid_data, show_progress=eval_show)
+        if special_logging_enabled:
+            from recbole_patch import end_special_eval
+            final_valid_special = end_special_eval(trainer)
+            if final_valid_special is not None:
+                best_valid_special_metrics = final_valid_special
+        if diag_logging_enabled:
+            from recbole_patch import end_diagnostic_eval
+            valid_diag_metrics = end_diagnostic_eval(trainer)
+
     if special_logging_enabled:
         from recbole_patch import begin_special_eval
         begin_special_eval(trainer, test_data, split_name="test")
+    if diag_logging_enabled:
+        from recbole_patch import begin_diagnostic_eval
+        begin_diagnostic_eval(trainer, split_name="test")
     test_result = trainer._valid_epoch(test_data, show_progress=eval_show)
     if special_logging_enabled:
         from recbole_patch import end_special_eval
         test_special_metrics = end_special_eval(trainer)
+    if diag_logging_enabled:
+        from recbole_patch import end_diagnostic_eval
+        test_diag_metrics = end_diagnostic_eval(trainer)
     if isinstance(test_result, tuple):
         test_result = next((x for x in test_result if isinstance(x, dict)), test_result[0])
     elapsed_time = time.time() - start_time
@@ -989,7 +1017,13 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
                     "epochs_run": len(epoch_times),
                     "model": cfg_i.get("model", ""),
                     "dataset": cfg_i.get("dataset", ""),
+                    "phase": cfg_i.get("fmoe_phase", cfg_i.get("phase", "")),
+                    "run_id": cfg_i.get("fmoe_run_id", ""),
                 },
+            )
+            run_logger.log_router_diagnostics(
+                valid_diag=valid_diag_metrics,
+                test_diag=test_diag_metrics,
             )
         except Exception:
             pass
@@ -1119,6 +1153,37 @@ def main():
         timestamp = datetime.now().strftime("%m%d%H%M%S%f")
         run_name = f"{code}_{info_tag}_{timestamp}"
 
+        def _slugify_token(text: str) -> str:
+            raw = str(text or "").strip()
+            out = []
+            for ch in raw:
+                if ch.isalnum() or ch in {"-", "_", "."}:
+                    out.append(ch)
+                else:
+                    out.append("_")
+            token = "".join(out).strip("_")
+            while "__" in token:
+                token = token.replace("__", "_")
+            return token or "run"
+
+        run_phase_value = str(cfg_i.get("run_phase", cfg_i.get("combo_id", ""))).strip()
+        phase_hint = str(cfg_i.get("fmoe_phase", cfg_i.get("phase", ""))).strip()
+        if not phase_hint:
+            if run_phase_value.upper().startswith("P") and "_" in run_phase_value:
+                phase_hint = run_phase_value.split("_", 1)[0].upper()
+            elif run_phase_value.upper().startswith("P") and len(run_phase_value) <= 4:
+                phase_hint = run_phase_value.upper()
+            else:
+                phase_hint = "P0"
+        run_slug = _slugify_token(run_phase_value or cfg_i.get("combo_desc", info_tag))[:40]
+        run_short_ts = datetime.now().strftime("%m%d_%H%M%S")
+        run_suffix = datetime.now().strftime("%f")[-3:]
+        run_id = f"{run_short_ts}_{run_slug}_{run_suffix}"
+        cfg_i["fmoe_run_id"] = run_id
+        cfg_i["fmoe_phase"] = phase_hint
+        if "featuredmoe_n3" in str(model).lower() or "featured_moe_n3" in str(model).lower():
+            cfg_i["fmoe_logging_model_scope"] = "fmoe_n3"
+
         label = f"[{run_index+1}/{total}]"
         if stage_total is not None:
             label = f"[S{stage_idx+1}/{stage_total}] {label}"
@@ -1168,6 +1233,7 @@ def main():
                 _run_logger = RunLogger(
                     run_name=run_name,
                     config=cfg_i,
+                    output_root=cfg_i.get("fmoe_logging_output_root", None),
                     debug_logging=fmoe_debug_logging,
                 )
                 mode_name = "debug_full" if fmoe_debug_logging else "metrics_only"

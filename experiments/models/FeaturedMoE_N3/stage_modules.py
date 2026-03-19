@@ -20,6 +20,8 @@ _VALID_ROUTER_GRANULARITY = {"session", "token"}
 _VALID_COMPUTE_MODE = {"none", "dense_plain", "moe"}
 _VALID_ROUTER_MODE = {"none", "learned", "rule_soft"}
 _VALID_ROUTER_SOURCE = {"hidden", "feature", "both"}
+_VALID_FACTORED_GROUP_ROUTER_SOURCE = {"hidden", "feature", "both"}
+_VALID_FACTORED_COMBINE_MODE = {"add", "hir", "fac_group"}
 _VALID_FEATURE_ENCODER = {"linear", "complex"}
 _VALID_FEATURE_INJECTION = {"none", "film", "gated_bias", "group_gated_bias"}
 _VALID_ROUTER_TYPE = {"standard", "factored"}
@@ -76,6 +78,10 @@ class StageRuntimeConfigN3:
     feature_group_bias_lambda: float
     feature_group_prior_temperature: float
     stage_router_type: str
+    stage_factored_group_router_source: str
+    factored_group_logit_scale: float
+    factored_intra_logit_scale: float
+    stage_factored_combine_mode: str
     router_temperature: float
     dense_hidden_scale: float
     stage_residual_mode: str
@@ -275,8 +281,18 @@ class N3StageBlock(nn.Module):
         self.feature_group_bias_lambda = float(cfg.feature_group_bias_lambda)
         self.feature_group_prior_temperature = max(float(cfg.feature_group_prior_temperature), 1e-6)
         self.stage_router_type = str(cfg.stage_router_type).lower().strip()
+        self.stage_factored_group_router_source = str(cfg.stage_factored_group_router_source).lower().strip()
+        self.factored_group_logit_scale = float(cfg.factored_group_logit_scale)
+        self.factored_intra_logit_scale = float(cfg.factored_intra_logit_scale)
+        self.stage_factored_combine_mode = str(cfg.stage_factored_combine_mode).lower().strip()
         if self.stage_router_type not in _VALID_ROUTER_TYPE:
             raise ValueError(f"Unsupported stage_router_type: {cfg.stage_router_type}")
+        if self.stage_factored_group_router_source not in _VALID_FACTORED_GROUP_ROUTER_SOURCE:
+            raise ValueError(
+                f"Unsupported stage_factored_group_router_source: {cfg.stage_factored_group_router_source}"
+            )
+        if self.stage_factored_combine_mode not in _VALID_FACTORED_COMBINE_MODE:
+            raise ValueError(f"Unsupported stage_factored_combine_mode: {cfg.stage_factored_combine_mode}")
         self.dropout = nn.Dropout(float(cfg.dropout))
         self.layer_norm = nn.LayerNorm(int(cfg.d_model), eps=float(cfg.layer_norm_eps))
         self.activation = _get_activation(cfg.hidden_act)
@@ -393,6 +409,7 @@ class N3StageBlock(nn.Module):
         self.rule_router = None
         self.group_router_net = None
         self.intra_router_net = None
+        self.feature_projection = None  # Projection for feature-only factored router
         if self.stage_compute_mode == "moe":
             if len(self.stage_feature_names) > 0:
                 selected_indices = []
@@ -413,15 +430,30 @@ class N3StageBlock(nn.Module):
                 )
             if self.stage_router_mode == "learned":
                 if self.stage_router_type == "factored":
-                    # Factored router: group routing from feature, intra-group routing from hidden
-                    self.group_router_net = nn.Linear(int(cfg.d_feat_emb), self.n_base_groups)
+                    group_in_dim = 0
+                    if self.stage_factored_group_router_source in {"hidden", "both"}:
+                        group_in_dim += int(cfg.d_model)
+                    if self.stage_factored_group_router_source in {"feature", "both"}:
+                        group_in_dim += int(cfg.d_feat_emb)
+                    self.group_router_net = nn.Linear(max(group_in_dim, 1), self.n_base_groups)
                     intra_in_dim = 0
                     if self.stage_router_source in {"hidden", "both"}:
                         intra_in_dim += int(cfg.d_model)
                     if self.stage_router_source in {"feature", "both"}:
                         intra_in_dim += int(cfg.d_feat_emb)
+                    
+                    # Feature-only projection: add projection layer to match router input dimension
+                    intra_in_for_router = intra_in_dim
+                    if self.stage_router_source == "feature" and intra_in_dim < int(cfg.d_router_hidden):
+                        # Feature embedding is smaller than router hidden, use projection to expand
+                        self.feature_projection = nn.Linear(intra_in_dim, int(cfg.d_router_hidden))
+                        intra_in_for_router = int(cfg.d_router_hidden)
+                    else:
+                        # Use actual input dimension or d_model as fallback
+                        intra_in_for_router = max(intra_in_dim, int(cfg.d_model))
+                    
                     self.intra_router_net = Router(
-                        d_in=max(intra_in_dim, int(cfg.d_model)),
+                        d_in=intra_in_for_router,
                         n_experts=self.n_experts,
                         d_hidden=int(cfg.d_router_hidden),
                         top_k=None,
@@ -662,6 +694,33 @@ class N3StageBlock(nn.Module):
             parts.append(hidden)
         return parts[0] if len(parts) == 1 else torch.cat(parts, dim=-1)
 
+    def _build_group_router_input(
+        self,
+        *,
+        hidden: torch.Tensor,
+        encoded_feat: torch.Tensor,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        if self.routing_granularity == "session":
+            parts = []
+            if self.stage_factored_group_router_source in {"hidden", "both"}:
+                parts.append(self._pool_sequence(hidden, valid_mask, item_seq_len))
+            if self.stage_factored_group_router_source in {"feature", "both"}:
+                parts.append(self._pool_sequence(encoded_feat, valid_mask, item_seq_len))
+            if not parts:
+                parts.append(self._pool_sequence(encoded_feat, valid_mask, item_seq_len))
+            return parts[0] if len(parts) == 1 else torch.cat(parts, dim=-1)
+
+        parts = []
+        if self.stage_factored_group_router_source in {"hidden", "both"}:
+            parts.append(hidden)
+        if self.stage_factored_group_router_source in {"feature", "both"}:
+            parts.append(encoded_feat)
+        if not parts:
+            parts.append(encoded_feat)
+        return parts[0] if len(parts) == 1 else torch.cat(parts, dim=-1)
+
     def _compute_router_outputs(
         self,
         *,
@@ -683,7 +742,7 @@ class N3StageBlock(nn.Module):
             raw_logits = self.rule_router.compute_logits(rule_input)
         else:
             if self.stage_router_type == "factored":
-                # Factored router: group-level routing from feature, intra-group from hidden.
+                # Factored router: group-level and intra-group logits are combined with tunable scales.
                 if self.group_router_net is None or self.intra_router_net is None:
                     raise RuntimeError(f"factored router not initialized for stage {self.stage_name}.")
                 if self.routing_granularity == "session":
@@ -692,28 +751,65 @@ class N3StageBlock(nn.Module):
                         hidden_pooled = self._pool_sequence(hidden, valid_mask, item_seq_len)
                     else:
                         hidden_pooled = feat_pooled
-                    feat_input = feat_pooled
                     if self.stage_router_source == "feature":
                         intra_input = feat_pooled
+                        if self.feature_projection is not None:
+                            intra_input = self.feature_projection(intra_input)  # d_feat_emb -> d_router_hidden
                     elif self.stage_router_source == "both":
                         intra_input = torch.cat([hidden_pooled, feat_pooled], dim=-1)
                     else:
                         intra_input = hidden_pooled
                 else:
-                    feat_input = encoded_feat
                     if self.stage_router_source == "feature":
                         intra_input = encoded_feat
+                        if self.feature_projection is not None:
+                            intra_input = self.feature_projection(intra_input)  # d_feat_emb -> d_router_hidden
                     elif self.stage_router_source == "both":
                         intra_input = torch.cat([hidden, encoded_feat], dim=-1)
                     else:
                         intra_input = hidden
-                group_logits = self.group_router_net(feat_input)           # (..., n_groups)
+                group_input = self._build_group_router_input(
+                    hidden=hidden,
+                    encoded_feat=encoded_feat,
+                    valid_mask=valid_mask,
+                    item_seq_len=item_seq_len,
+                )
+                group_logits = self.group_router_net(group_input)          # (..., n_groups)
                 intra_logits = self.intra_router_net.net(intra_input)      # (..., n_experts)
                 # Broadcast group logits to expert level: expert e in group g gets group_logits[g]
                 e_grp = self.expert_group_idx[: self.n_experts].to(group_logits.device)
                 expert_group_logits = group_logits.index_select(-1, e_grp)  # (..., n_experts)
-                raw_logits = expert_group_logits + intra_logits
+
+                if self.stage_factored_combine_mode == "hir":
+                    group_probs = F.softmax(self.factored_group_logit_scale * group_logits, dim=-1)
+                    base_weights = torch.zeros_like(intra_logits)
+                    for group_idx in range(self.n_base_groups):
+                        mask = self.expert_group_idx[: self.n_experts] == group_idx
+                        if not mask.any():
+                            continue
+                        idx = mask.nonzero(as_tuple=False).view(-1).to(device=intra_logits.device)
+                        intra_group_logits = intra_logits.index_select(-1, idx)
+                        intra_group_probs = F.softmax(self.factored_intra_logit_scale * intra_group_logits, dim=-1)
+                        group_weight = group_probs[..., group_idx : group_idx + 1]
+                        base_weights[..., idx] = group_weight * intra_group_probs
+                    base_weights = base_weights / base_weights.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+                    raw_logits = torch.log(base_weights.clamp(min=1e-8)) * self.current_router_temperature
+                else:
+                    # add / fac_group: dense expert logits + per-group importance bias.
+                    raw_logits = (
+                        self.factored_group_logit_scale * expert_group_logits
+                        + self.factored_intra_logit_scale * intra_logits
+                    )
                 aux["factored_group_logits"] = group_logits
+                aux["factored_group_logit_scale"] = group_logits.new_full(
+                    group_logits.shape[:-1],
+                    float(self.factored_group_logit_scale),
+                )
+                aux["factored_intra_logit_scale"] = group_logits.new_full(
+                    group_logits.shape[:-1],
+                    float(self.factored_intra_logit_scale),
+                )
+                aux["factored_combine_mode"] = self.stage_factored_combine_mode
             else:
                 if self.learned_router is None:
                     raise RuntimeError("learned router is not initialized.")
@@ -908,6 +1004,7 @@ class N3StageBlock(nn.Module):
 
         router_aux = dict(router_aux)
         router_aux["group_weights"] = self._aggregate_group_weights(gate_weights)
+        router_aux["expert_group_idx"] = self.expert_group_idx[: self.n_experts].to(device=hidden.device)
         router_aux["expert_output_mean"] = expert_outputs.mean(dim=(0, 1)).detach()
         dense_aux = {
             "condition_norm": cond_norm.detach(),

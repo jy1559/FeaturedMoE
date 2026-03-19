@@ -1,0 +1,230 @@
+[RUN_STATUS] START pid=471269 ts=2026-03-18T12:16:09
+
+=================================================================
+  Hyperopt TPE  |  BSARec x KuaiRecLargeStrictPosV2_0.2
+  max_evals=5  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=3072/6144/6144
+  track=baseline  axis=hparam  phase=P2_MORE_SEARCH_M00_BSAREC_C14
+=================================================================
+Changed knobs: learning_rate, num_heads, num_layers
+Tuned params(len>1): 3  (~9 discrete combos)
+Tuned groups: 3
+  [optimization]
+    learning_rate                   [0.002, 0.009]                            -> loguniform
+  [model_core]
+    num_heads                       [2, 4, 8]                                 -> choice
+    num_layers                      [1, 2, 3]                                 -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [optimization]
+    weight_decay                    0.0001                                  
+  [model_core]
+    dropout_ratio                   0.15                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/5] learning_rate=0.003481, num_heads=2, num_layers=1
+  -> FAILED: CUDA out of memory. Tried to allocate 1.32 GiB. GPU 0 has a total capacity of 23.56 GiB of which 283.75 MiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 6.36 GiB memory in use. Of the allocated memory 3.37 GiB is allocated by PyTorch, and 2.67 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3617, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2548, in train_and_evaluate
+    vr, epoch_valid_special, epoch_valid_diag = _run_eval(
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2454, in _run_eval
+    return _run_trainer_eval(
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1989, in _run_trainer_eval
+    eval_result = trainer._valid_epoch(data_loader, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 809, in _patched_valid_epoch
+    return _original_valid_epoch(self, valid_data, show_progress)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 283, in _valid_epoch
+    valid_result = self.evaluate(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 616, in evaluate
+    interaction, scores, positive_u, positive_i = eval_func(batched_data)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 1008, in _patched_full_sort_batch_eval
+    result = _original_full_sort_batch_eval(self, batched_data)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 525, in _full_sort_batch_eval
+    scores = self.model.full_sort_predict(interaction.to(self.device))
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 347, in full_sort_predict
+    seq_output = self.forward(item_seq, item_seq_len)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 255, in forward
+    x = layer(x, mask)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 174, in forward
+    ff_out = self.feed_forward(x)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 734, in forward
+    return F.gelu(input, approximate=self.approximate)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.32 GiB. GPU 0 has a total capacity of 23.56 GiB of which 283.75 MiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 6.36 GiB memory in use. Of the allocated memory 3.37 GiB is allocated by PyTorch, and 2.67 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[2/5] learning_rate=0.002001, num_heads=2, num_layers=3
+  -> FAILED: CUDA out of memory. Tried to allocate 176.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 105.75 MiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 6.53 GiB memory in use. Of the allocated memory 5.75 GiB is allocated by PyTorch, and 469.43 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3617, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2497, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 801, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 304, in calculate_loss
+    seq_output = self.forward(item_seq, item_seq_len)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 255, in forward
+    x = layer(x, mask)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 170, in forward
+    freq_out = self.frequency(x)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 68, in forward
+    x_fft_filtered = torch.complex(out_real, out_imag)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 176.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 105.75 MiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 6.53 GiB memory in use. Of the allocated memory 5.75 GiB is allocated by PyTorch, and 469.43 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[3/5] learning_rate=0.006637, num_heads=4, num_layers=3
+  -> FAILED: CUDA out of memory. Tried to allocate 170.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 107.75 MiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 6.53 GiB memory in use. Of the allocated memory 5.78 GiB is allocated by PyTorch, and 439.25 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3617, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2497, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 801, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 304, in calculate_loss
+    seq_output = self.forward(item_seq, item_seq_len)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 255, in forward
+    x = layer(x, mask)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 166, in forward
+    attn_out = self.attention(x, x, x, mask)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 120, in forward
+    context = context.transpose(1, 2).contiguous()
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 170.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 107.75 MiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 6.53 GiB memory in use. Of the allocated memory 5.78 GiB is allocated by PyTorch, and 439.25 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[4/5] learning_rate=0.002467, num_heads=4, num_layers=1
+  -> FAILED: CUDA out of memory. Tried to allocate 1.32 GiB. GPU 0 has a total capacity of 23.56 GiB of which 1.28 GiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 5.35 GiB memory in use. Of the allocated memory 3.22 GiB is allocated by PyTorch, and 1.81 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3617, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2548, in train_and_evaluate
+    vr, epoch_valid_special, epoch_valid_diag = _run_eval(
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2454, in _run_eval
+    return _run_trainer_eval(
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 1989, in _run_trainer_eval
+    eval_result = trainer._valid_epoch(data_loader, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 809, in _patched_valid_epoch
+    return _original_valid_epoch(self, valid_data, show_progress)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 283, in _valid_epoch
+    valid_result = self.evaluate(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 616, in evaluate
+    interaction, scores, positive_u, positive_i = eval_func(batched_data)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 1008, in _patched_full_sort_batch_eval
+    result = _original_full_sort_batch_eval(self, batched_data)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 525, in _full_sort_batch_eval
+    scores = self.model.full_sort_predict(interaction.to(self.device))
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 347, in full_sort_predict
+    seq_output = self.forward(item_seq, item_seq_len)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 255, in forward
+    x = layer(x, mask)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 174, in forward
+    ff_out = self.feed_forward(x)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 734, in forward
+    return F.gelu(input, approximate=self.approximate)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.32 GiB. GPU 0 has a total capacity of 23.56 GiB of which 1.28 GiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 5.35 GiB memory in use. Of the allocated memory 3.22 GiB is allocated by PyTorch, and 1.81 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[5/5] learning_rate=0.002861, num_heads=8, num_layers=1
+  -> FAILED: CUDA out of memory. Tried to allocate 676.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 639.75 MiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 6.01 GiB memory in use. Of the allocated memory 4.29 GiB is allocated by PyTorch, and 1.40 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3617, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2497, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 801, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 304, in calculate_loss
+    seq_output = self.forward(item_seq, item_seq_len)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 255, in forward
+    x = layer(x, mask)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/bsarec.py", line 174, in forward
+    ff_out = self.feed_forward(x)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/dropout.py", line 70, in forward
+    return F.dropout(input, self.p, self.training, self.inplace)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 1425, in dropout
+    _VF.dropout_(input, p, training) if inplace else _VF.dropout(input, p, training)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 676.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 639.75 MiB is free. Process 464305 has 16.92 GiB memory in use. Including non-PyTorch memory, this process has 6.01 GiB memory in use. Of the allocated memory 4.29 GiB is allocated by PyTorch, and 1.40 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[WARN] fmin ended with: 
+
+=================================================================
+  DONE  |  BSARec x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.0000  |  0/5 trials OK
+  Best HR@10  = 0.0000
+  Test MRR@20 = 0.0000  (best-valid checkpoint)
+  Test HR@10  = 0.0000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.0000 best_valid_hr10=0.0000 test_mrr20=0.0000 test_hr10=0.0000
+  Total time: 0.6 min
+  Best params:
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/KuaiRecLargeStrictPosV2_0.2_BSARec_p2_more_search_m00_bsarec_c14_20260318_121609_402815_pid471269.json
+  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/normal/hparam/P2/KuaiRecLargeStrictPosV2_0.2/BSARec/KuaiRecLargeStrictPosV2_0.2_BSARec_p2_more_search_m00_bsarec_c14_20260318_121609_402815_pid471269.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=471269 start=2026-03-18T12:16:09 end=2026-03-18T12:16:47

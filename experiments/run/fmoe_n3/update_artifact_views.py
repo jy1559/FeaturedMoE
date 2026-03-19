@@ -180,6 +180,8 @@ def build_diag_summary(axis: str) -> Path:
                 "trial_count": len(trial_rows),
                 "trial_summary_file": str(trial_summary_path.resolve()),
                 "best_valid_diag_file": str((base_dir / "best_valid_diag.json.gz").resolve()) if (base_dir / "best_valid_diag.json.gz").exists() else "",
+                "best_valid_overview_file": str((base_dir / "best_valid_overview.json").resolve()) if (base_dir / "best_valid_overview.json").exists() else "",
+                "best_valid_overview_md_file": str((base_dir / "best_valid_overview.md").resolve()) if (base_dir / "best_valid_overview.md").exists() else "",
                 "early_valid_diag_file": str((base_dir / "early_valid_diag.json.gz").resolve()) if (base_dir / "early_valid_diag.json.gz").exists() else "",
                 "test_diag_file": str((base_dir / "test_diag.json.gz").resolve()) if (base_dir / "test_diag.json.gz").exists() else "",
                 "collapse_diag_file": str((base_dir / "collapse_diag.json.gz").resolve()) if (base_dir / "collapse_diag.json.gz").exists() else "",
@@ -193,11 +195,74 @@ def build_diag_summary(axis: str) -> Path:
     return out_path
 
 
+def build_diag_readable_summary(axis: str) -> Path:
+    diag_root = RESULT_ROOT / "diag" / axis
+    rows: list[dict[str, Any]] = []
+    if diag_root.exists():
+        for trial_summary_path in sorted(diag_root.glob("*/*/*/trial_summary.csv")):
+            combo_id = trial_summary_path.parts[-4]
+            dataset = trial_summary_path.parts[-3]
+            model = trial_summary_path.parts[-2]
+            with trial_summary_path.open(encoding="utf-8", newline="") as fp:
+                trial_rows = list(csv.DictReader(fp))
+            if not trial_rows:
+                continue
+
+            best_row = max(trial_rows, key=lambda row: _safe_float(row.get("mrr@20")) or float("-inf"))
+
+            stage_prefixes = sorted(
+                {
+                    key.rsplit(".", 1)[0]
+                    for key in best_row.keys()
+                    if "." in key and key.rsplit(".", 1)[-1] in {
+                        "route_jitter_adjacent",
+                        "route_consistency_knn_js",
+                        "route_consistency_knn_score",
+                        "n_eff",
+                        "cv_usage",
+                        "top1_max_frac",
+                        "entropy_mean",
+                    }
+                }
+            )
+
+            row: dict[str, Any] = {
+                "combo_id": combo_id,
+                "dataset": dataset,
+                "model": model,
+                "trial": best_row.get("trial", ""),
+                "best_mrr@20": best_row.get("mrr@20", ""),
+                "best_test_mrr@20": best_row.get("test_mrr@20", ""),
+                "best_test_hr@10": best_row.get("test_hr@10", ""),
+            }
+
+            for prefix in stage_prefixes:
+                for metric in (
+                    "n_eff",
+                    "cv_usage",
+                    "top1_max_frac",
+                    "entropy_mean",
+                    "route_jitter_adjacent",
+                    "route_consistency_knn_js",
+                    "route_consistency_knn_score",
+                ):
+                    key = f"{prefix}.{metric}"
+                    if key in best_row:
+                        row[key] = best_row.get(key, "")
+
+            rows.append(row)
+
+    out_path = LOG_ROOT / axis / f"{axis}_diag_readable_summary.csv"
+    _write_csv(out_path, rows)
+    return out_path
+
+
 def build_artifact_views(axis: str) -> dict[str, Path]:
     return {
         "special_summary": build_special_summary(axis),
         "feature_ablation_summary": build_feature_ablation_summary(axis),
         "diag_summary": build_diag_summary(axis),
+        "diag_readable_summary": build_diag_readable_summary(axis),
     }
 
 

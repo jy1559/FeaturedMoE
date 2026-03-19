@@ -1,0 +1,103 @@
+[PHASE7_SETTING_HEADER]
+run_phase=P7_AUX_R0_STD_SPEC_A_S20260319 setting=AUX_R0_STD_SPEC_A group=aux_reg seed=20260319
+router_key=R0_STD aux_key=SPEC_A
+desc=aux::standard::specialization_smoothness
+dataset=KuaiRecLargeStrictPosV2_0.2 gpu=1 order=26
+max_evals=10 tune_epochs=100 tune_patience=10
+seed=19025
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 10 --tune-epochs 100 --tune-patience 10 --seed 19025 --run-group fmoe_n3 --run-axis phase7_router_aux_v1 --run-phase P7_AUX_R0_STD_SPEC_A_S20260319 model=featured_moe_n3_tune dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session feature_mode=full_v3 gpu_id=1 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_phase="P7" MAX_ITEM_LIST_LENGTH=20 train_batch_size=4096 eval_batch_size=4096 embedding_size=128 num_heads=4 attn_dropout_prob=0.1 d_ff=256 d_feat_emb=16 d_expert_hidden=128 d_router_hidden=64 expert_scale=3 ++layer_layout=[macro,mid,micro] ++search.learning_rate=[0.0002,0.008] ++search.weight_decay=[1e-06] ++search.hidden_dropout_prob=[0.15] ++search.lr_scheduler_type=["warmup_cosine"] ++search_space_type_overrides.learning_rate=loguniform ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice ++p7_setting_id="AUX_R0_STD_SPEC_A" ++p7_setting_group="aux_reg" ++p7_setting_desc="aux::standard::specialization_smoothness" ++p7_router_key="R0_STD" ++p7_aux_key="SPEC_A" ++stage_router_type={macro:"standard",mid:"standard",micro:"standard"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"gated_bias",mid:"gated_bias",micro:"gated_bias"} ++topk_scope_mode="global_flat" moe_top_k=0 balance_loss_lambda=0.002 z_loss_lambda=0.0001 route_smoothness_lambda=0.04 route_consistency_lambda=0.0 route_sharpness_lambda=0.0 route_monopoly_lambda=0.0 route_monopoly_tau=0.25 route_prior_lambda=0.0 group_prior_align_lambda=0.0 factored_group_balance_lambda=0.0
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=77911 ts=2026-03-18T20:33:51
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x KuaiRecLargeStrictPosV2_0.2
+  max_evals=10  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=4096/4096/4096
+  track=fmoe_n3  axis=phase7_router_aux_v1  phase=P7_AUX_R0_STD_SPEC_A_S20260319
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.0002, 0.008]                           -> loguniform
+Fixed params(singleton/non-list): 3
+Fixed groups: 3
+  [optimization]
+    hidden_dropout_prob             0.15                                    
+    weight_decay                    1e-06                                   
+  [other]
+    lr_scheduler_type               warmup_cosine                           
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] learning_rate=0.0006898
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0813  best=0.0813  (early_stop@23, trial=4.5min, avg=5.0min/trial, total=5.0min, ETA=44.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.0813 cur_best_hr10=0.1150 cur_test_mrr20=0.1620 cur_test_hr10=0.1884 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+
+[2/10] learning_rate=0.002684
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0804  best=0.0813  (early_stop@15, trial=2.9min, avg=3.9min/trial, total=7.8min, ETA=31.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.0804 cur_best_hr10=0.1136 cur_test_mrr20=0.1612 cur_test_hr10=0.1872 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+
+[3/10] learning_rate=0.002933
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0800  best=0.0813  (early_stop@15, trial=2.8min, avg=3.5min/trial, total=10.6min, ETA=24.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.0800 cur_best_hr10=0.1132 cur_test_mrr20=0.1609 cur_test_hr10=0.1858 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+
+[4/10] learning_rate=0.00145
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0812  best=0.0813  (early_stop@17, trial=3.1min, avg=3.4min/trial, total=13.8min, ETA=20.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.0812 cur_best_hr10=0.1150 cur_test_mrr20=0.1620 cur_test_hr10=0.1898 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+
+[5/10] learning_rate=0.0003058
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0810  best=0.0813  (early_stop@35, trial=6.5min, avg=4.1min/trial, total=20.3min, ETA=20.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.0810 cur_best_hr10=0.1158 cur_test_mrr20=0.1621 cur_test_hr10=0.1895 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+
+[6/10] learning_rate=0.0008392
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0813  best=0.0813  (early_stop@22, trial=4.0min, avg=4.1min/trial, total=24.3min, ETA=16.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.0813 cur_best_hr10=0.1157 cur_test_mrr20=0.1619 cur_test_hr10=0.1889 run_best_mrr20=0.0813 run_best_hr10=0.1157 run_test_mrr20=0.1619 run_test_hr10=0.1889
+
+[7/10] learning_rate=0.005759
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0801  best=0.0813  (early_stop@15, trial=2.7min, avg=3.9min/trial, total=27.1min, ETA=11.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.0801 cur_best_hr10=0.1134 cur_test_mrr20=0.1611 cur_test_hr10=0.1863 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+
+[8/10] learning_rate=0.0006026
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0811  best=0.0813  (early_stop@22, trial=4.1min, avg=3.9min/trial, total=31.1min, ETA=7.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.0811 cur_best_hr10=0.1159 cur_test_mrr20=0.1621 cur_test_hr10=0.1886 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+
+[9/10] learning_rate=0.005034
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0802  best=0.0813  (early_stop@15, trial=2.7min, avg=3.8min/trial, total=33.9min, ETA=3.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.0802 cur_best_hr10=0.1130 cur_test_mrr20=0.1612 cur_test_hr10=0.1862 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+
+[10/10] learning_rate=0.002589
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.0803  best=0.0813  (early_stop@15, trial=2.7min, avg=3.7min/trial, total=36.6min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.0803 cur_best_hr10=0.1136 cur_test_mrr20=0.1611 cur_test_hr10=0.1874 run_best_mrr20=0.0813 run_best_hr10=0.1150 run_test_mrr20=0.1620 run_test_hr10=0.1884
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+[1;35mEvaluate   [0m:   0%|                                                           | 0/10 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/10 [00:04<?, ?it/s, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:04<00:37,  4.21s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:08<00:37,  4.21s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:08<00:32,  4.10s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:12<00:32,  4.10s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:12<00:28,  4.11s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:16<00:28,  4.11s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:16<00:24,  4.10s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:20<00:24,  4.10s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:20<00:20,  4.13s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:24<00:20,  4.13s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:24<00:16,  4.16s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:28<00:16,  4.16s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:28<00:12,  4.14s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:33<00:12,  4.14s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:33<00:08,  4.17s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:37<00:08,  4.17s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:37<00:04,  4.14s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:38<00:04,  4.14s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|█████████████████████████| 10/10 [00:38<00:00,  3.19s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                           | 0/10 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/10 [00:04<?, ?it/s, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:04<00:36,  4.03s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:08<00:36,  4.03s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:08<00:32,  4.01s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:12<00:32,  4.01s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:12<00:28,  4.01s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:16<00:28,  4.01s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:16<00:24,  4.04s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:20<00:24,  4.04s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:20<00:20,  4.02s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:24<00:20,  4.02s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:24<00:16,  4.03s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:28<00:16,  4.03s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:28<00:12,  4.03s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:32<00:12,  4.03s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:32<00:08,  4.05s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:36<00:08,  4.05s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:36<00:04,  4.07s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:37<00:04,  4.07s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|█████████████████████████| 10/10 [00:37<00:00,  3.17s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                           | 0/10 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/10 [00:04<?, ?it/s, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:04<00:37,  4.19s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  10%|██▌                       | 1/10 [00:08<00:37,  4.19s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:08<00:33,  4.16s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  20%|█████▏                    | 2/10 [00:12<00:33,  4.16s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:12<00:29,  4.17s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  30%|███████▊                  | 3/10 [00:16<00:29,  4.17s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:16<00:25,  4.17s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  40%|██████████▍               | 4/10 [00:20<00:25,  4.17s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:20<00:20,  4.15s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 5/10 [00:24<00:20,  4.15s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:24<00:16,  4.13s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  60%|███████████████▌          | 6/10 [00:28<00:16,  4.13s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:28<00:12,  4.12s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  70%|██████████████████▏       | 7/10 [00:32<00:12,  4.12s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:32<00:08,  4.08s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  80%|████████████████████▊     | 8/10 [00:37<00:08,  4.08s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:37<00:04,  4.10s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m:  90%|███████████████████████▍  | 9/10 [00:38<00:04,  4.10s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|█████████████████████████| 10/10 [00:38<00:00,  3.17s/it, [1;33mGPU RAM: 8.30 G/23.56 G[0m][0m                                                                                                    
+=================================================================
+  DONE  |  FeaturedMoE_N3 x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.0813  |  10/10 trials OK
+  Best HR@10  = 0.1150
+  Test MRR@20 = 0.1620  (best-valid checkpoint)
+  Test HR@10  = 0.1884  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.0813 best_valid_hr10=0.1150 test_mrr20=0.1620 test_hr10=0.1884
+  Total time: 38.5 min
+  Best params:
+    learning_rate: 0.000689798
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p7_aux_r0_std_spec_a_s20260319_20260318_203351_904717_pid77911.json
+  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/normal/phase7_router_aux_v1/P7/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p7_aux_r0_std_spec_a_s20260319_20260318_203351_904717_pid77911.json
+  Special result -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/special/phase7_router_aux_v1/P7/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p7_aux_r0_std_spec_a_s20260319_20260318_203351_904717_pid77911_special_metrics.json
+  Special log -> /workspace/jy1559/FMoE/experiments/run/artifacts/logs/fmoe_n3/special/phase7_router_aux_v1/P7/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p7_aux_r0_std_spec_a_s20260319_20260318_203351_904717_pid77911_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=77911 start=2026-03-18T20:33:51 end=2026-03-18T21:12:24

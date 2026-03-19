@@ -155,6 +155,22 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             resolver.get("stage_router_type", None),
             default_value="standard",
         )
+        self.stage_factored_group_router_source = _parse_stage_str_map(
+            resolver.get("stage_factored_group_router_source", None),
+            default_value="feature",
+        )
+        self.stage_factored_group_logit_scale = _parse_stage_float_map(
+            resolver.get("stage_factored_group_logit_scale", None),
+            default_value=1.0,
+        )
+        self.stage_factored_intra_logit_scale = _parse_stage_float_map(
+            resolver.get("stage_factored_intra_logit_scale", None),
+            default_value=1.0,
+        )
+        self.stage_factored_combine_mode = _parse_stage_str_map(
+            resolver.get("stage_factored_combine_mode", None),
+            default_value="add",
+        )
         self.stage_residual_mode = _parse_stage_str_map(
             resolver.get("stage_residual_mode", None),
             default_value="base",
@@ -176,6 +192,18 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         self.feature_group_bias_lambda = float(resolver.get("feature_group_bias_lambda", 0.0))
         self.feature_group_prior_temperature = float(resolver.get("feature_group_prior_temperature", 1.0))
         self.factored_group_balance_lambda = float(resolver.get("factored_group_balance_lambda", 0.0))
+        self.route_smoothness_lambda = float(resolver.get("route_smoothness_lambda", 0.0))
+        self.route_smoothness_stage_weight = _parse_stage_float_map(
+            resolver.get("route_smoothness_stage_weight", None),
+            default_value=1.0,
+        )
+        self.route_consistency_lambda = float(resolver.get("route_consistency_lambda", 0.0))
+        self.route_consistency_pairs = max(int(resolver.get("route_consistency_pairs", 4)), 1)
+        self.route_sharpness_lambda = float(resolver.get("route_sharpness_lambda", 0.0))
+        self.route_monopoly_lambda = float(resolver.get("route_monopoly_lambda", 0.0))
+        self.route_monopoly_tau = float(resolver.get("route_monopoly_tau", 0.0))
+        self.route_prior_lambda = float(resolver.get("route_prior_lambda", 0.0))
+        self.route_prior_bias_scale = float(resolver.get("route_prior_bias_scale", 0.5))
         self.fmoe_diag_logging = bool(resolver.get("fmoe_diag_logging", True))
         self.fmoe_diag_sample_sessions = max(int(resolver.get("fmoe_diag_sample_sessions", 256)), 0)
 
@@ -218,6 +246,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         self._scalar_fallback_field_once: set[str] = set()
 
         col2idx = build_column_to_index(self.feature_base_fields)
+        self._feature_col2idx = dict(col2idx)
         self._feature_family_ablation_indices = {}
         for family_name in GROUP_ORDER:
             family_cols = []
@@ -269,6 +298,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             feature_group_bias_lambda=self.feature_group_bias_lambda,
             feature_group_prior_temperature=self.feature_group_prior_temperature,
             stage_router_type=self.stage_router_type,
+            stage_factored_group_router_source=self.stage_factored_group_router_source,
+            stage_factored_group_logit_scale=self.stage_factored_group_logit_scale,
+            stage_factored_intra_logit_scale=self.stage_factored_intra_logit_scale,
+            stage_factored_combine_mode=self.stage_factored_combine_mode,
             mid_router_temperature=self.mid_router_temperature,
             micro_router_temperature=self.micro_router_temperature,
             dense_hidden_scale=self.dense_hidden_scale,
@@ -308,6 +341,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "stage_router_source": dict(self.stage_router_source),
             "stage_feature_injection": dict(self.stage_feature_injection),
             "stage_router_type": dict(self.stage_router_type),
+            "stage_factored_group_router_source": dict(self.stage_factored_group_router_source),
+            "stage_factored_group_logit_scale": dict(self.stage_factored_group_logit_scale),
+            "stage_factored_intra_logit_scale": dict(self.stage_factored_intra_logit_scale),
+            "stage_factored_combine_mode": dict(self.stage_factored_combine_mode),
             "stage_residual_mode": dict(self.stage_residual_mode),
             "residual_alpha_fixed": dict(self.residual_alpha_fixed),
             "residual_alpha_init": dict(self.residual_alpha_init),
@@ -319,6 +356,15 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "feature_group_bias_lambda": self.feature_group_bias_lambda,
             "feature_group_prior_temperature": self.feature_group_prior_temperature,
             "factored_group_balance_lambda": self.factored_group_balance_lambda,
+            "route_smoothness_lambda": self.route_smoothness_lambda,
+            "route_smoothness_stage_weight": dict(self.route_smoothness_stage_weight),
+            "route_consistency_lambda": self.route_consistency_lambda,
+            "route_consistency_pairs": self.route_consistency_pairs,
+            "route_sharpness_lambda": self.route_sharpness_lambda,
+            "route_monopoly_lambda": self.route_monopoly_lambda,
+            "route_monopoly_tau": self.route_monopoly_tau,
+            "route_prior_lambda": self.route_prior_lambda,
+            "route_prior_bias_scale": self.route_prior_bias_scale,
             "hidden_act": self.hidden_act,
             "layer_norm_eps": self.layer_norm_eps,
             "fmoe_special_logging": bool(self.fmoe_special_logging),
@@ -371,6 +417,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             all_feature_columns=self.feature_base_fields,
             max_positions=int(self.max_seq_length),
             feature_mode=self._feature_ablation_tag(),
+            consistency_pairs=int(self.route_consistency_pairs),
         )
 
     def end_diagnostic_eval(self) -> Optional[dict]:
@@ -550,6 +597,164 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             losses.append(n_grps * (mean_prob * mean_prob).sum())
         return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
 
+    @staticmethod
+    def _base_stage_name(stage_key: str) -> str:
+        text = str(stage_key or "")
+        if "@" in text:
+            text = text.split("@", 1)[0]
+        if "." in text:
+            text = text.split(".", 1)[0]
+        return text
+
+    def _session_gate_prob(
+        self,
+        stage_weights: torch.Tensor,
+        item_seq_len: torch.Tensor,
+    ) -> torch.Tensor:
+        mask = self._sequence_valid_mask(item_seq_len, stage_weights.size(1), stage_weights.device).float()
+        denom = mask.sum(dim=1, keepdim=True).clamp(min=1.0)
+        return (stage_weights * mask.unsqueeze(-1)).sum(dim=1) / denom
+
+    def _compute_route_smoothness_loss(
+        self,
+        gate_weights: Dict[str, torch.Tensor],
+        item_seq_len: torch.Tensor,
+    ) -> torch.Tensor:
+        losses = []
+        for stage_key, weights in (gate_weights or {}).items():
+            if not torch.is_tensor(weights) or weights.ndim != 3 or weights.size(1) <= 1:
+                continue
+            stage_name = self._base_stage_name(stage_key)
+            stage_w = float(self.route_smoothness_stage_weight.get(stage_name, 1.0))
+            if stage_w <= 0:
+                continue
+            valid = self._sequence_valid_mask(item_seq_len, weights.size(1), weights.device).float()
+            pair_mask = valid[:, 1:] * valid[:, :-1]
+            if pair_mask.sum() <= 0:
+                continue
+            delta = (weights[:, 1:, :] - weights[:, :-1, :]).abs().sum(dim=-1)
+            losses.append(stage_w * ((delta * pair_mask).sum() / pair_mask.sum().clamp(min=1.0)))
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
+    def _compute_route_consistency_loss(
+        self,
+        gate_weights: Dict[str, torch.Tensor],
+        item_seq_len: torch.Tensor,
+        feat: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        if feat is None or not torch.is_tensor(feat) or feat.ndim != 3:
+            return self.item_embedding.weight.new_tensor(0.0)
+        batch_size = int(feat.size(0))
+        if batch_size <= 1:
+            return self.item_embedding.weight.new_tensor(0.0)
+        feat_repr = feat.mean(dim=1)
+        feat_norm = F.normalize(feat_repr, p=2, dim=-1)
+        sim = feat_norm @ feat_norm.transpose(0, 1)
+        sim.fill_diagonal_(-1e9)
+        k = min(int(self.route_consistency_pairs), batch_size - 1)
+        if k <= 0:
+            return self.item_embedding.weight.new_tensor(0.0)
+        neigh_idx = sim.topk(k=k, dim=1).indices
+
+        losses = []
+        for weights in (gate_weights or {}).values():
+            if not torch.is_tensor(weights) or weights.ndim != 3:
+                continue
+            session_prob = self._session_gate_prob(weights, item_seq_len).clamp(min=1e-8)
+            pi = session_prob.unsqueeze(1).expand(-1, k, -1)
+            pj = session_prob.index_select(0, neigh_idx.reshape(-1)).reshape(batch_size, k, -1).clamp(min=1e-8)
+            m = 0.5 * (pi + pj)
+            js = 0.5 * ((pi * (pi.log() - m.log())).sum(dim=-1) + (pj * (pj.log() - m.log())).sum(dim=-1))
+            losses.append(js.mean())
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
+    def _compute_route_sharpness_loss(
+        self,
+        gate_weights: Dict[str, torch.Tensor],
+        item_seq_len: torch.Tensor,
+    ) -> torch.Tensor:
+        losses = []
+        for weights in (gate_weights or {}).values():
+            if not torch.is_tensor(weights) or weights.ndim != 3:
+                continue
+            mask = self._sequence_valid_mask(item_seq_len, weights.size(1), weights.device).float()
+            entropy = -(weights.clamp(min=1e-8) * weights.clamp(min=1e-8).log()).sum(dim=-1)
+            losses.append((entropy * mask).sum() / mask.sum().clamp(min=1.0))
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
+    def _compute_route_monopoly_loss(
+        self,
+        gate_weights: Dict[str, torch.Tensor],
+        item_seq_len: torch.Tensor,
+    ) -> torch.Tensor:
+        losses = []
+        for weights in (gate_weights or {}).values():
+            if not torch.is_tensor(weights) or weights.ndim != 3:
+                continue
+            mask = self._sequence_valid_mask(item_seq_len, weights.size(1), weights.device)
+            top1 = weights.argmax(dim=-1)
+            active = top1[mask]
+            if active.numel() <= 0:
+                continue
+            n_exp = int(weights.size(-1))
+            usage = torch.bincount(active, minlength=n_exp).float() / float(active.numel())
+            tau = float(self.route_monopoly_tau)
+            if tau <= 0:
+                tau = min(0.45, 2.5 / max(float(n_exp), 1.0))
+            losses.append(torch.relu(usage - tau).pow(2).sum())
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
+    def _compute_route_prior_loss(
+        self,
+        gate_weights: Dict[str, torch.Tensor],
+        item_seq_len: torch.Tensor,
+        feat: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        if feat is None or not torch.is_tensor(feat) or feat.ndim != 3:
+            return self.item_embedding.weight.new_tensor(0.0)
+        losses = []
+        feat_mean = feat.mean(dim=1)
+        for stage_key, weights in (gate_weights or {}).items():
+            if not torch.is_tensor(weights) or weights.ndim != 3:
+                continue
+            stage_name = self._base_stage_name(stage_key)
+            family_map = dict(self.feature_spec.get("stage_family_features", {}).get(stage_name, {}) or {})
+            expert_names = list(self._stage_expert_names.get(stage_name, []) or [])
+            if not family_map or not expert_names:
+                continue
+
+            family_scores = []
+            family_names = []
+            for family_name, columns in family_map.items():
+                idx = [self._feature_col2idx[c] for c in columns if c in self._feature_col2idx]
+                if not idx:
+                    continue
+                sel = feat_mean.index_select(-1, torch.tensor(idx, device=feat_mean.device))
+                family_scores.append(sel.mean(dim=-1))
+                family_names.append(family_name)
+            if not family_scores:
+                continue
+            fam_logits = torch.stack(family_scores, dim=-1)
+            fam_prob = F.softmax(fam_logits / max(float(self.feature_group_prior_temperature), 1e-6), dim=-1)
+
+            prior = torch.zeros(weights.size(0), weights.size(-1), device=weights.device, dtype=weights.dtype)
+            for fam_idx, fam_name in enumerate(family_names):
+                matched = [i for i, en in enumerate(expert_names) if fam_name.lower() in str(en).lower()]
+                if not matched:
+                    continue
+                share = fam_prob[:, fam_idx] / float(len(matched))
+                for ex_idx in matched:
+                    prior[:, ex_idx] = prior[:, ex_idx] + share
+            prior = prior + 1e-8
+            prior = prior / prior.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+
+            student = self._session_gate_prob(weights, item_seq_len).clamp(min=1e-8)
+            if self.route_prior_bias_scale > 0:
+                blended = student + float(self.route_prior_bias_scale) * prior
+                student = blended / blended.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+            losses.append((student * (student.log() - prior.log())).sum(dim=-1).mean())
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
     def forward(self, item_seq, item_seq_len, feat=None):
         batch_size, seq_len = item_seq.shape
         item_emb = self.item_embedding(item_seq)
@@ -654,6 +859,33 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             aux_loss = aux_loss + self.factored_group_balance_lambda * self._compute_factored_group_balance_loss(
                 router_aux,
                 item_seq_len,
+            )
+        if self.route_smoothness_lambda > 0:
+            aux_loss = aux_loss + self.route_smoothness_lambda * self._compute_route_smoothness_loss(
+                aux_data.get("gate_weights", {}),
+                item_seq_len,
+            )
+        if self.route_consistency_lambda > 0:
+            aux_loss = aux_loss + self.route_consistency_lambda * self._compute_route_consistency_loss(
+                aux_data.get("gate_weights", {}),
+                item_seq_len,
+                feat,
+            )
+        if self.route_sharpness_lambda > 0:
+            aux_loss = aux_loss + self.route_sharpness_lambda * self._compute_route_sharpness_loss(
+                aux_data.get("gate_weights", {}),
+                item_seq_len,
+            )
+        if self.route_monopoly_lambda > 0:
+            aux_loss = aux_loss + self.route_monopoly_lambda * self._compute_route_monopoly_loss(
+                aux_data.get("gate_weights", {}),
+                item_seq_len,
+            )
+        if self.route_prior_lambda > 0:
+            aux_loss = aux_loss + self.route_prior_lambda * self._compute_route_prior_loss(
+                aux_data.get("gate_weights", {}),
+                item_seq_len,
+                feat,
             )
 
         if self.fmoe_debug_logging and self.training and aux_data.get("gate_weights"):

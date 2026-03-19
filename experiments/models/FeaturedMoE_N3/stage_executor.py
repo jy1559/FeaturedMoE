@@ -65,6 +65,10 @@ class StageExecutorN3(nn.Module):
         feature_group_bias_lambda: float,
         feature_group_prior_temperature: float,
         stage_router_type: Dict[str, str],
+        stage_factored_group_router_source: Dict[str, str],
+        stage_factored_group_logit_scale: Dict[str, float],
+        stage_factored_intra_logit_scale: Dict[str, float],
+        stage_factored_combine_mode: Dict[str, str],
         mid_router_temperature: float,
         micro_router_temperature: float,
         dense_hidden_scale: float,
@@ -136,6 +140,12 @@ class StageExecutorN3(nn.Module):
                     feature_group_bias_lambda=float(feature_group_bias_lambda),
                     feature_group_prior_temperature=float(feature_group_prior_temperature),
                     stage_router_type=str(stage_router_type.get(stage_name, "standard")),
+                    stage_factored_group_router_source=str(
+                        stage_factored_group_router_source.get(stage_name, "feature")
+                    ),
+                    factored_group_logit_scale=float(stage_factored_group_logit_scale.get(stage_name, 1.0)),
+                    factored_intra_logit_scale=float(stage_factored_intra_logit_scale.get(stage_name, 1.0)),
+                    stage_factored_combine_mode=str(stage_factored_combine_mode.get(stage_name, "add")),
                     router_temperature=router_temperature,
                     dense_hidden_scale=float(dense_hidden_scale),
                     stage_residual_mode=str(stage_residual_mode.get(stage_name, "base")),

@@ -176,9 +176,23 @@ def _config_get(config_obj, key, default=None):
         return getattr(config_obj, key, default)
 
 
+def _normalize_model_name(raw) -> str:
+    """Normalize model key used for family checks.
+
+    Some launchers use tune aliases (e.g. featured_moe_n3_tune) that should share
+    the same feature-aware behavior as the base model.
+    """
+    key = str(raw or "").strip().lower()
+    for suffix in ("_tune", "-tune"):
+        if key.endswith(suffix):
+            key = key[: -len(suffix)]
+            break
+    return key
+
+
 def _sync_model_dimensions(cfg_dict: dict) -> None:
     """Synchronize hidden/embedding size according to model family policy."""
-    model_name = str(cfg_dict.get("model", "")).strip().lower()
+    model_name = _normalize_model_name(cfg_dict.get("model", ""))
 
     # v2 uses embedding_size as primary; keep hidden_size aligned for RecBole internals.
     if model_name in _FEATURED_MOE_V2_MODELS:
@@ -199,7 +213,7 @@ def _ensure_feature_load_columns(cfg_dict: dict) -> None:
     Some launch paths can accidentally keep a minimal `load_col.inter` and silently drop
     engineered feature fields, which then forces zero-filled feature fallbacks.
     """
-    model_name = str(cfg_dict.get("model", "")).strip().lower()
+    model_name = _normalize_model_name(cfg_dict.get("model", ""))
     if model_name not in _FEATURE_AWARE_MOE_MODELS:
         return
 
@@ -229,6 +243,15 @@ def _ensure_feature_load_columns(cfg_dict: dict) -> None:
             merged.append(name)
 
     load_col["inter"] = merged
+
+
+def _model_uses_feature_inputs(cfg_dict: dict) -> bool:
+    model_name = _normalize_model_name(cfg_dict.get("model", ""))
+    if model_name not in _FEATURE_AWARE_MOE_MODELS:
+        return False
+    feature_mode = str(cfg_dict.get("feature_mode", "")).strip().lower()
+    data_path = str(cfg_dict.get("data_path", "")).strip().lower()
+    return ("feature_added" in data_path) or (feature_mode in {"full", "full_v2", "full_v3", "feature_added"})
     cfg_dict["load_col"] = load_col
 
     # Legacy behavior for v1/baseline models.
@@ -482,7 +505,7 @@ def _resolve_cache_source_tag(cfg_dict):
     if feature_mode == "basic":
         return "basic"
 
-    model = str(cfg_dict.get("model", "")).lower()
+    model = _normalize_model_name(cfg_dict.get("model", ""))
     if model in _FEATURE_AWARE_MOE_MODELS:
         return "feature_added"
     return "basic"
@@ -1100,6 +1123,18 @@ def _logs_root() -> Path:
     return Path(__file__).resolve().parent / "run" / "artifacts" / "logs"
 
 
+def _logging_root() -> Path:
+    raw = str(os.environ.get("HYPEROPT_LOGGING_DIR", "")).strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return Path(__file__).resolve().parent / "run" / "artifacts" / "logging"
+
+
+def _use_unified_logging_layout() -> bool:
+    raw = str(os.environ.get("FMOE_UNIFIED_LOGGING_LAYOUT", "")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _artifact_mirror_paths(
     result_file: Path,
     dataset: str,
@@ -1108,6 +1143,14 @@ def _artifact_mirror_paths(
     run_axis: str,
     run_phase: str,
 ) -> dict[str, Path]:
+    if _use_unified_logging_layout():
+        run_dir = result_file.parent
+        return {
+            "normal_result": result_file,
+            "special_result": run_dir / "special_metrics.json",
+            "special_log": run_dir / "special_log.json",
+        }
+
     dataset_dir = _safe_slug(_canonical_dataset_name(dataset))
     model_tag = _model_tag(model)
     axis_tag = _safe_slug(run_axis or "axis")
@@ -1164,6 +1207,214 @@ def _write_csv_file(path: Path, rows: list[dict]) -> None:
             writer.writerow({k: _ser(v) for k, v in row.items()})
 
 
+def _copy_if_exists(src: str | Path | None, dst: Path) -> str:
+    src_path = Path(str(src or "")).expanduser()
+    if not src_path.exists() or not src_path.is_file():
+        return ""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if src_path.resolve() == dst.resolve():
+        return str(dst.resolve())
+    # In legacy layout, some artifacts are stored as *.json.gz / *.csv.gz.
+    # If bundle targets plain extensions, transparently decompress so editors can open them directly.
+    if src_path.suffix == ".gz" and dst.suffix in {".json", ".csv"}:
+        with gzip.open(src_path, "rb") as src_f:
+            dst.write_bytes(src_f.read())
+        return str(dst.resolve())
+    shutil.copy2(src_path, dst)
+    return str(dst.resolve())
+
+
+def _bundle_run_dir(*, path: Path, model: str, dataset: str, run_group: str, run_phase: str) -> Path:
+    phase_bucket = _phase_bucket(run_phase)
+    dataset_bucket = _safe_slug(_canonical_dataset_name(dataset))
+    group_bucket = _safe_slug(run_group or _model_tag(model) or "model")
+    if path.name == "result.json":
+        run_id = _safe_slug(path.parent.name)
+    else:
+        run_id = _safe_slug(path.stem)
+    return _logging_root() / group_bucket / dataset_bucket / phase_bucket / run_id
+
+
+def _write_bundle_summary_md(path: Path, payload: dict) -> None:
+    lines = [
+        "# Run Logging Summary",
+        "",
+        f"- model: {payload.get('model', '')}",
+        f"- dataset: {payload.get('dataset', '')}",
+        f"- run_group: {payload.get('run_group', '')}",
+        f"- run_axis: {payload.get('run_axis', '')}",
+        f"- run_phase: {payload.get('run_phase', '')}",
+        f"- best_mrr@20: {payload.get('best_mrr@20', '')}",
+        f"- test_mrr@20: {payload.get('test_mrr@20', '')}",
+        f"- test_hr@10: {payload.get('test_hr@10', '')}",
+        "",
+        "## Artifacts",
+        "",
+        f"- result_json: {payload.get('result_json', '')}",
+        f"- special_metrics: {payload.get('special_metrics_json', '')}",
+        f"- special_log: {payload.get('special_log_json', '')}",
+        f"- diag_trial_summary: {payload.get('diag_trial_summary_csv', '')}",
+        f"- diag_best_valid: {payload.get('diag_best_valid_json', '')}",
+        f"- diag_best_valid_overview: {payload.get('diag_best_valid_overview_json', '')}",
+        f"- diag_best_valid_overview_md: {payload.get('diag_best_valid_overview_md', '')}",
+        f"- diag_early_valid: {payload.get('diag_early_valid_json', '')}",
+        f"- diag_test: {payload.get('diag_test_json', '')}",
+        f"- diag_collapse: {payload.get('diag_collapse_json', '')}",
+        f"- diag_epoch_trace: {payload.get('diag_epoch_trace_csv', '')}",
+        f"- feature_ablation: {payload.get('feature_ablation_json', '')}",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _extract_overview_rows(overview_json_path: str | Path | None) -> list[dict]:
+    p = Path(str(overview_json_path or ""))
+    if not p.exists() or not p.is_file():
+        return []
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    rows = []
+    for row in list((payload or {}).get("stages", []) or []):
+        rows.append(
+            {
+                "stage": row.get("stage", ""),
+                "n_eff": row.get("n_eff", ""),
+                "cv_usage": row.get("cv_usage", ""),
+                "top1_max_frac": row.get("top1_max_frac", ""),
+                "entropy_mean": row.get("entropy_mean", ""),
+                "route_jitter_adjacent": row.get("route_jitter_adjacent", ""),
+                "route_consistency_knn_js": row.get("route_consistency_knn_js", ""),
+                "route_consistency_knn_score": row.get("route_consistency_knn_score", ""),
+                "route_consistency_group_knn_js": row.get("route_consistency_group_knn_js", ""),
+                "route_consistency_group_knn_score": row.get("route_consistency_group_knn_score", ""),
+                "route_consistency_intra_group_knn_mean_js": row.get("route_consistency_intra_group_knn_mean_js", ""),
+                "route_consistency_intra_group_knn_mean_score": row.get("route_consistency_intra_group_knn_mean_score", ""),
+                "route_consistency_feature_group_knn_tempo_js": row.get("route_consistency_feature_group_knn_tempo_js", ""),
+                "route_consistency_feature_group_knn_tempo_score": row.get("route_consistency_feature_group_knn_tempo_score", ""),
+                "route_consistency_feature_group_knn_focus_js": row.get("route_consistency_feature_group_knn_focus_js", ""),
+                "route_consistency_feature_group_knn_focus_score": row.get("route_consistency_feature_group_knn_focus_score", ""),
+                "route_consistency_feature_group_knn_memory_js": row.get("route_consistency_feature_group_knn_memory_js", ""),
+                "route_consistency_feature_group_knn_memory_score": row.get("route_consistency_feature_group_knn_memory_score", ""),
+                "route_consistency_feature_group_knn_exposure_js": row.get("route_consistency_feature_group_knn_exposure_js", ""),
+                "route_consistency_feature_group_knn_exposure_score": row.get("route_consistency_feature_group_knn_exposure_score", ""),
+                "route_consistency_feature_group_knn_mean_score": row.get("route_consistency_feature_group_knn_mean_score", ""),
+                "family_top_expert_mean_share": row.get("family_top_expert_mean_share", ""),
+            }
+        )
+    return rows
+
+
+def _write_logging_bundle(
+    *,
+    result_path: Path,
+    data_payload: dict,
+    model: str,
+    dataset: str,
+    run_group: str,
+    run_phase: str,
+) -> dict:
+    bundle_dir = _bundle_run_dir(
+        path=result_path,
+        model=model,
+        dataset=dataset,
+        run_group=run_group,
+        run_phase=run_phase,
+    )
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+
+    out = {
+        "bundle_dir": str(bundle_dir.resolve()),
+        "result_json": _copy_if_exists(result_path, bundle_dir / "result.json"),
+        "special_metrics_json": _copy_if_exists(data_payload.get("special_result_file"), bundle_dir / "special_metrics.json"),
+        "special_log_json": _copy_if_exists(data_payload.get("special_log_file"), bundle_dir / "special_log.json"),
+        "diag_trial_summary_csv": _copy_if_exists(data_payload.get("diag_trial_summary_file"), bundle_dir / "diag_trial_summary.csv"),
+        "diag_best_valid_json": _copy_if_exists(data_payload.get("diag_best_valid_file"), bundle_dir / "diag_best_valid.json"),
+        "diag_best_valid_overview_json": _copy_if_exists(data_payload.get("diag_best_valid_overview_file"), bundle_dir / "diag_best_valid_overview.json"),
+        "diag_best_valid_overview_md": _copy_if_exists(data_payload.get("diag_best_valid_overview_md_file"), bundle_dir / "diag_best_valid_overview.md"),
+        "diag_early_valid_json": _copy_if_exists(data_payload.get("diag_early_valid_file"), bundle_dir / "diag_early_valid.json"),
+        "diag_test_json": _copy_if_exists(data_payload.get("diag_test_file"), bundle_dir / "diag_test.json"),
+        "diag_collapse_json": _copy_if_exists(data_payload.get("diag_collapse_file"), bundle_dir / "diag_collapse.json"),
+        "diag_epoch_trace_csv": _copy_if_exists(data_payload.get("diag_epoch_trace_file"), bundle_dir / "diag_epoch_trace.csv"),
+        "feature_ablation_json": _copy_if_exists(data_payload.get("feature_ablation_file"), bundle_dir / "feature_ablation.json"),
+    }
+
+    overview_rows = _extract_overview_rows(out.get("diag_best_valid_overview_json"))
+    if overview_rows:
+        _write_csv_file(bundle_dir / "diag_overview_table.csv", overview_rows)
+        out["diag_overview_table_csv"] = str((bundle_dir / "diag_overview_table.csv").resolve())
+    else:
+        out["diag_overview_table_csv"] = ""
+
+    summary_payload = {
+        "model": data_payload.get("model", model),
+        "dataset": data_payload.get("dataset", _canonical_dataset_name(dataset)),
+        "run_group": data_payload.get("run_group", run_group),
+        "run_axis": data_payload.get("run_axis", ""),
+        "run_phase": data_payload.get("run_phase", run_phase),
+        "timestamp": data_payload.get("timestamp", ""),
+        "max_evals": data_payload.get("max_evals", ""),
+        "n_completed": data_payload.get("n_completed", ""),
+        "best_mrr@20": data_payload.get("best_mrr@20", ""),
+        "test_mrr@20": data_payload.get("test_mrr@20", ""),
+        "test_hr@10": data_payload.get("test_hr@10", ""),
+        "best_params": data_payload.get("best_params", {}),
+        "best_valid_result": data_payload.get("best_valid_result", {}),
+        "test_result": data_payload.get("test_result", {}),
+        **out,
+    }
+
+    trials_rows = []
+    for t in list(data_payload.get("trials", []) or []):
+        trials_rows.append(
+            {
+                "trial": t.get("trial", ""),
+                "status": t.get("status", ""),
+                "mrr@20": t.get("mrr@20", ""),
+                "test_mrr@20": t.get("test_mrr@20", ""),
+                "test_hr@10": t.get("test_hr@10", ""),
+                "epochs_run": t.get("epochs_run", ""),
+                "early_stopped": t.get("early_stopped", ""),
+            }
+        )
+    if trials_rows:
+        _write_csv_file(bundle_dir / "trials_brief.csv", trials_rows)
+        out["trials_brief_csv"] = str((bundle_dir / "trials_brief.csv").resolve())
+    else:
+        out["trials_brief_csv"] = ""
+
+    analysis_card = {
+        "model": summary_payload["model"],
+        "dataset": summary_payload["dataset"],
+        "run_axis": summary_payload["run_axis"],
+        "run_phase": summary_payload["run_phase"],
+        "best_mrr@20": summary_payload["best_mrr@20"],
+        "test_mrr@20": summary_payload["test_mrr@20"],
+        "test_hr@10": summary_payload["test_hr@10"],
+        "best_params": summary_payload["best_params"],
+        "stage_overview": overview_rows,
+        "feature_ablation_available": bool(out.get("feature_ablation_json")),
+        "diag_available": bool(out.get("diag_best_valid_json")),
+        "special_available": bool(out.get("special_metrics_json")),
+    }
+    _write_json_file(bundle_dir / "analysis_card.json", analysis_card)
+    out["analysis_card_json"] = str((bundle_dir / "analysis_card.json").resolve())
+
+    summary_payload.update(
+        {
+            "trials_brief_csv": out.get("trials_brief_csv", ""),
+            "analysis_card_json": out.get("analysis_card_json", ""),
+            "diag_overview_table_csv": out.get("diag_overview_table_csv", ""),
+        }
+    )
+    _write_json_file(bundle_dir / "run_summary.json", summary_payload)
+    _write_bundle_summary_md(bundle_dir / "run_summary.md", summary_payload)
+    out["run_summary_json"] = str((bundle_dir / "run_summary.json").resolve())
+    out["run_summary_md"] = str((bundle_dir / "run_summary.md").resolve())
+    return out
+
+
 def _diag_artifact_paths(
     result_file: Path,
     dataset: str,
@@ -1172,6 +1423,19 @@ def _diag_artifact_paths(
     run_axis: str,
     run_phase: str,
 ) -> dict[str, Path]:
+    if _use_unified_logging_layout():
+        base_dir = result_file.parent
+        return {
+            "trial_summary": base_dir / "diag_trial_summary.csv",
+            "best_valid_diag": base_dir / "diag_best_valid.json",
+            "best_valid_overview": base_dir / "diag_best_valid_overview.json",
+            "best_valid_overview_md": base_dir / "diag_best_valid_overview.md",
+            "early_valid_diag": base_dir / "diag_early_valid.json",
+            "test_diag": base_dir / "diag_test.json",
+            "collapse_diag": base_dir / "diag_collapse.json",
+            "epoch_trace": base_dir / "diag_epoch_trace.csv",
+        }
+
     dataset_dir = _safe_slug(_canonical_dataset_name(dataset))
     model_tag = _model_tag(model)
     axis_tag = _safe_slug(run_axis or "axis")
@@ -1180,6 +1444,8 @@ def _diag_artifact_paths(
     return {
         "trial_summary": diag_root / "trial_summary.csv",
         "best_valid_diag": diag_root / "best_valid_diag.json.gz",
+        "best_valid_overview": diag_root / "best_valid_overview.json",
+        "best_valid_overview_md": diag_root / "best_valid_overview.md",
         "early_valid_diag": diag_root / "early_valid_diag.json.gz",
         "test_diag": diag_root / "test_diag.json.gz",
         "collapse_diag": diag_root / "collapse_diag.json.gz",
@@ -1191,6 +1457,130 @@ def _diag_scalar_metrics(diag_payload: dict | None) -> dict:
     if not isinstance(diag_payload, dict):
         return {}
     return dict(diag_payload.get("scalar_metrics", {}) or {})
+
+
+def _metric_name_token(name: str) -> str:
+    text = str(name or "").strip().lower()
+    if not text:
+        return "group"
+    out = []
+    prev_us = False
+    for ch in text:
+        if ch.isalnum():
+            out.append(ch)
+            prev_us = False
+        else:
+            if not prev_us:
+                out.append("_")
+                prev_us = True
+    token = "".join(out).strip("_")
+    return token or "group"
+
+
+def _build_diag_overview_payload(diag_payload: dict | None) -> dict:
+    if not isinstance(diag_payload, dict):
+        return {"split": "", "feature_mode": "", "stages": []}
+
+    stages = []
+    stage_metrics = dict(diag_payload.get("stage_metrics", {}) or {})
+    for stage_key in sorted(stage_metrics.keys()):
+        st = dict(stage_metrics.get(stage_key, {}) or {})
+        spec = dict(st.get("specialization_summary", {}) or {})
+        intra = dict(st.get("route_consistency_intra_group_knn", {}) or {})
+        feat_grp = dict(st.get("route_consistency_feature_group_knn", {}) or {})
+        feat_group_names = list(feat_grp.get("group_names", []) or [])
+        feat_js = list(feat_grp.get("js_by_group", []) or [])
+        feat_score = list(feat_grp.get("score_by_group", []) or [])
+        feat_map = {}
+        for idx, group_name in enumerate(feat_group_names):
+            token = _metric_name_token(group_name)
+            js_val = float(feat_js[idx]) if idx < len(feat_js) else 0.0
+            score_val = float(feat_score[idx]) if idx < len(feat_score) else 0.0
+            feat_map[f"route_consistency_feature_group_knn_{token}_js"] = js_val
+            feat_map[f"route_consistency_feature_group_knn_{token}_score"] = score_val
+        for token in ("tempo", "focus", "memory", "exposure"):
+            feat_map.setdefault(f"route_consistency_feature_group_knn_{token}_js", 0.0)
+            feat_map.setdefault(f"route_consistency_feature_group_knn_{token}_score", 0.0)
+        stages.append(
+            {
+                "stage": stage_key,
+                "n_eff": float(st.get("n_eff", 0.0) or 0.0),
+                "cv_usage": float(st.get("cv_usage", 0.0) or 0.0),
+                "top1_max_frac": float(st.get("top1_max_frac", 0.0) or 0.0),
+                "entropy_mean": float(st.get("entropy_mean", 0.0) or 0.0),
+                "route_jitter_adjacent": float(st.get("route_jitter_adjacent", 0.0) or 0.0),
+                "route_consistency_knn_js": float(st.get("route_consistency_knn_js", 0.0) or 0.0),
+                "route_consistency_knn_score": float(st.get("route_consistency_knn_score", 0.0) or 0.0),
+                "route_consistency_group_knn_js": float(st.get("route_consistency_group_knn_js", 0.0) or 0.0),
+                "route_consistency_group_knn_score": float(st.get("route_consistency_group_knn_score", 0.0) or 0.0),
+                "route_consistency_intra_group_knn_mean_js": float(intra.get("mean_js", 0.0) or 0.0),
+                "route_consistency_intra_group_knn_mean_score": float(intra.get("mean_score", 0.0) or 0.0),
+                "route_consistency_feature_group_knn_mean_score": float(
+                    ((st.get("route_consistency_feature_group_knn") or {}).get("mean_score", 0.0) or 0.0)
+                ),
+                "family_top_expert_mean_share": float(spec.get("mean_top_expert_share", 0.0) or 0.0),
+                **feat_map,
+            }
+        )
+
+    return {
+        "split": str(diag_payload.get("split", "")),
+        "feature_mode": str(diag_payload.get("feature_mode", "")),
+        "stages": stages,
+    }
+
+
+def _diag_overview_markdown(overview: dict) -> str:
+    rows = list(overview.get("stages", []) or [])
+    lines = [
+        "# Diagnostic Overview",
+        "",
+        f"- split: {overview.get('split', '')}",
+        f"- feature_mode: {overview.get('feature_mode', '')}",
+        "",
+        "## Base Metrics",
+        "",
+        "| stage | n_eff | cv_usage | top1_max | entropy | jitter_adj |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            "| {stage} | {n_eff:.4f} | {cv_usage:.4f} | {top1_max_frac:.4f} | {entropy_mean:.4f} | {route_jitter_adjacent:.4f} |".format(
+                **row
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## KNN Core",
+            "",
+            "| stage | knn_js | knn_score | group_knn_js | group_knn_score | intra_group_knn_mean_js | intra_group_knn_mean_score |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in rows:
+        lines.append(
+            "| {stage} | {route_consistency_knn_js:.4f} | {route_consistency_knn_score:.4f} | {route_consistency_group_knn_js:.4f} | {route_consistency_group_knn_score:.4f} | {route_consistency_intra_group_knn_mean_js:.4f} | {route_consistency_intra_group_knn_mean_score:.4f} |".format(
+                **row
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## Feature-Group KNN",
+            "",
+            "| stage | tempo_knn_js | tempo_knn_score | focus_knn_js | focus_knn_score | memory_knn_js | memory_knn_score | exposure_knn_js | exposure_knn_score | family_top_share |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in rows:
+        lines.append(
+            "| {stage} | {route_consistency_feature_group_knn_tempo_js:.4f} | {route_consistency_feature_group_knn_tempo_score:.4f} | {route_consistency_feature_group_knn_focus_js:.4f} | {route_consistency_feature_group_knn_focus_score:.4f} | {route_consistency_feature_group_knn_memory_js:.4f} | {route_consistency_feature_group_knn_memory_score:.4f} | {route_consistency_feature_group_knn_exposure_js:.4f} | {route_consistency_feature_group_knn_exposure_score:.4f} | {family_top_expert_mean_share:.4f} |".format(
+                **row
+            )
+        )
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _top1_share_from_diag(diag_payload: dict | None) -> dict[str, list[float]]:
@@ -1680,9 +2070,17 @@ def _collect_feature_ablation_metrics(
 def _build_eval_runtime(cfg_dict: dict):
     cfg = copy.deepcopy(cfg_dict)
     cfg["log_wandb"] = False
-    model_name = str(cfg.get("model", "")).lower()
+    model_name = _normalize_model_name(cfg.get("model", ""))
     if model_name in _FEATURE_AWARE_MOE_MODELS and "fmoe_special_logging" not in cfg:
         cfg["fmoe_special_logging"] = True
+    if model_name in _FEATURE_AWARE_MOE_MODELS and "fmoe_diag_logging" not in cfg:
+        cfg["fmoe_diag_logging"] = True
+    if (
+        model_name in _FEATURE_AWARE_MOE_MODELS
+        and "fmoe_feature_ablation_logging" not in cfg
+        and _model_uses_feature_inputs(cfg)
+    ):
+        cfg["fmoe_feature_ablation_logging"] = bool(cfg.get("fmoe_special_logging", True) and cfg.get("fmoe_diag_logging", True))
     cfg["show_progress"] = bool(cfg.get("show_progress", True))
     for drop in ("search", "search_stages", "search_strategy", "max_search"):
         cfg.pop(drop, None)
@@ -1750,7 +2148,7 @@ def _collect_deferred_combo_best_artifacts(
     runtime = _build_eval_runtime(cfg_trial)
     cfg_eval, config, dataset, train_data, valid_data, test_data, model, trainer = runtime
     show_progress = bool(cfg_eval.get("show_progress", True))
-    model_name = str(cfg_eval.get("model", "")).lower()
+    model_name = _normalize_model_name(cfg_eval.get("model", ""))
     special_logging_enabled = model_name in _FEATURE_AWARE_MOE_MODELS and bool(
         _config_get(config, "fmoe_special_logging", cfg_eval.get("fmoe_special_logging", True))
     )
@@ -1868,9 +2266,17 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     """Train one configuration.  Returns best-validation MRR@20 and metrics."""
     cfg = copy.deepcopy(cfg_dict)
     cfg["log_wandb"] = False
-    model_name = str(cfg.get("model", "")).lower()
+    model_name = _normalize_model_name(cfg.get("model", ""))
     if model_name in _FEATURE_AWARE_MOE_MODELS and "fmoe_special_logging" not in cfg:
         cfg["fmoe_special_logging"] = True
+    if model_name in _FEATURE_AWARE_MOE_MODELS and "fmoe_diag_logging" not in cfg:
+        cfg["fmoe_diag_logging"] = True
+    if (
+        model_name in _FEATURE_AWARE_MOE_MODELS
+        and "fmoe_feature_ablation_logging" not in cfg
+        and _model_uses_feature_inputs(cfg)
+    ):
+        cfg["fmoe_feature_ablation_logging"] = bool(cfg.get("fmoe_special_logging", True) and cfg.get("fmoe_diag_logging", True))
     trial_epoch_log = bool(cfg.get("trial_epoch_log", False))
     cfg["show_progress"] = bool(cfg.get("show_progress", True)) and trial_epoch_log
     for drop in ("search", "search_stages", "search_strategy", "max_search"):
@@ -2270,7 +2676,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
 
         fmoe_arch = {}
         try:
-            model_name = str(cfg.get("model", "")).lower()
+            model_name = _normalize_model_name(cfg.get("model", ""))
             if model_name in _FEATURE_AWARE_MOE_MODELS:
                 fmoe_arch = _extract_featured_moe_arch(model, cfg)
         except Exception:
@@ -2446,10 +2852,12 @@ def _save_results(
     data["special_log_file"] = str(mirror_paths["special_log"].resolve()) if special_payload else ""
 
     _write_json_file(path, data)
-    _write_json_file(mirror_paths["normal_result"], data)
+    if mirror_paths["normal_result"].resolve() != path.resolve():
+        _write_json_file(mirror_paths["normal_result"], data)
     if special_payload is not None:
         _write_json_file(mirror_paths["special_result"], special_payload)
-        _write_json_file(mirror_paths["special_log"], special_payload)
+        if mirror_paths["special_log"].resolve() != mirror_paths["special_result"].resolve():
+            _write_json_file(mirror_paths["special_log"], special_payload)
 
     diag_paths = _diag_artifact_paths(path, dataset_canonical, model, run_group, run_axis, run_phase)
     trial_summary_rows = []
@@ -2475,32 +2883,96 @@ def _save_results(
         for trial in normalized_trials
     )
 
+    unified_layout = _use_unified_logging_layout()
+
     if has_any_diag and trial_summary_rows:
         _write_csv_file(diag_paths["trial_summary"], trial_summary_rows)
     if has_any_diag and epoch_trace_rows:
-        _write_csv_gz_file(diag_paths["epoch_trace"], epoch_trace_rows)
+        if unified_layout:
+            _write_csv_file(diag_paths["epoch_trace"], epoch_trace_rows)
+        else:
+            _write_csv_gz_file(diag_paths["epoch_trace"], epoch_trace_rows)
 
     if ok:
         collapse_row = min(ok, key=lambda x: float(x.get("mrr@20", 0.0) or 0.0))
         if bt.get("valid_diag"):
-            _write_json_gz_file(diag_paths["best_valid_diag"], bt.get("valid_diag") or {})
+            if unified_layout:
+                _write_json_file(diag_paths["best_valid_diag"], bt.get("valid_diag") or {})
+            else:
+                _write_json_gz_file(diag_paths["best_valid_diag"], bt.get("valid_diag") or {})
+            overview_payload = _build_diag_overview_payload(bt.get("valid_diag") or {})
+            _write_json_file(diag_paths["best_valid_overview"], overview_payload)
+            diag_paths["best_valid_overview_md"].write_text(
+                _diag_overview_markdown(overview_payload),
+                encoding="utf-8",
+            )
         if bt.get("early_valid_diag"):
-            _write_json_gz_file(diag_paths["early_valid_diag"], bt.get("early_valid_diag") or {})
+            if unified_layout:
+                _write_json_file(diag_paths["early_valid_diag"], bt.get("early_valid_diag") or {})
+            else:
+                _write_json_gz_file(diag_paths["early_valid_diag"], bt.get("early_valid_diag") or {})
         if bt.get("test_diag"):
-            _write_json_gz_file(diag_paths["test_diag"], bt.get("test_diag") or {})
+            if unified_layout:
+                _write_json_file(diag_paths["test_diag"], bt.get("test_diag") or {})
+            else:
+                _write_json_gz_file(diag_paths["test_diag"], bt.get("test_diag") or {})
         if collapse_row.get("valid_diag"):
             collapse_payload = copy.deepcopy(collapse_row.get("valid_diag") or {})
             if collapse_row.get("feature_ablation_metrics"):
                 collapse_payload["feature_ablation"] = collapse_row.get("feature_ablation_metrics") or {}
-            _write_json_gz_file(diag_paths["collapse_diag"], collapse_payload)
+            if unified_layout:
+                _write_json_file(diag_paths["collapse_diag"], collapse_payload)
+            else:
+                _write_json_gz_file(diag_paths["collapse_diag"], collapse_payload)
+
+    feature_ablation_path = ""
+    if ok and bt.get("feature_ablation_metrics"):
+        if unified_layout:
+            p = path.parent / "feature_ablation.json"
+            _write_json_file(
+                p,
+                {
+                    "best_trial": int(bt.get("trial", 0) or 0),
+                    "mrr@20": _ser(bt.get("mrr@20", 0.0)),
+                    "feature_ablation_metrics": bt.get("feature_ablation_metrics") or {},
+                },
+            )
+            feature_ablation_path = str(p.resolve())
+        else:
+            p = diag_paths["trial_summary"].parent / "feature_ablation.json"
+            _write_json_file(
+                p,
+                {
+                    "best_trial": int(bt.get("trial", 0) or 0),
+                    "mrr@20": _ser(bt.get("mrr@20", 0.0)),
+                    "feature_ablation_metrics": bt.get("feature_ablation_metrics") or {},
+                },
+            )
+            feature_ablation_path = str(p.resolve())
     data["diag_trial_summary_file"] = str(diag_paths["trial_summary"].resolve()) if has_any_diag and trial_summary_rows else ""
     data["diag_best_valid_file"] = str(diag_paths["best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else ""
+    data["diag_best_valid_overview_file"] = str(diag_paths["best_valid_overview"].resolve()) if ok and bt.get("valid_diag") else ""
+    data["diag_best_valid_overview_md_file"] = str(diag_paths["best_valid_overview_md"].resolve()) if ok and bt.get("valid_diag") else ""
     data["diag_early_valid_file"] = str(diag_paths["early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else ""
     data["diag_test_file"] = str(diag_paths["test_diag"].resolve()) if ok and bt.get("test_diag") else ""
     data["diag_collapse_file"] = str(diag_paths["collapse_diag"].resolve()) if ok and collapse_row.get("valid_diag") else ""
     data["diag_epoch_trace_file"] = str(diag_paths["epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else ""
+    data["feature_ablation_file"] = feature_ablation_path
+
+    bundle_payload = _write_logging_bundle(
+        result_path=path,
+        data_payload=data,
+        model=model,
+        dataset=dataset,
+        run_group=run_group,
+        run_phase=run_phase,
+    )
+    data["logging_bundle_dir"] = bundle_payload.get("bundle_dir", "")
+    data["logging_bundle_summary_file"] = bundle_payload.get("run_summary_json", "")
+
     _write_json_file(path, data)
-    _write_json_file(mirror_paths["normal_result"], data)
+    if mirror_paths["normal_result"].resolve() != path.resolve():
+        _write_json_file(mirror_paths["normal_result"], data)
     return {
         "result_file": str(path.resolve()),
         "normal_result_mirror_file": str(mirror_paths["normal_result"].resolve()),
@@ -2508,10 +2980,17 @@ def _save_results(
         "special_log_file": str(mirror_paths["special_log"].resolve()) if special_payload else "",
         "diag_trial_summary_file": str(diag_paths["trial_summary"].resolve()) if has_any_diag and trial_summary_rows else "",
         "diag_best_valid_file": str(diag_paths["best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else "",
+        "diag_best_valid_overview_file": str(diag_paths["best_valid_overview"].resolve()) if ok and bt.get("valid_diag") else "",
+        "diag_best_valid_overview_md_file": str(diag_paths["best_valid_overview_md"].resolve()) if ok and bt.get("valid_diag") else "",
         "diag_early_valid_file": str(diag_paths["early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else "",
         "diag_test_file": str(diag_paths["test_diag"].resolve()) if ok and bt.get("test_diag") else "",
         "diag_collapse_file": str(diag_paths["collapse_diag"].resolve()) if ok and collapse_row.get("valid_diag") else "",
         "diag_epoch_trace_file": str(diag_paths["epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else "",
+        "feature_ablation_file": feature_ablation_path,
+        "logging_bundle_dir": bundle_payload.get("bundle_dir", ""),
+        "logging_bundle_summary_file": bundle_payload.get("run_summary_json", ""),
+        "logging_bundle_summary_md_file": bundle_payload.get("run_summary_md", ""),
+        "logging_bundle_diag_table_file": bundle_payload.get("diag_overview_table_csv", ""),
     }
 
 
@@ -3041,17 +3520,28 @@ def main():
         safe_group = re.sub(r"[^a-z0-9._-]+", "_", run_group).strip("._-")
         if safe_group:
             results_dir = results_dir / safe_group
-    results_dir.mkdir(parents=True, exist_ok=True)
+    run_axis = str(args.run_axis or "").strip().lower()
+    run_phase = str(args.run_phase or "").strip()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    phase_for_file = str(args.run_phase or "").strip().lower()
-    phase_slug = re.sub(r"[^a-z0-9._-]+", "_", phase_for_file).strip("._-")
-    if phase_slug:
-        phase_slug = phase_slug[:80]
-    file_parts = [dataset_canonical, model]
-    if phase_slug:
-        file_parts.append(phase_slug)
-    file_parts.extend([ts, f"pid{os.getpid()}"])
-    result_file = results_dir / ("_".join(file_parts) + ".json")
+    if _use_unified_logging_layout():
+        phase_bucket = _phase_bucket(run_phase)
+        dataset_bucket = _safe_slug(dataset_canonical)
+        model_bucket = _safe_slug(run_group or _model_tag(model) or "model")
+        run_folder = f"{_safe_slug(run_phase or 'phase')}_{ts}_pid{os.getpid()}"
+        results_dir = _logging_root() / model_bucket / dataset_bucket / phase_bucket / run_folder
+    results_dir.mkdir(parents=True, exist_ok=True)
+    if _use_unified_logging_layout():
+        result_file = results_dir / "result.json"
+    else:
+        phase_for_file = str(args.run_phase or "").strip().lower()
+        phase_slug = re.sub(r"[^a-z0-9._-]+", "_", phase_for_file).strip("._-")
+        if phase_slug:
+            phase_slug = phase_slug[:80]
+        file_parts = [dataset_canonical, model]
+        if phase_slug:
+            file_parts.append(phase_slug)
+        file_parts.extend([ts, f"pid{os.getpid()}"])
+        result_file = results_dir / ("_".join(file_parts) + ".json")
 
     trials = Trials()
     all_trials_data: list[dict] = []
@@ -3060,8 +3550,6 @@ def main():
     tuned_search_ser = {k: _ser(v) for k, v in tuned_search.items()}
     fixed_search_ser = {k: _ser(v) for k, v in fixed_search.items()}
     context_fixed_ser = {k: _ser(v) for k, v in context_fixed.items()}
-    run_axis = str(args.run_axis or "").strip().lower()
-    run_phase = str(args.run_phase or "").strip()
     parent_result = str(args.parent_result or "").strip()
     interrupted = False
     interrupted_at = None
@@ -3074,7 +3562,7 @@ def main():
     artifact_logging_policy = str(cfg.get("fmoe_artifact_logging_policy", "combo_best") or "combo_best").strip().lower()
     if artifact_logging_policy not in {"per_trial", "combo_best"}:
         artifact_logging_policy = "combo_best"
-    defer_detailed_artifacts = bool(str(model).strip().lower() in _FEATURE_AWARE_MOE_MODELS and artifact_logging_policy != "per_trial")
+    defer_detailed_artifacts = bool(_normalize_model_name(model) in _FEATURE_AWARE_MOE_MODELS and artifact_logging_policy != "per_trial")
     combo_best_artifact_state = {
         "trial": None,
         "mrr20": float("-inf"),

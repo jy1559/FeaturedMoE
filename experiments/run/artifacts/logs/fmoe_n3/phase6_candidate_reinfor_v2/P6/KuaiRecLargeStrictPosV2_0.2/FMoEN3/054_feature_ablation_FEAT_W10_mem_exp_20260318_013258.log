@@ -1,0 +1,26 @@
+[PHASE6_COMBO_HEADER]
+run_phase=P6_FEAT_W10_MEM_EXP category=feature_ablation combo=FEAT_W10_mem_exp desc=feature_mask_10_Memory,Exposure
+dataset=KuaiRecLargeStrictPosV2_0.2 gpu=5 order=54
+max_evals=5 tune_epochs=100 tune_patience=10
+seed=16419
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 5 --tune-epochs 100 --tune-patience 10 --seed 16419 --run-group fmoe_n3 --run-axis phase6_candidate_reinfor_v2 --run-phase P6_FEAT_W10_MEM_EXP model=featured_moe_n3_tune dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session feature_mode=full_v3 gpu_id=5 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_phase="P6" MAX_ITEM_LIST_LENGTH=20 train_batch_size=4096 eval_batch_size=4096 embedding_size=128 num_heads=4 attn_dropout_prob=0.1 d_ff=256 d_feat_emb=16 d_expert_hidden=128 d_router_hidden=64 expert_scale=3 ++layer_layout=["macro","mid","micro"] ++search.learning_rate=[0.0002,0.002] ++search.weight_decay=[1e-07,1e-06,1e-05,5e-05] ++search.hidden_dropout_prob=[0.1,0.15,0.2] ++search.lr_scheduler_type=["warmup_cosine"] ++search_space_type_overrides.learning_rate=loguniform ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice ++p6_category="feature_ablation" ++p6_combo_id="FEAT_W10_mem_exp" ++p6_combo_desc="feature_mask_10_Memory,Exposure" ++stage_router_type={macro:"factored",mid:"factored",micro:"factored"} ++stage_feature_injection={macro:"group_gated_bias",mid:"group_gated_bias",micro:"group_gated_bias"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_residual_mode={macro:"base",mid:"base",micro:"base"} ++topk_scope_mode="group_dense" moe_top_k=0 balance_loss_lambda=0.002 z_loss_lambda=0.0001 route_smoothness_lambda=0.01 group_prior_align_lambda=0.0005 factored_group_balance_lambda=0.001 route_consistency_lambda=0.0 route_prior_lambda=0.0 macro_history_window=10 ++stage_feature_family_mask={macro:["Memory","Exposure"],mid:["Memory","Exposure"],micro:["Memory","Exposure"]}
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=295301 ts=2026-03-18T01:33:01
+[ERROR] model precheck failed for model=FeaturedMoE_N3: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+[HINT] check custom model imports under experiments/models and recbole_patch.py
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3991, in <module>
+    main()
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3412, in main
+    _ = get_model(model)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 159, in _patched_get_model
+    raise e
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 153, in _patched_get_model
+    return _original_get_model(model_name)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/utils/utils.py", line 81, in get_model
+    raise ValueError(
+ValueError: `model_name` [FeaturedMoE_N3] is not the name of an existing model.
+[RUN_STATUS] END status=normal pid=295301 start=2026-03-18T01:33:01 end=2026-03-18T01:33:02
