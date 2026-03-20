@@ -95,6 +95,22 @@ def _parse_stage_float_map(raw_value, *, default_value: float) -> Dict[str, floa
     return out
 
 
+def _parse_stage_nested_map(raw_value, *, default_value: Optional[dict] = None) -> Dict[str, dict]:
+    base_default = dict(default_value or {})
+    out = {stage: copy.deepcopy(base_default) for stage in STAGE_NAMES}
+    if raw_value is None or not isinstance(raw_value, dict):
+        return out
+    global_default = raw_value.get("_default")
+    if isinstance(global_default, dict):
+        for stage in STAGE_NAMES:
+            out[stage] = copy.deepcopy(global_default)
+    for stage in STAGE_NAMES:
+        value = raw_value.get(stage, raw_value.get(stage.capitalize(), None))
+        if isinstance(value, dict):
+            out[stage] = copy.deepcopy(value)
+    return out
+
+
 class FeaturedMoE_N3(FeaturedMoE_N):
     """N3 branch with explicit layer_layout and stage-wise controls."""
 
@@ -151,25 +167,13 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             resolver.get("stage_feature_injection", None),
             default_value="none",
         )
-        self.stage_router_type = _parse_stage_str_map(
-            resolver.get("stage_router_type", None),
-            default_value="standard",
+        self.stage_router_wrapper = _parse_stage_str_map(
+            resolver.get("stage_router_wrapper", None),
+            default_value="w1_flat",
         )
-        self.stage_factored_group_router_source = _parse_stage_str_map(
-            resolver.get("stage_factored_group_router_source", None),
-            default_value="feature",
-        )
-        self.stage_factored_group_logit_scale = _parse_stage_float_map(
-            resolver.get("stage_factored_group_logit_scale", None),
-            default_value=1.0,
-        )
-        self.stage_factored_intra_logit_scale = _parse_stage_float_map(
-            resolver.get("stage_factored_intra_logit_scale", None),
-            default_value=1.0,
-        )
-        self.stage_factored_combine_mode = _parse_stage_str_map(
-            resolver.get("stage_factored_combine_mode", None),
-            default_value="add",
+        self.stage_router_primitives = _parse_stage_nested_map(
+            resolver.get("stage_router_primitives", None),
+            default_value={},
         )
         self.stage_residual_mode = _parse_stage_str_map(
             resolver.get("stage_residual_mode", None),
@@ -297,11 +301,8 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             rule_bias_scale=self.rule_bias_scale,
             feature_group_bias_lambda=self.feature_group_bias_lambda,
             feature_group_prior_temperature=self.feature_group_prior_temperature,
-            stage_router_type=self.stage_router_type,
-            stage_factored_group_router_source=self.stage_factored_group_router_source,
-            stage_factored_group_logit_scale=self.stage_factored_group_logit_scale,
-            stage_factored_intra_logit_scale=self.stage_factored_intra_logit_scale,
-            stage_factored_combine_mode=self.stage_factored_combine_mode,
+            stage_router_wrapper=self.stage_router_wrapper,
+            stage_router_primitives=self.stage_router_primitives,
             mid_router_temperature=self.mid_router_temperature,
             micro_router_temperature=self.micro_router_temperature,
             dense_hidden_scale=self.dense_hidden_scale,
@@ -340,11 +341,8 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "stage_router_mode": dict(self.stage_router_mode),
             "stage_router_source": dict(self.stage_router_source),
             "stage_feature_injection": dict(self.stage_feature_injection),
-            "stage_router_type": dict(self.stage_router_type),
-            "stage_factored_group_router_source": dict(self.stage_factored_group_router_source),
-            "stage_factored_group_logit_scale": dict(self.stage_factored_group_logit_scale),
-            "stage_factored_intra_logit_scale": dict(self.stage_factored_intra_logit_scale),
-            "stage_factored_combine_mode": dict(self.stage_factored_combine_mode),
+            "stage_router_wrapper": dict(self.stage_router_wrapper),
+            "stage_router_primitives": dict(self.stage_router_primitives),
             "stage_residual_mode": dict(self.stage_residual_mode),
             "residual_alpha_fixed": dict(self.residual_alpha_fixed),
             "residual_alpha_init": dict(self.residual_alpha_init),
@@ -500,7 +498,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
     def _compute_rule_agreement_loss(
         self,
         gate_logits: Dict[str, torch.Tensor],
-        router_aux: Dict[str, Dict[str, torch.Tensor]],
+        router_aux: Dict[str, Dict[str, object]],
         item_seq_len: torch.Tensor,
     ) -> torch.Tensor:
         target_map = dict((router_aux or {}).get("rule_target_logits", {}) or {})
@@ -521,7 +519,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
 
     def _compute_group_coverage_reward(
         self,
-        router_aux: Dict[str, Dict[str, torch.Tensor]],
+        router_aux: Dict[str, Dict[str, object]],
         item_seq_len: torch.Tensor,
     ) -> torch.Tensor:
         group_map = dict((router_aux or {}).get("group_weights", {}) or {})
@@ -541,7 +539,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
 
     def _compute_group_prior_alignment_loss(
         self,
-        router_aux: Dict[str, Dict[str, torch.Tensor]],
+        router_aux: Dict[str, Dict[str, object]],
         item_seq_len: torch.Tensor,
     ) -> torch.Tensor:
         group_map = dict((router_aux or {}).get("group_weights", {}) or {})
@@ -567,7 +565,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
 
     def _compute_factored_group_balance_loss(
         self,
-        router_aux: Dict[str, Dict[str, torch.Tensor]],
+        router_aux: Dict[str, Dict[str, object]],
         item_seq_len: torch.Tensor,
     ) -> torch.Tensor:
         """Load balance loss applied to factored group router logits.
@@ -767,7 +765,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
 
         gate_weights: Dict[str, torch.Tensor] = {}
         gate_logits: Dict[str, torch.Tensor] = {}
-        router_aux: Dict[str, Dict[str, torch.Tensor]] = {}
+        router_aux: Dict[str, Dict[str, object]] = {}
         dense_aux: Dict[str, Dict[str, torch.Tensor]] = {}
         stage_merge_weights = None
         stage_merge_logits = None

@@ -5,9 +5,9 @@
 - run_group: baseline
 - run_axis: hparam
 - run_phase: P2_MORE_SEARCH_M02_PATT_C10
-- best_mrr@20: 0.0733
-- test_mrr@20: 0.1524
-- test_hr@10: 0.1748
+- best_mrr@20: 0.0766
+- test_mrr@20: 0.1554
+- test_hr@10: 0.1772
 
 ## Artifacts
 

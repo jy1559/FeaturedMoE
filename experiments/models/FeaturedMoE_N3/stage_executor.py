@@ -64,11 +64,8 @@ class StageExecutorN3(nn.Module):
         rule_bias_scale: float,
         feature_group_bias_lambda: float,
         feature_group_prior_temperature: float,
-        stage_router_type: Dict[str, str],
-        stage_factored_group_router_source: Dict[str, str],
-        stage_factored_group_logit_scale: Dict[str, float],
-        stage_factored_intra_logit_scale: Dict[str, float],
-        stage_factored_combine_mode: Dict[str, str],
+        stage_router_wrapper: Dict[str, str],
+        stage_router_primitives: Dict[str, Dict[str, object]],
         mid_router_temperature: float,
         micro_router_temperature: float,
         dense_hidden_scale: float,
@@ -139,13 +136,8 @@ class StageExecutorN3(nn.Module):
                     rule_bias_scale=float(rule_bias_scale),
                     feature_group_bias_lambda=float(feature_group_bias_lambda),
                     feature_group_prior_temperature=float(feature_group_prior_temperature),
-                    stage_router_type=str(stage_router_type.get(stage_name, "standard")),
-                    stage_factored_group_router_source=str(
-                        stage_factored_group_router_source.get(stage_name, "feature")
-                    ),
-                    factored_group_logit_scale=float(stage_factored_group_logit_scale.get(stage_name, 1.0)),
-                    factored_intra_logit_scale=float(stage_factored_intra_logit_scale.get(stage_name, 1.0)),
-                    stage_factored_combine_mode=str(stage_factored_combine_mode.get(stage_name, "add")),
+                    stage_router_wrapper=str(stage_router_wrapper.get(stage_name, "w1_flat")),
+                    stage_router_primitives=dict(stage_router_primitives.get(stage_name, {}) or {}),
                     router_temperature=router_temperature,
                     dense_hidden_scale=float(dense_hidden_scale),
                     stage_residual_mode=str(stage_residual_mode.get(stage_name, "base")),
@@ -282,7 +274,7 @@ class StageExecutorN3(nn.Module):
         torch.Tensor,
         Dict[str, torch.Tensor],
         Dict[str, torch.Tensor],
-        Dict[str, Dict[str, torch.Tensor]],
+        Dict[str, Dict[str, object]],
         Dict[str, Dict[str, torch.Tensor]],
         Optional[torch.Tensor],
         Optional[torch.Tensor],
@@ -290,7 +282,7 @@ class StageExecutorN3(nn.Module):
         out = hidden
         gate_weights: Dict[str, torch.Tensor] = {}
         gate_logits: Dict[str, torch.Tensor] = {}
-        router_aux: Dict[str, Dict[str, torch.Tensor]] = {}
+        router_aux: Dict[str, Dict[str, object]] = {}
         dense_aux: Dict[str, Dict[str, torch.Tensor]] = {}
 
         for op in self.compiled_ops:

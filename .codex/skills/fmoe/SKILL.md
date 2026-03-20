@@ -8,6 +8,20 @@ description: FMoE-first sequential recommendation experiment operation and impro
 ## Overview
 순차 추천 실험을 FMoE 중심으로 운영하고, 결과를 집계해 다음 실험안을 제안한다. 기본 루프는 ML1M 앵커 최적화 후 RetailRocket 전이이며, MRR@20 단일 best score를 채택 기준으로 사용한다.
 
+## KuaiRec N3 Canonical Handoff
+- KuaiRec `FeaturedMoE_N3` 총정리는 아래 문서를 **우선 참조**한다.
+  - `experiments/run/fmoe_n3/docs/FMOE_N3_KuaiRec_Strict_Master_Handoff.md`
+- 사용 목적:
+  - 신규 모델/에이전트 온보딩
+  - 다음 phase 실험 설계
+  - 논문 초안 작성(핵심 주장, 반례, 대안 가설 정리)
+- 갱신 트리거:
+  - phase 종료 후(예: P8 완료)
+  - major finding 발생 시(예: best/test 역전, cold slice 급변, diag 해석 전환)
+- 권장 워크플로우:
+  - 먼저 handoff 문서의 `Observed fact`와 `Interpretation`을 분리해서 읽는다.
+  - 이후 필요한 원본은 문서의 Appendix source map 경로로 역추적한다.
+
 ## Quick Start
 1. Dry-run으로 실행 파이프라인 확인.
 ```bash

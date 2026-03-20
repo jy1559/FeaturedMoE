@@ -1,0 +1,39 @@
+[LFM_ALLINONE_HEADER]
+phase=P0 run_phase=P0_AN_L_expert_scale_suite_ES_4 category=expert_scale_suite suite=expert_scale_suite variant=ES_4
+anchor=AN_L router_variant=inherit d_feat_emb=16 lr_range=[5e-05, 0.004]
+dataset=lastfm0.03 gpu=4 order=9
+max_evals=10 tune_epochs=100 tune_patience=10
+seed=22096
+axis_tags=["expert_scale_suite", "ES_4", "AN_L"]
+
+[ANCHOR_FIXED]
+embedding_size=192 d_ff=384 d_router_hidden=128 d_expert_hidden=256 expert_scale=4
+weight_decay=1e-05 hidden_dropout_prob=0.2 attn_dropout_prob=0.15
+
+[SEARCH_POLICY]
+learning_rate=loguniform[5e-05, 0.004], others=fixed
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 10 --tune-epochs 100 --tune-patience 10 --seed 22096 --run-group fmoe_n3 --run-axis phase_lfm_allinone_v1 --run-phase P0_AN_L_expert_scale_suite_ES_4 model=featured_moe_n3_tune dataset=lastfm0.03 eval_mode=session feature_mode=full_v3 gpu_id=4 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_artifact_logging_policy=final_only fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_phase="P0" ++lfm_aio_anchor_id="AN_L" ++lfm_aio_suite_id="expert_scale_suite" ++lfm_aio_variant_id="ES_4" ++lfm_aio_router_variant="inherit" ++lfm_aio_axis_tags=["expert_scale_suite","ES_4","AN_L"] MAX_ITEM_LIST_LENGTH=20 train_batch_size=2048 eval_batch_size=4096 embedding_size=192 num_heads=4 d_ff=384 d_feat_emb=16 d_router_hidden=128 d_expert_hidden=256 expert_scale=4 hidden_dropout_prob=0.2 attn_dropout_prob=0.15 ++weight_decay=1e-05 ++layer_layout=["macro","mid","micro"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_type={macro:"standard",mid:"standard",micro:"standard"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_encoder_mode={macro:"linear",mid:"linear",micro:"linear"} ++stage_feature_injection={macro:"gated_bias",mid:"gated_bias",micro:"gated_bias"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_feature_family_mask={} ++stage_residual_mode={macro:"base",mid:"base",micro:"base"} ++macro_history_window=5 ++topk_scope_mode="global_flat" ++moe_top_k=0 ++moe_top_k_ratio=0.5 ++moe_top_k_policy="auto" ++balance_loss_lambda=0.002 ++z_loss_lambda=0.0001 ++route_smoothness_lambda=0.01 ++route_consistency_lambda=0.0 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++lr_scheduler_type="warmup_cosine" ++lr_scheduler_warmup_ratio=0.1 ++lr_scheduler_min_lr_ratio=0.1 ++lr_scheduler_plateau_factor=0.5 ++lr_scheduler_plateau_patience=3 ++search.learning_rate=[5e-05,0.004] ++search_space_type_overrides.learning_rate=loguniform
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=129595 ts=2026-03-20T04:25:29
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x lastfm0.03
+  max_evals=10  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=2048/4096/4096
+  track=fmoe_n3  axis=phase_lfm_allinone_v1  phase=P0_AN_L_expert_scale_suite_ES_4
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [5e-05, 0.004]                            -> loguniform
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] learning_rate=6.187e-05
