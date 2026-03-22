@@ -15,9 +15,10 @@ TUNE_PATIENCE="10"
 SEED_BASE="58000"
 FEATURE_GROUP_BIAS_LAMBDA="0.05"
 RULE_BIAS_SCALE="0.1"
-ONLY_BASE=""
-WINNER_MAP_JSON=""
-ALLOW_FALLBACK_WINNER="false"
+ONLY_CANDIDATE=""
+CANDIDATE_MAP_JSON=""
+SOURCE_MIN_COMPLETED="20"
+ALLOW_PARTIAL_SOURCE="false"
 MANIFEST_OUT=""
 RESUME_FROM_LOGS="true"
 DRY_RUN="${DRY_RUN:-false}"
@@ -30,8 +31,8 @@ Usage: $0 [--datasets KuaiRecLargeStrictPosV2_0.2,lastfm0.03] [--gpus 4,5,6,7]
           [--seeds 1,2,3,4] [--max-evals 10] [--tune-epochs 100] [--tune-patience 10]
           [--seed-base 58000]
           [--feature-group-bias-lambda 0.05] [--rule-bias-scale 0.1]
-          [--only-base B1,B2]
-          [--winner-map-json path] [--allow-fallback-winner]
+          [--only-candidate K1,K2] [--candidate-map-json path]
+          [--source-min-completed 20] [--allow-partial-source]
           [--resume-from-logs|--no-resume-from-logs]
           [--manifest-out path] [--dry-run] [--smoke-test] [--smoke-max-runs 4]
 USAGE
@@ -75,16 +76,20 @@ while [ $# -gt 0 ]; do
       RULE_BIAS_SCALE="$2"
       shift 2
       ;;
-    --only-base)
-      ONLY_BASE="$2"
+    --only-candidate)
+      ONLY_CANDIDATE="$2"
       shift 2
       ;;
-    --winner-map-json)
-      WINNER_MAP_JSON="$2"
+    --candidate-map-json)
+      CANDIDATE_MAP_JSON="$2"
       shift 2
       ;;
-    --allow-fallback-winner)
-      ALLOW_FALLBACK_WINNER="true"
+    --source-min-completed)
+      SOURCE_MIN_COMPLETED="$2"
+      shift 2
+      ;;
+    --allow-partial-source)
+      ALLOW_PARTIAL_SOURCE="true"
       shift
       ;;
     --manifest-out)
@@ -150,17 +155,18 @@ for DATASET in "${DATASET_LIST[@]}"; do
     --seed-base "${CUR_SEED_BASE}"
     --feature-group-bias-lambda "${FEATURE_GROUP_BIAS_LAMBDA}"
     --rule-bias-scale "${RULE_BIAS_SCALE}"
+    --source-min-completed "${SOURCE_MIN_COMPLETED}"
     --smoke-max-runs "${SMOKE_MAX_RUNS}"
   )
 
-  if [ -n "${ONLY_BASE}" ]; then
-    CMD+=(--only-base "${ONLY_BASE}")
+  if [ -n "${ONLY_CANDIDATE}" ]; then
+    CMD+=(--only-candidate "${ONLY_CANDIDATE}")
   fi
-  if [ -n "${WINNER_MAP_JSON}" ]; then
-    CMD+=(--winner-map-json "${WINNER_MAP_JSON}")
+  if [ -n "${CANDIDATE_MAP_JSON}" ]; then
+    CMD+=(--candidate-map-json "${CANDIDATE_MAP_JSON}")
   fi
-  if [ "${ALLOW_FALLBACK_WINNER}" = "true" ]; then
-    CMD+=(--allow-fallback-winner)
+  if [ "${ALLOW_PARTIAL_SOURCE}" = "true" ]; then
+    CMD+=(--allow-partial-source)
   fi
   if [ -n "${MANIFEST_OUT}" ]; then
     CMD+=(--manifest-out "${MANIFEST_OUT}_${DATASET}")

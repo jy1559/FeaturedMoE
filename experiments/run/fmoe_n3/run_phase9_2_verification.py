@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch FeaturedMoE_N3 Phase9_2 verification runs (4 winners x 4 hparams x 4 seeds)."""
+"""Launch FeaturedMoE_N3 Phase9_2 verification runs (4 candidates x 4 hparams x 4 seeds)."""
 
 from __future__ import annotations
 
@@ -8,12 +8,13 @@ import copy
 import csv
 import json
 import os
+import re
 import subprocess
 import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from run_phase9_auxloss import (  # noqa: E402
     ARTIFACT_ROOT,
@@ -37,8 +38,20 @@ from run_phase9_auxloss import (  # noqa: E402
     hydra_literal,
 )
 
-AXIS = "phase9_2_verification_v1"
+AXIS = "phase9_2_verification_v2"
 PHASE = "P9_2"
+
+CONCEPT_ORDER = ("C0", "C1", "C2", "C3")
+DEFAULT_CANDIDATE_RUN_PHASES: Dict[str, str] = {
+    # C0 winner (best_valid top in Natural)
+    "K1": "P9_B4_C0_N4_S1",
+    # C1 winner (best_valid top in CanonicalBalance)
+    "K2": "P9_B3_C1_B1_S1",
+    # C2 winner (best_valid top in Specialization)
+    "K3": "P9_B1_C2_S3_S1",
+    # C3 winner (best_valid top in FeatureAlignment)
+    "K4": "P9_B2_C3_F2_S1",
+}
 
 
 def _hparam_variants() -> Dict[str, Dict[str, float]]:
@@ -80,9 +93,9 @@ def _hparam_variants() -> Dict[str, Dict[str, float]]:
 
 def _profile_lookup() -> Dict[str, Dict[str, Any]]:
     out: Dict[str, Dict[str, Any]] = {}
-    for p in _aux_profiles():
-        key = f"{str(p['concept_id']).upper()}_{str(p['combo_id']).upper()}"
-        out[key] = p
+    for profile in _aux_profiles():
+        key = f"{str(profile['concept_id']).upper()}_{str(profile['combo_id']).upper()}"
+        out[key] = profile
     return out
 
 
@@ -105,11 +118,13 @@ def _summary_fieldnames() -> list[str]:
         "run_phase",
         "run_id",
         "dataset",
+        "candidate_id",
+        "source_run_phase",
         "base_id",
-        "winner_concept_id",
-        "winner_combo_id",
-        "winner_main_aux",
-        "winner_support_aux",
+        "concept_id",
+        "combo_id",
+        "main_aux",
+        "support_aux",
         "hvar_id",
         "seed_id",
         "gpu_id",
@@ -153,11 +168,13 @@ def _write_summary_csv(path: Path, rows: list[Dict[str, Any]], result_index: Dic
                     "run_phase": row["run_phase"],
                     "run_id": row["run_id"],
                     "dataset": row["dataset"],
+                    "candidate_id": row["candidate_id"],
+                    "source_run_phase": row["source_run_phase"],
                     "base_id": row["base_id"],
-                    "winner_concept_id": row["winner_concept_id"],
-                    "winner_combo_id": row["winner_combo_id"],
-                    "winner_main_aux": row["winner_main_aux"],
-                    "winner_support_aux": row["winner_support_aux"],
+                    "concept_id": row["concept_id"],
+                    "combo_id": row["combo_id"],
+                    "main_aux": row["main_aux"],
+                    "support_aux": row["support_aux"],
                     "hvar_id": row["hvar_id"],
                     "seed_id": row["seed_id"],
                     "gpu_id": row.get("assigned_gpu", ""),
@@ -194,155 +211,183 @@ def _completed_by_result(result_index: Dict[str, Dict[str, Any]]) -> set[str]:
     return done
 
 
-def _parse_phase9_run_phase(run_phase: str) -> tuple[str, str, str] | None:
+def _candidate_sort_key(candidate_id: str) -> tuple[str, int]:
+    m = re.match(r"^([A-Za-z]+)(\d+)$", str(candidate_id))
+    if not m:
+        return (str(candidate_id), 0)
+    return (m.group(1), int(m.group(2)))
+
+
+def _parse_phase9_run_phase(run_phase: str) -> tuple[str, str, str, int] | None:
     # Expected: P9_<BASE>_<CONCEPT>_<COMBO>_S1
     parts = str(run_phase).split("_")
-    if len(parts) < 5:
+    if len(parts) != 5:
         return None
     if parts[0] != "P9":
         return None
     base_id = str(parts[1]).upper()
     concept_id = str(parts[2]).upper()
     combo_id = str(parts[3]).upper()
-    seed_tok = str(parts[4]).upper()
+    seed_token = str(parts[4]).upper()
     if base_id not in {"B1", "B2", "B3", "B4"}:
         return None
-    if not seed_tok.startswith("S"):
+    if concept_id not in {"C0", "C1", "C2", "C3"}:
         return None
-    return base_id, concept_id, combo_id
+    if not seed_token.startswith("S"):
+        return None
+    try:
+        seed_id = int(seed_token[1:])
+    except Exception:
+        return None
+    return base_id, concept_id, combo_id, seed_id
 
 
-def _load_winner_map_json(path: str) -> Dict[str, str]:
+def _load_candidate_map_json(path: str) -> Dict[str, str]:
     if not path:
         return {}
     obj = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(obj, dict):
-        raise ValueError("winner-map-json must be a JSON object")
+        raise ValueError("candidate-map-json must be a JSON object")
+
     out: Dict[str, str] = {}
-    for base_id, profile_key in obj.items():
-        b = str(base_id).upper().strip()
-        p = str(profile_key).upper().strip()
-        if b not in {"B1", "B2", "B3", "B4"}:
-            raise ValueError(f"Invalid base_id in winner-map-json: {base_id}")
-        out[b] = p
+    for raw_candidate_id, raw_value in obj.items():
+        candidate_id = str(raw_candidate_id).upper().strip()
+        run_phase = str(raw_value).strip()
+        if not candidate_id:
+            raise ValueError(f"Invalid candidate id in candidate-map-json: {raw_candidate_id}")
+        parsed = _parse_phase9_run_phase(run_phase)
+        if parsed is None:
+            raise ValueError(
+                f"Invalid run_phase in candidate-map-json for {candidate_id}: {raw_value} "
+                "(expected P9_<BASE>_<CONCEPT>_<COMBO>_S<seed>)"
+            )
+        out[candidate_id] = run_phase
     return out
 
 
-def _select_winners(
-    *,
+def _build_candidate_record(candidate_id: str, source_run_phase: str, profiles: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    parsed = _parse_phase9_run_phase(source_run_phase)
+    if parsed is None:
+        raise ValueError(f"Invalid source run_phase: {source_run_phase}")
+    base_id, concept_id, combo_id, _ = parsed
+    key = f"{concept_id}_{combo_id}"
+    profile = profiles.get(key)
+    if profile is None:
+        raise ValueError(f"Unknown profile for source run_phase={source_run_phase} (key={key})")
+    return {
+        "candidate_id": str(candidate_id).upper(),
+        "source_run_phase": source_run_phase,
+        "base_id": base_id,
+        "concept_id": concept_id,
+        "combo_id": combo_id,
+        "main_aux": str(profile.get("main_aux", "none")),
+        "support_aux": str(profile.get("support_aux", "none")),
+        "scenario": str(profile.get("scenario", "")),
+        "overrides": copy.deepcopy(dict(profile.get("overrides", {}) or {})),
+    }
+
+
+def _validate_candidates_against_source(
+    candidates: list[Dict[str, Any]],
     dataset: str,
-    manual_map: Dict[str, str],
-    allow_fallback_winner: bool,
-) -> Dict[str, Dict[str, Any]]:
-    profiles = _profile_lookup()
-    winners: Dict[str, Dict[str, Any]] = {}
-
-    for base_id, profile_key in manual_map.items():
-        prof = profiles.get(profile_key)
-        if prof is None:
-            raise ValueError(f"Unknown profile key in winner-map-json: {profile_key}")
-        winners[base_id] = {
-            "concept_id": str(prof["concept_id"]).upper(),
-            "combo_id": str(prof["combo_id"]).upper(),
-            "main_aux": str(prof["main_aux"]),
-            "support_aux": str(prof["support_aux"]),
-            "scenario": str(prof["scenario"]),
-            "overrides": copy.deepcopy(dict(prof.get("overrides", {}) or {})),
-            "source": "manual_map",
-        }
-
-    if len(winners) == 4:
-        return winners
-
-    result_index = _load_result_index(dataset, SOURCE_AXIS)
-    by_base: Dict[str, list[Dict[str, Any]]] = {b: [] for b in ("B1", "B2", "B3", "B4")}
-    for run_phase, rec in result_index.items():
-        parsed = _parse_phase9_run_phase(run_phase)
-        if parsed is None:
+    source_min_completed: int,
+    allow_partial_source: bool,
+) -> None:
+    source_index = _load_result_index(dataset, SOURCE_AXIS)
+    missing = []
+    partial = []
+    for cand in candidates:
+        run_phase = str(cand["source_run_phase"])
+        rec = source_index.get(run_phase)
+        if not isinstance(rec, dict):
+            missing.append(run_phase)
             continue
-        base_id, concept_id, combo_id = parsed
         best = _metric_to_float(rec.get("best_mrr"))
-        if best is None:
-            continue
-        test = _metric_to_float(rec.get("test_mrr"))
-        profile_key = f"{concept_id}_{combo_id}"
-        prof = profiles.get(profile_key)
-        if prof is None:
-            continue
-        by_base[base_id].append(
-            {
-                "base_id": base_id,
-                "concept_id": concept_id,
-                "combo_id": combo_id,
-                "best_mrr": best,
-                "test_mrr": -1e9 if test is None else float(test),
-                "main_aux": str(prof["main_aux"]),
-                "support_aux": str(prof["support_aux"]),
-                "scenario": str(prof["scenario"]),
-                "overrides": copy.deepcopy(dict(prof.get("overrides", {}) or {})),
-                "source": f"phase9_result:{run_phase}",
-            }
-        )
+        n_completed = int(rec.get("n_completed", 0) or 0)
+        interrupted = bool(rec.get("interrupted", False))
+        cand["source_best_mrr"] = best
+        cand["source_test_mrr"] = _metric_to_float(rec.get("test_mrr"))
+        cand["source_n_completed"] = n_completed
+        cand["source_interrupted"] = interrupted
+        cand["source_result_path"] = str(rec.get("path", ""))
+        if best is None or n_completed < int(source_min_completed) or interrupted:
+            partial.append(run_phase)
 
-    for base_id in ("B1", "B2", "B3", "B4"):
-        if base_id in winners:
-            continue
-        candidates = by_base.get(base_id, [])
-        if candidates:
-            candidates.sort(
-                key=lambda x: (
-                    float(x["best_mrr"]),
-                    float(x["test_mrr"]),
-                    str(x["concept_id"]),
-                    str(x["combo_id"]),
-                ),
-                reverse=True,
-            )
-            winners[base_id] = candidates[0]
-            continue
-        if allow_fallback_winner:
-            fallback = profiles["C0_N1"]
-            winners[base_id] = {
-                "base_id": base_id,
-                "concept_id": "C0",
-                "combo_id": "N1",
-                "main_aux": str(fallback["main_aux"]),
-                "support_aux": str(fallback["support_aux"]),
-                "scenario": str(fallback["scenario"]),
-                "overrides": copy.deepcopy(dict(fallback.get("overrides", {}) or {})),
-                "source": "fallback:C0_N1",
-            }
-            continue
+    if missing:
         raise RuntimeError(
-            f"No winner candidate found for {base_id}. "
-            "Run phase9 first or provide --winner-map-json / --allow-fallback-winner."
+            "Missing source phase9 result(s) for candidate(s): "
+            + ", ".join(sorted(missing))
+            + f" (axis={SOURCE_AXIS})"
+        )
+    if partial and not allow_partial_source:
+        raise RuntimeError(
+            "Candidate source result is incomplete/partial (set --allow-partial-source to bypass): "
+            + ", ".join(sorted(partial))
         )
 
-    return winners
+
+def _resolve_candidates(args: argparse.Namespace) -> list[Dict[str, Any]]:
+    profiles = _profile_lookup()
+
+    candidate_map = dict(DEFAULT_CANDIDATE_RUN_PHASES)
+    json_map = _load_candidate_map_json(args.candidate_map_json)
+    if json_map:
+        candidate_map = dict(json_map)
+
+    only_candidate = {tok.upper() for tok in _parse_csv_strings(args.only_candidate)}
+    out: list[Dict[str, Any]] = []
+    for candidate_id in sorted(candidate_map.keys(), key=_candidate_sort_key):
+        if only_candidate and candidate_id not in only_candidate:
+            continue
+        out.append(
+            _build_candidate_record(
+                candidate_id=candidate_id,
+                source_run_phase=str(candidate_map[candidate_id]),
+                profiles=profiles,
+            )
+        )
+    if not out:
+        raise RuntimeError("No candidates selected. Check --only-candidate / --candidate-map-json.")
+
+    _validate_candidates_against_source(
+        candidates=out,
+        dataset=args.dataset,
+        source_min_completed=int(args.source_min_completed),
+        allow_partial_source=bool(args.allow_partial_source),
+    )
+
+    concept_set = {str(c["concept_id"]).upper() for c in out}
+    expected = set(CONCEPT_ORDER)
+    if len(out) == 4 and concept_set != expected:
+        print(f"[phase9_2][warn] 4 candidates selected but concept coverage is {sorted(concept_set)} (expected {sorted(expected)}).")
+    return out
 
 
-def _run_phase_name(base_id: str, concept_id: str, combo_id: str, hvar_id: str, seed_id: int) -> str:
-    return f"P9_2_{base_id}_{concept_id}{combo_id}_{hvar_id}_S{int(seed_id)}"
+def _run_phase_name(candidate: Dict[str, Any], hvar_id: str, seed_id: int) -> str:
+    return (
+        f"P9_2_{candidate['candidate_id']}_{candidate['base_id']}_{candidate['concept_id']}_"
+        f"{candidate['combo_id']}_{hvar_id}_S{int(seed_id)}"
+    )
 
 
-def _run_id(base_id: str, concept_id: str, combo_id: str, hvar_id: str, seed_id: int) -> str:
-    return f"{base_id}_{concept_id}{combo_id}_{hvar_id}_S{int(seed_id)}"
+def _run_id(candidate: Dict[str, Any], hvar_id: str, seed_id: int) -> str:
+    return (
+        f"{candidate['candidate_id']}_{candidate['base_id']}_{candidate['concept_id']}_"
+        f"{candidate['combo_id']}_{hvar_id}_S{int(seed_id)}"
+    )
 
 
-def _build_rows(args: argparse.Namespace, winners: Dict[str, Dict[str, Any]]) -> list[Dict[str, Any]]:
+def _build_rows(args: argparse.Namespace, candidates: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
     seeds = _parse_csv_ints(args.seeds)
     if not seeds:
         raise SystemExit("No seeds provided")
     hvars = _hparam_variants()
     bases = _base_definitions()
-    base_allow = {tok.upper() for tok in _parse_csv_strings(args.only_base)}
 
     rows: list[Dict[str, Any]] = []
     seed_cursor = 0
-    for base_id in ("B1", "B2", "B3", "B4"):
-        if base_allow and base_id not in base_allow:
-            continue
-        winner = winners[base_id]
+    for candidate in candidates:
+        base_id = str(candidate["base_id"]).upper()
         base_cfg = bases[base_id]
         for hvar_id in ("H1", "H2", "H3", "H4"):
             h = dict(hvars[hvar_id])
@@ -354,37 +399,26 @@ def _build_rows(args: argparse.Namespace, winners: Dict[str, Dict[str, Any]]) ->
                     feature_group_bias_lambda=float(args.feature_group_bias_lambda),
                     rule_bias_scale=float(args.rule_bias_scale),
                 )
-                for key, value in dict(winner.get("overrides", {}) or {}).items():
+                for key, value in dict(candidate.get("overrides", {}) or {}).items():
                     overrides[str(key)] = value
-                run_phase = _run_phase_name(
-                    base_id=base_id,
-                    concept_id=str(winner["concept_id"]),
-                    combo_id=str(winner["combo_id"]),
-                    hvar_id=hvar_id,
-                    seed_id=seed_id,
-                )
-                run_id = _run_id(
-                    base_id=base_id,
-                    concept_id=str(winner["concept_id"]),
-                    combo_id=str(winner["combo_id"]),
-                    hvar_id=hvar_id,
-                    seed_id=seed_id,
-                )
+                run_phase = _run_phase_name(candidate, hvar_id=hvar_id, seed_id=seed_id)
+                run_id = _run_id(candidate, hvar_id=hvar_id, seed_id=seed_id)
                 rows.append(
                     {
                         "dataset": args.dataset,
+                        "candidate_id": str(candidate["candidate_id"]),
+                        "source_run_phase": str(candidate["source_run_phase"]),
                         "base_id": base_id,
+                        "concept_id": str(candidate["concept_id"]).upper(),
+                        "combo_id": str(candidate["combo_id"]).upper(),
+                        "main_aux": str(candidate["main_aux"]),
+                        "support_aux": str(candidate["support_aux"]),
                         "hvar_id": hvar_id,
                         "hparams": h,
                         "seed_id": int(seed_id),
                         "seed_offset": int(seed_cursor),
                         "run_id": run_id,
                         "run_phase": run_phase,
-                        "winner_concept_id": str(winner["concept_id"]).upper(),
-                        "winner_combo_id": str(winner["combo_id"]).upper(),
-                        "winner_main_aux": str(winner["main_aux"]),
-                        "winner_support_aux": str(winner["support_aux"]),
-                        "winner_source": str(winner["source"]),
                         "overrides": overrides,
                     }
                 )
@@ -448,12 +482,14 @@ def _build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) -
         "++search_space_type_overrides.weight_decay=choice",
         "++search_space_type_overrides.hidden_dropout_prob=choice",
         "++search_space_type_overrides.lr_scheduler_type=choice",
+        f"++p9_2_candidate_id={hydra_literal(row['candidate_id'])}",
+        f"++p9_2_source_run_phase={hydra_literal(row['source_run_phase'])}",
         f"++p9_2_base_id={hydra_literal(row['base_id'])}",
+        f"++p9_2_concept_id={hydra_literal(row['concept_id'])}",
+        f"++p9_2_combo_id={hydra_literal(row['combo_id'])}",
+        f"++p9_2_main_aux={hydra_literal(row['main_aux'])}",
+        f"++p9_2_support_aux={hydra_literal(row['support_aux'])}",
         f"++p9_2_hvar_id={hydra_literal(row['hvar_id'])}",
-        f"++p9_2_winner_concept_id={hydra_literal(row['winner_concept_id'])}",
-        f"++p9_2_winner_combo_id={hydra_literal(row['winner_combo_id'])}",
-        f"++p9_2_winner_main_aux={hydra_literal(row['winner_main_aux'])}",
-        f"++p9_2_winner_support_aux={hydra_literal(row['winner_support_aux'])}",
         f"++p9_2_run_id={hydra_literal(row['run_id'])}",
     ]
     for key, value in dict(row.get("overrides", {}) or {}).items():
@@ -471,14 +507,11 @@ def _write_log_preamble(log_file: Path, row: Dict[str, Any], gpu_id: str, args: 
     lines = [
         "[PHASE9_2_SETTING_HEADER]",
         (
-            f"run_id={row['run_id']} run_phase={row['run_phase']} "
-            f"base={row['base_id']} hvar={row['hvar_id']} seed={row['seed_id']}"
+            f"run_id={row['run_id']} run_phase={row['run_phase']} candidate={row['candidate_id']} "
+            f"base={row['base_id']} concept={row['concept_id']} combo={row['combo_id']} "
+            f"hvar={row['hvar_id']} seed={row['seed_id']}"
         ),
-        (
-            f"winner={row['winner_concept_id']}_{row['winner_combo_id']} "
-            f"main_aux={row['winner_main_aux']} support_aux={row['winner_support_aux']}"
-        ),
-        f"winner_source={row['winner_source']}",
+        f"source_run_phase={row['source_run_phase']} main_aux={row['main_aux']} support_aux={row['support_aux']}",
         f"dataset={row['dataset']} gpu={gpu_id}",
         f"max_evals={args.max_evals} tune_epochs={args.tune_epochs} tune_patience={args.tune_patience}",
         f"seed={int(args.seed_base) + int(row['seed_offset'])}",
@@ -490,7 +523,7 @@ def _write_log_preamble(log_file: Path, row: Dict[str, Any], gpu_id: str, args: 
     log_file.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _write_matrix_manifest(rows: list[Dict[str, Any]], winners: Dict[str, Dict[str, Any]], args: argparse.Namespace) -> Path:
+def _write_matrix_manifest(rows: list[Dict[str, Any]], candidates: list[Dict[str, Any]], args: argparse.Namespace) -> Path:
     if args.manifest_out:
         out_path = Path(args.manifest_out)
     else:
@@ -503,26 +536,32 @@ def _write_matrix_manifest(rows: list[Dict[str, Any]], winners: Dict[str, Dict[s
         "phase": PHASE,
         "dataset": args.dataset,
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "winners": {
-            base_id: {
-                "concept_id": str(rec["concept_id"]),
-                "combo_id": str(rec["combo_id"]),
-                "main_aux": str(rec["main_aux"]),
-                "support_aux": str(rec["support_aux"]),
-                "source": str(rec["source"]),
+        "candidates": [
+            {
+                "candidate_id": c["candidate_id"],
+                "source_run_phase": c["source_run_phase"],
+                "base_id": c["base_id"],
+                "concept_id": c["concept_id"],
+                "combo_id": c["combo_id"],
+                "main_aux": c["main_aux"],
+                "support_aux": c["support_aux"],
+                "source_best_mrr": c.get("source_best_mrr"),
+                "source_test_mrr": c.get("source_test_mrr"),
+                "source_n_completed": c.get("source_n_completed"),
             }
-            for base_id, rec in winners.items()
-        },
+            for c in candidates
+        ],
         "n_rows": len(rows),
         "rows": [
             {
                 "run_id": r["run_id"],
                 "run_phase": r["run_phase"],
+                "candidate_id": r["candidate_id"],
                 "base_id": r["base_id"],
+                "concept_id": r["concept_id"],
+                "combo_id": r["combo_id"],
                 "hvar_id": r["hvar_id"],
                 "seed_id": r["seed_id"],
-                "winner_concept_id": r["winner_concept_id"],
-                "winner_combo_id": r["winner_combo_id"],
             }
             for r in rows
         ],
@@ -572,7 +611,8 @@ def _launch_rows(rows: list[Dict[str, Any]], gpus: list[str], args: argparse.Nam
             cmd = _build_command(row, row["assigned_gpu"], args)
             print(
                 f"[dry-run] gpu={row['assigned_gpu']} run={row['run_id']} "
-                f"base={row['base_id']} winner={row['winner_concept_id']}_{row['winner_combo_id']} hvar={row['hvar_id']} -> {lp}"
+                f"candidate={row['candidate_id']} source={row['source_run_phase']} "
+                f"hvar={row['hvar_id']} -> {lp}"
             )
             print("          " + " ".join(cmd))
         return 0
@@ -599,7 +639,7 @@ def _launch_rows(rows: list[Dict[str, Any]], gpus: list[str], args: argparse.Nam
             active[gpu_id] = {"proc": proc, "row": row, "log_path": lp}
             print(
                 f"[launch] gpu={gpu_id} run={row['run_id']} "
-                f"({row['base_id']}/{row['winner_concept_id']}{row['winner_combo_id']}/{row['hvar_id']})"
+                f"(candidate={row['candidate_id']} source={row['source_run_phase']} hvar={row['hvar_id']})"
             )
 
         done_gpu = []
@@ -631,7 +671,7 @@ def _launch_rows(rows: list[Dict[str, Any]], gpus: list[str], args: argparse.Nam
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="FMoE_N3 Phase9_2 verification launcher")
+    parser = argparse.ArgumentParser(description="FMoE_N3 Phase9_2 verification launcher (candidate-based)")
     parser.add_argument("--dataset", default="KuaiRecLargeStrictPosV2_0.2")
     parser.add_argument("--gpus", default="4,5,6,7")
     parser.add_argument("--seeds", default="1,2,3,4")
@@ -654,9 +694,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--search-lr-max", type=float, default=8e-3)
     parser.add_argument("--search-lr-scheduler", default="warmup_cosine")
 
-    parser.add_argument("--only-base", default="", help="Comma-separated subset of {B1,B2,B3,B4}")
-    parser.add_argument("--winner-map-json", default="", help='Optional JSON map like {"B1":"C0_N1",...}')
-    parser.add_argument("--allow-fallback-winner", action="store_true")
+    parser.add_argument("--only-candidate", default="", help="Comma-separated subset of candidate ids (e.g. K1,K4)")
+    parser.add_argument(
+        "--candidate-map-json",
+        default="",
+        help='Optional JSON map like {"K1":"P9_B4_C0_N4_S1", "K2":"P9_B3_C1_B1_S1", ...}',
+    )
+    parser.add_argument("--source-min-completed", type=int, default=20)
+    parser.add_argument("--allow-partial-source", action="store_true")
 
     parser.add_argument("--manifest-out", default="", help="Optional matrix JSON output path")
     parser.add_argument("--resume-from-logs", action="store_true", default=True)
@@ -684,22 +729,27 @@ def main() -> int:
     if not gpus:
         raise SystemExit("No GPUs provided")
 
-    manual_map = _load_winner_map_json(args.winner_map_json)
-    winners = _select_winners(
-        dataset=args.dataset,
-        manual_map=manual_map,
-        allow_fallback_winner=bool(args.allow_fallback_winner),
-    )
-    rows = _build_rows(args, winners)
+    candidates = _resolve_candidates(args)
+    print(f"[phase9_2] selected_candidates={len(candidates)} axis={AXIS} phase={PHASE}")
+    for cand in candidates:
+        print(
+            "[phase9_2][candidate] "
+            f"{cand['candidate_id']} -> {cand['source_run_phase']} "
+            f"(base={cand['base_id']} concept={cand['concept_id']} combo={cand['combo_id']} "
+            f"best={cand.get('source_best_mrr')} test={cand.get('source_test_mrr')})"
+        )
+
+    rows = _build_rows(args, candidates)
     if args.smoke_test:
         rows = rows[: max(int(args.smoke_max_runs), 1)]
     if not rows:
         raise SystemExit("No rows matched filters")
 
-    manifest_path = _write_matrix_manifest(rows, winners, args)
+    manifest_path = _write_matrix_manifest(rows, candidates, args)
     print(f"[phase9_2] dataset={args.dataset} total_rows={len(rows)} manifest={manifest_path}")
     return _launch_rows(rows=rows, gpus=gpus, args=args)
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
