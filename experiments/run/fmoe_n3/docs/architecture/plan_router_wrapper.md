@@ -167,10 +167,10 @@ if source == "both":
 신규 키:
 
 - `stage_router_wrapper`
-  - stage별 wrapper 선택: `w1_flat|w2_a_plus_d|w3_bxc|w4_bxd|w5_exd`
+  - stage별 wrapper 선택: `w1_flat|w2_a_plus_d|w3_bxc|w4_bxd|w5_exd|w6_bxd_plus_a`
 - `stage_router_primitives`
   - stage별 primitive 설정 묶음
-  - 예: `a_joint/b_group/c_shared/d_cond/e_scalar/wrapper(alpha_d)`
+  - 예: `a_joint/b_group/c_shared/d_cond/e_scalar/wrapper(alpha_d,alpha_struct,alpha_a)`
 
 예시 (W5 + D top1):
 
@@ -191,6 +191,15 @@ stage_router_primitives:
 - `group_probs`, `intra_probs`
 - `wrapper_alias`, `wrapper_name`
 - `primitive_outputs` (각 primitive의 logits/probs/source/temperature/top_k)
+- `wrapper_internal` (wrapper 계수/내부 파라미터)
+
+P8 저장 경로는 run-centric으로 고정:
+
+- `.../logging/fmoe_n3/<dataset>/P8/<run_id>/diag/meta.json`
+- `.../diag/tier_a_final/final_metrics.csv`
+- `.../diag/tier_b_internal/internal_metrics.csv`
+- `.../diag/tier_c_viz/*`
+- `.../diag/raw/*` (best/test/raw trace)
 
 호환용 key:
 
@@ -215,6 +224,7 @@ stage_router_primitives:
 - `w3_bxc`: shared intra 가정의 타당성 검증
 - `w4_bxd`: 정석 계층형 baseline
 - `w5_exd`: group scalar 추정 방식의 대안 검증
+- `w6_bxd_plus_a`: structured(BxD) + flat(A) residual correction
 
 ## 10. 코드 레벨 매핑 (핵심 진입점)
 
@@ -222,8 +232,8 @@ stage_router_primitives:
 
 - `experiments/models/FeaturedMoE_N3/router_wrapper.py`
   - Primitive 클래스: `StageJointExpertRouter`, `StageGroupRouter`, `StageSharedIntraRouter`, `GroupConditionalIntraRouter`, `GroupScalarRouter`
-  - Wrapper 클래스: `FlatJointWrapper`, `FlatPlusGroupIntraResidualWrapper`, `GroupSharedIntraProductWrapper`, `GroupConditionalProductWrapper`, `ScalarGroupConditionalProductWrapper`
-  - helper: `_primitive_payload`, `_joint_prob_to_logit`, `normalize_wrapper_name`, `build_wrapper_module`
+  - Wrapper 클래스: `FlatJointWrapper`, `FlatPlusGroupIntraResidualWrapper`, `GroupSharedIntraProductWrapper`, `GroupConditionalProductWrapper`, `ScalarGroupConditionalProductWrapper`, `GroupConditionalResidualJointWrapper`
+  - helper: `_primitive_payload`, `_joint_prob_to_logit`, `normalize_wrapper_name`, `build_wrapper_module`, `required_primitives_for_wrapper`
 
 - `experiments/models/FeaturedMoE_N3/stage_modules.py`
   - `StageRuntimeConfigN3`: 신규 router schema 필드 정의

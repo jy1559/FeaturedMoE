@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -97,6 +97,26 @@ def _build_group_routing_payload(raw: dict) -> dict:
     }
 
 
+def _entropy_norm(entropy_mean: float, support_size: int) -> float:
+    support = max(int(support_size), 1)
+    if support <= 1:
+        return 0.0
+    return float(entropy_mean / max(math.log(float(support)), 1e-8))
+
+
+def _top1_monopoly_norm(top1_max_frac: float, support_size: int) -> float:
+    support = max(int(support_size), 1)
+    if support <= 1:
+        return float(max(top1_max_frac, 0.0))
+    uniform = 1.0 / float(support)
+    denom = max(1.0 - uniform, 1e-8)
+    return float((float(top1_max_frac) - uniform) / denom)
+
+
+def _js_to_score(js_value: float) -> float:
+    return float(math.exp(-float(js_value)))
+
+
 class N3DiagnosticCollector:
     """Collect compact routing/conditioning diagnostics over one evaluation split."""
 
@@ -106,6 +126,7 @@ class N3DiagnosticCollector:
         split_name: str,
         stage_family_features: Dict[str, Dict[str, List[str]]],
         stage_expert_names: Dict[str, List[str]],
+        stage_router_granularity: Optional[Dict[str, str]] = None,
         all_feature_columns: List[str],
         max_positions: int,
         feature_mode: str = "none",
@@ -119,11 +140,126 @@ class N3DiagnosticCollector:
         self.stage_expert_names = {
             str(stage): list(names) for stage, names in dict(stage_expert_names or {}).items()
         }
+        self.stage_router_granularity = {
+            str(stage): str(gran).lower().strip()
+            for stage, gran in dict(stage_router_granularity or {}).items()
+        }
         self.col2idx = {name: idx for idx, name in enumerate(list(all_feature_columns or []))}
         self.max_positions = max(int(max_positions), 1)
         self.feature_mode = str(feature_mode or "none")
         self.consistency_pairs = max(int(consistency_pairs), 1)
         self._stage_data: Dict[str, dict] = {}
+
+    def _stage_aggregation_level(self, stage_key: str) -> str:
+        base = _base_stage_name(stage_key)
+        gran = str(self.stage_router_granularity.get(base, "token") or "token").lower().strip()
+        return "session" if gran == "session" else "token"
+
+    @staticmethod
+    def _dominant_name(counter: Dict[str, int], default: str = "") -> str:
+        if not counter:
+            return default
+        return max(counter.items(), key=lambda kv: int(kv[1]))[0]
+
+    def _ensure_node_acc(
+        self,
+        stage_store: dict,
+        *,
+        node_name: str,
+        node_kind: str,
+        route_space: str,
+        support_size: int,
+        aggregation_level: str,
+        wrapper_name: str,
+        source_type: str = "",
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+    ) -> dict:
+        node_map = stage_store.setdefault("node_acc", {})
+        if node_name not in node_map:
+            node_map[node_name] = {
+                "node_name": str(node_name),
+                "node_kind": str(node_kind),
+                "route_space": str(route_space),
+                "support_size": int(max(support_size, 1)),
+                "aggregation_level": str(aggregation_level),
+                "wrapper_name": str(wrapper_name or ""),
+                "source_type": str(source_type or ""),
+                "temperature": None if temperature is None else float(temperature),
+                "top_k": None if top_k is None else int(top_k),
+                "usage_sum": torch.zeros(int(max(support_size, 1))),
+                "top1_count": torch.zeros(int(max(support_size, 1))),
+                "entropy_sum": 0.0,
+                "n_tokens": 0,
+                "knn_js_sum": 0.0,
+                "knn_js_count": 0,
+            }
+        node = node_map[node_name]
+        if node.get("wrapper_name", "") == "" and wrapper_name:
+            node["wrapper_name"] = str(wrapper_name)
+        return node
+
+    def _accumulate_node_probs(
+        self,
+        stage_store: dict,
+        *,
+        node_name: str,
+        node_kind: str,
+        route_space: str,
+        probs: torch.Tensor,
+        mask: torch.Tensor,
+        aggregation_level: str,
+        wrapper_name: str,
+        neigh_idx: Optional[torch.Tensor] = None,
+        neigh_k: int = 0,
+        source_type: str = "",
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+    ) -> None:
+        if not torch.is_tensor(probs) or probs.ndim != 3 or probs.size(-1) <= 0:
+            return
+        if not torch.is_tensor(mask) or mask.ndim != 2:
+            return
+        if probs.size(0) != mask.size(0) or probs.size(1) != mask.size(1):
+            return
+
+        node = self._ensure_node_acc(
+            stage_store,
+            node_name=node_name,
+            node_kind=node_kind,
+            route_space=route_space,
+            support_size=int(probs.size(-1)),
+            aggregation_level=aggregation_level,
+            wrapper_name=wrapper_name,
+            source_type=source_type,
+            temperature=temperature,
+            top_k=top_k,
+        )
+        p = probs.detach()
+        valid = mask.unsqueeze(-1).float()
+        n_valid = int(mask.sum().item())
+        if n_valid <= 0:
+            return
+        node["usage_sum"] += (p * valid).sum(dim=(0, 1)).cpu()
+        entropy = -(p.clamp(min=1e-8) * p.clamp(min=1e-8).log()).sum(dim=-1)
+        node["entropy_sum"] += float((entropy * mask.float()).sum().item())
+        node["n_tokens"] += n_valid
+        top1 = p.argmax(dim=-1)
+        node["top1_count"] += torch.bincount(top1[mask].cpu(), minlength=int(p.size(-1))).float()
+
+        if neigh_idx is not None and neigh_k > 0 and int(p.size(0)) > 1:
+            sess_prob = (p * mask.unsqueeze(-1).float()).sum(dim=1)
+            sess_prob = sess_prob / mask.float().sum(dim=1, keepdim=True).clamp(min=1.0)
+            sess_prob = sess_prob.clamp(min=1e-8)
+            pi = sess_prob.unsqueeze(1).expand(-1, neigh_k, -1)
+            pj = sess_prob.index_select(0, neigh_idx.reshape(-1)).reshape(int(p.size(0)), neigh_k, -1).clamp(min=1e-8)
+            mix = 0.5 * (pi + pj)
+            js = 0.5 * (
+                (pi * (pi.log() - mix.log())).sum(dim=-1)
+                + (pj * (pj.log() - mix.log())).sum(dim=-1)
+            )
+            node["knn_js_sum"] += float(js.sum().item())
+            node["knn_js_count"] += int(js.numel())
 
     def _ensure_stage(self, stage_key: str, *, n_slots: int, mode: str) -> dict:
         if stage_key not in self._stage_data:
@@ -133,6 +269,7 @@ class N3DiagnosticCollector:
             self._stage_data[stage_key] = {
                 "mode": mode,
                 "n_slots": int(n_slots),
+                "aggregation_level": self._stage_aggregation_level(stage_key),
                 "usage_sum": torch.zeros(n_slots),
                 "top1_count": torch.zeros(n_slots),
                 "entropy_sum": 0.0,
@@ -180,6 +317,8 @@ class N3DiagnosticCollector:
                 "intra_group_consistency_js_count": torch.zeros(n_groups),
                 "feature_group_consistency_js_sum": torch.zeros(n_groups),
                 "feature_group_consistency_js_count": torch.zeros(n_groups),
+                "wrapper_name_hist": defaultdict(int),
+                "node_acc": {},
             }
         return self._stage_data[stage_key]
 
@@ -231,11 +370,29 @@ class N3DiagnosticCollector:
             n_valid = int(mask.sum().item())
             if n_valid <= 0:
                 continue
+            wrapper_alias = str(dict(router_aux.get("wrapper_alias", {}) or {}).get(stage_key, "") or "").strip()
+            wrapper_name = str(dict(router_aux.get("wrapper_name", {}) or {}).get(stage_key, "") or wrapper_alias).strip()
+            if wrapper_name:
+                stage_store["wrapper_name_hist"][wrapper_name] += 1
+            aggregation_level = str(stage_store.get("aggregation_level", "token") or "token")
             stage_store["usage_sum"] += (w * valid).sum(dim=(0, 1)).cpu()
             entropy = -(w.clamp(min=1e-8) * w.clamp(min=1e-8).log()).sum(dim=-1)
             stage_store["entropy_sum"] += float((entropy * mask.float()).sum().item())
             stage_store["n_tokens"] += n_valid
             stage_store["n_sessions"] += int(weights.size(0))
+
+            self._accumulate_node_probs(
+                stage_store,
+                node_name="final.expert",
+                node_kind="final",
+                route_space="expert",
+                probs=w,
+                mask=mask,
+                aggregation_level=aggregation_level,
+                wrapper_name=wrapper_name,
+                neigh_idx=neigh_idx,
+                neigh_k=neigh_k,
+            )
 
             top1 = w.argmax(dim=-1)
             flat_top1 = top1[mask]
@@ -348,6 +505,18 @@ class N3DiagnosticCollector:
                     stage_store["feature_group_consistency_js_sum"] = torch.zeros(n_grps)
                     stage_store["feature_group_consistency_js_count"] = torch.zeros(n_grps)
                     stage_store["n_groups"] = n_grps
+                self._accumulate_node_probs(
+                    stage_store,
+                    node_name="final.group",
+                    node_kind="final",
+                    route_space="group",
+                    probs=gw,
+                    mask=mask,
+                    aggregation_level=aggregation_level,
+                    wrapper_name=wrapper_name,
+                    neigh_idx=neigh_idx,
+                    neigh_k=neigh_k,
+                )
                 gvalid = mask.unsqueeze(-1).float()
                 stage_store["group_usage_sum"] += (gw * gvalid).sum(dim=(0, 1)).cpu()
                 g_entropy = -(gw.clamp(min=1e-8) * gw.clamp(min=1e-8).log()).sum(dim=-1)
@@ -390,6 +559,36 @@ class N3DiagnosticCollector:
                             )
                             stage_store["intra_group_consistency_js_sum"][grp_idx] += float(gjs.sum().item())
                             stage_store["intra_group_consistency_js_count"][grp_idx] += float(gjs.numel())
+
+                expert_group_idx = dict(router_aux.get("expert_group_idx", {}) or {}).get(stage_key)
+                if torch.is_tensor(expert_group_idx) and expert_group_idx.numel() >= int(weights.size(-1)):
+                    eg = expert_group_idx[: int(weights.size(-1))].to(device=weights.device, dtype=torch.long)
+                    group_names = list(stage_store.get("family_names", []) or [])
+                    for grp_idx in range(int(n_grps)):
+                        grp_members = (eg == grp_idx).nonzero(as_tuple=False).view(-1)
+                        if grp_members.numel() <= 0:
+                            continue
+                        grp_weight = w.index_select(-1, grp_members)
+                        grp_mass = grp_weight.sum(dim=-1, keepdim=True)
+                        grp_mask = mask & (grp_mass.squeeze(-1) > 1e-12)
+                        grp_intra = grp_weight / grp_mass.clamp(min=1e-8)
+                        group_name = (
+                            str(group_names[grp_idx])
+                            if grp_idx < len(group_names)
+                            else f"group_{grp_idx}"
+                        )
+                        self._accumulate_node_probs(
+                            stage_store,
+                            node_name=f"final.intra.{group_name}",
+                            node_kind="final",
+                            route_space="intra",
+                            probs=grp_intra,
+                            mask=grp_mask,
+                            aggregation_level=aggregation_level,
+                            wrapper_name=wrapper_name,
+                            neigh_idx=neigh_idx,
+                            neigh_k=neigh_k,
+                        )
 
             # Feature-group-specific KNN consistency:
             # neighbors are built per family feature subset, but JS is measured on full expert routing.
@@ -445,6 +644,98 @@ class N3DiagnosticCollector:
                 elif fgl.ndim == 2:
                     stage_store["factored_group_entropy_sum"] += float(fg_entropy.sum().item())
                     stage_store["factored_group_n_tokens"] += int(fg_entropy.numel())
+
+            wrapper_group_probs = dict(router_aux.get("group_probs", {}) or {}).get(stage_key)
+            if torch.is_tensor(wrapper_group_probs) and wrapper_group_probs.ndim == 3:
+                self._accumulate_node_probs(
+                    stage_store,
+                    node_name="wrapper.group",
+                    node_kind="wrapper",
+                    route_space="group",
+                    probs=wrapper_group_probs.detach(),
+                    mask=mask,
+                    aggregation_level=aggregation_level,
+                    wrapper_name=wrapper_name,
+                    neigh_idx=neigh_idx,
+                    neigh_k=neigh_k,
+                )
+
+            wrapper_intra_probs = dict(router_aux.get("intra_probs", {}) or {}).get(stage_key)
+            if torch.is_tensor(wrapper_intra_probs) and wrapper_intra_probs.ndim == 4:
+                group_names = list(stage_store.get("family_names", []) or [])
+                for grp_idx in range(int(wrapper_intra_probs.size(-2))):
+                    group_name = (
+                        str(group_names[grp_idx])
+                        if grp_idx < len(group_names)
+                        else f"group_{grp_idx}"
+                    )
+                    self._accumulate_node_probs(
+                        stage_store,
+                        node_name=f"wrapper.intra.{group_name}",
+                        node_kind="wrapper",
+                        route_space="intra",
+                        probs=wrapper_intra_probs[..., grp_idx, :].detach(),
+                        mask=mask,
+                        aggregation_level=aggregation_level,
+                        wrapper_name=wrapper_name,
+                        neigh_idx=neigh_idx,
+                        neigh_k=neigh_k,
+                    )
+
+            primitive_outputs = dict(router_aux.get("primitive_outputs", {}) or {}).get(stage_key)
+            if isinstance(primitive_outputs, dict):
+                group_names = list(stage_store.get("family_names", []) or [])
+                for primitive_name, payload in primitive_outputs.items():
+                    if not isinstance(payload, dict):
+                        continue
+                    probs = payload.get("probs")
+                    source_type = str(payload.get("source", "") or "")
+                    temperature = payload.get("temperature")
+                    top_k = payload.get("top_k")
+                    if torch.is_tensor(probs) and probs.ndim == 3:
+                        if primitive_name in {"a_joint"}:
+                            route_space = "expert"
+                        elif primitive_name in {"b_group", "e_scalar"}:
+                            route_space = "group"
+                        else:
+                            route_space = "intra"
+                        self._accumulate_node_probs(
+                            stage_store,
+                            node_name=f"primitive.{primitive_name}",
+                            node_kind="primitive",
+                            route_space=route_space,
+                            probs=probs.detach(),
+                            mask=mask,
+                            aggregation_level=aggregation_level,
+                            wrapper_name=wrapper_name,
+                            neigh_idx=neigh_idx,
+                            neigh_k=neigh_k,
+                            source_type=source_type,
+                            temperature=temperature if temperature is None else float(temperature),
+                            top_k=None if top_k is None else int(top_k),
+                        )
+                    elif torch.is_tensor(probs) and probs.ndim == 4:
+                        for grp_idx in range(int(probs.size(-2))):
+                            group_name = (
+                                str(group_names[grp_idx])
+                                if grp_idx < len(group_names)
+                                else f"group_{grp_idx}"
+                            )
+                            self._accumulate_node_probs(
+                                stage_store,
+                                node_name=f"primitive.{primitive_name}.{group_name}",
+                                node_kind="primitive",
+                                route_space="intra",
+                                probs=probs[..., grp_idx, :].detach(),
+                                mask=mask,
+                                aggregation_level=aggregation_level,
+                                wrapper_name=wrapper_name,
+                                neigh_idx=neigh_idx,
+                                neigh_k=neigh_k,
+                                source_type=source_type,
+                                temperature=temperature if temperature is None else float(temperature),
+                                top_k=None if top_k is None else int(top_k),
+                            )
 
         for stage_key, cond in dense_aux.items():
             stage_store = self._ensure_stage(stage_key, n_slots=1, mode="dense")
@@ -517,6 +808,9 @@ class N3DiagnosticCollector:
     def finalize(self) -> dict:
         stage_payload = {}
         flat_scalars = {}
+        diagnostic_nodes: List[dict] = []
+        tier_a_final_rows: List[dict] = []
+        tier_b_internal_rows: List[dict] = []
         for stage_key, raw in self._stage_data.items():
             usage_scalars = self._usage_scalars(raw["usage_sum"], raw["top1_count"])
             n_tokens = max(int(raw["n_tokens"]), 1)
@@ -571,6 +865,7 @@ class N3DiagnosticCollector:
                 feature_score_by_group = [1.0] * n_groups
             feature_mean_js = float(sum(feature_js_by_group) / max(len(feature_js_by_group), 1))
             feature_mean_score = float(sum(feature_score_by_group) / max(len(feature_score_by_group), 1))
+            wrapper_name = self._dominant_name(dict(raw.get("wrapper_name_hist", {}) or {}), default="")
             family_payload = {
                 "mean_top_expert_share": 0.0,
                 "family_top_expert": [],
@@ -638,6 +933,7 @@ class N3DiagnosticCollector:
                 "cv_usage": usage_scalars["cv_usage"],
                 "dead_expert_frac": usage_scalars["dead_expert_frac"],
                 "top1_max_frac": usage_scalars["top1_max_frac"],
+                "wrapper_name": wrapper_name,
                 "feature_family_expert_heatmap": {
                     "family_names": list(raw["family_names"]),
                     "values": raw["family_expert"].tolist(),
@@ -690,6 +986,52 @@ class N3DiagnosticCollector:
                 flat_scalars[f"{prefix}.group_entropy_mean"] = float(grp_payload.get("group_entropy_mean", 0.0))
                 flat_scalars[f"{prefix}.factored_group_entropy_mean"] = float(grp_payload.get("factored_group_entropy_mean", 0.0))
 
+            node_acc = dict(raw.get("node_acc", {}) or {})
+            for node_name in sorted(node_acc.keys()):
+                node = dict(node_acc.get(node_name, {}) or {})
+                support_size = int(node.get("support_size", 0) or 0)
+                usage_sum = node.get("usage_sum")
+                top1_count = node.get("top1_count")
+                if not torch.is_tensor(usage_sum) or not torch.is_tensor(top1_count):
+                    continue
+                node_usage = self._usage_scalars(usage_sum, top1_count)
+                node_tokens = max(int(node.get("n_tokens", 0) or 0), 1)
+                entropy_mean_node = float(node.get("entropy_sum", 0.0) or 0.0) / node_tokens
+                knn_js = float(node.get("knn_js_sum", 0.0) or 0.0) / max(int(node.get("knn_js_count", 0) or 0), 1)
+                knn_score = _js_to_score(knn_js)
+                node_wrapper_name = str(node.get("wrapper_name", "") or wrapper_name)
+                row = {
+                    "stage_name": _base_stage_name(stage_key),
+                    "stage_key": stage_key,
+                    "split": self.split_name,
+                    "aggregation_level": str(node.get("aggregation_level", raw.get("aggregation_level", "token"))),
+                    "node_kind": str(node.get("node_kind", "")),
+                    "node_name": str(node.get("node_name", node_name)),
+                    "route_space": str(node.get("route_space", "")),
+                    "support_size": support_size,
+                    "wrapper_name": node_wrapper_name,
+                    "source_type": str(node.get("source_type", "")),
+                    "temperature": node.get("temperature"),
+                    "top_k": node.get("top_k"),
+                    "entropy_norm": _entropy_norm(entropy_mean_node, support_size),
+                    "n_eff_norm": float(node_usage.get("n_eff", 0.0)) / max(float(support_size), 1.0),
+                    "top1_monopoly_norm": _top1_monopoly_norm(float(node_usage.get("top1_max_frac", 0.0)), support_size),
+                    "jitter_adj_norm": 0.0,
+                    "knn_consistency_score": knn_score,
+                    "knn_consistency_js": knn_js,
+                    "n_eff": float(node_usage.get("n_eff", 0.0)),
+                    "cv_usage": float(node_usage.get("cv_usage", 0.0)),
+                    "top1_max_frac": float(node_usage.get("top1_max_frac", 0.0)),
+                    "entropy_mean": entropy_mean_node,
+                }
+                if row["node_name"] == "final.expert":
+                    row["jitter_adj_norm"] = jitter_adj
+                diagnostic_nodes.append(row)
+                if row["node_kind"] == "final":
+                    tier_a_final_rows.append(row)
+                else:
+                    tier_b_internal_rows.append(row)
+
         readable_stages = []
         for stage_key in sorted(stage_payload.keys()):
             st = stage_payload[stage_key]
@@ -722,6 +1064,16 @@ class N3DiagnosticCollector:
             "feature_mode": self.feature_mode,
             "stage_metrics": stage_payload,
             "scalar_metrics": flat_scalars,
+            "diagnostic_nodes": diagnostic_nodes,
+            "diag_tiers": {
+                "tier_a_final": tier_a_final_rows,
+                "tier_b_internal": tier_b_internal_rows,
+                "tier_c_viz": {
+                    "viz_feature_pca": [],
+                    "viz_router_input_pca": [],
+                    "viz_group_feature_pca": [],
+                },
+            },
             "readable_summary": {
                 "stages": readable_stages,
             },

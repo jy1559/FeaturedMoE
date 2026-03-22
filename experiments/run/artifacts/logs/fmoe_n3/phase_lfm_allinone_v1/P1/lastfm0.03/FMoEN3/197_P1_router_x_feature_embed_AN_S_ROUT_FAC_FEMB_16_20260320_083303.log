@@ -1,0 +1,184 @@
+[LFM_ALLINONE_HEADER]
+phase=P1 run_phase=P1_AN_S_RXF_ROUT_FAC_FEMB_16 category=router_x_feature_embed suite=router_x_feature_embed variant=ROUT_FAC__FEMB_16
+anchor=AN_S router_variant=factored d_feat_emb=16 lr_range=[0.0001, 0.004]
+dataset=lastfm0.03 gpu=4 order=197
+max_evals=10 tune_epochs=100 tune_patience=10
+seed=22145
+axis_tags=["router_suite", "ROUT_FAC", "feature_embed_suite", "FEMB_16", "AN_S"]
+
+[ANCHOR_FIXED]
+embedding_size=96 d_ff=192 d_router_hidden=64 d_expert_hidden=128 expert_scale=3
+weight_decay=1e-06 hidden_dropout_prob=0.1 attn_dropout_prob=0.1
+
+[SEARCH_POLICY]
+learning_rate=loguniform[0.0001, 0.004], others=fixed
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 10 --tune-epochs 100 --tune-patience 10 --seed 22145 --run-group fmoe_n3 --run-axis phase_lfm_allinone_v1 --run-phase P1_AN_S_RXF_ROUT_FAC_FEMB_16 model=featured_moe_n3_tune dataset=lastfm0.03 eval_mode=session feature_mode=full_v3 gpu_id=4 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_artifact_logging_policy=final_only fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_phase="P1" ++lfm_aio_anchor_id="AN_S" ++lfm_aio_suite_id="router_x_feature_embed" ++lfm_aio_variant_id="ROUT_FAC__FEMB_16" ++lfm_aio_router_variant="factored" ++lfm_aio_axis_tags=["router_suite","ROUT_FAC","feature_embed_suite","FEMB_16","AN_S"] MAX_ITEM_LIST_LENGTH=20 train_batch_size=2048 eval_batch_size=4096 embedding_size=96 num_heads=4 d_ff=192 d_feat_emb=16 d_router_hidden=64 d_expert_hidden=128 expert_scale=3 hidden_dropout_prob=0.1 attn_dropout_prob=0.1 ++weight_decay=1e-06 ++layer_layout=["macro","mid","micro"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_type={macro:"factored",mid:"factored",micro:"factored"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_encoder_mode={macro:"linear",mid:"linear",micro:"linear"} ++stage_feature_injection={macro:"group_gated_bias",mid:"group_gated_bias",micro:"group_gated_bias"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_feature_family_mask={} ++stage_residual_mode={macro:"base",mid:"base",micro:"base"} ++macro_history_window=5 ++topk_scope_mode="group_dense" ++moe_top_k=0 ++moe_top_k_ratio=0.5 ++moe_top_k_policy="auto" ++balance_loss_lambda=0.002 ++z_loss_lambda=0.0001 ++route_smoothness_lambda=0.01 ++route_consistency_lambda=0.0 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0005 ++factored_group_balance_lambda=0.001 ++lr_scheduler_type="warmup_cosine" ++lr_scheduler_warmup_ratio=0.1 ++lr_scheduler_min_lr_ratio=0.1 ++lr_scheduler_plateau_factor=0.5 ++lr_scheduler_plateau_patience=3 ++search.learning_rate=[0.0001,0.004] ++search_space_type_overrides.learning_rate=loguniform ++stage_factored_group_router_source={macro:"feature",mid:"feature",micro:"feature"} ++stage_factored_group_logit_scale={macro:1.0,mid:1.0,micro:1.0} ++stage_factored_intra_logit_scale={macro:1.0,mid:1.0,micro:1.0} ++stage_factored_combine_mode={macro:"add",mid:"add",micro:"add"}
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=156773 ts=2026-03-20T08:33:06
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x lastfm0.03
+  max_evals=10  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=2048/4096/4096
+  track=fmoe_n3  axis=phase_lfm_allinone_v1  phase=P1_AN_S_RXF_ROUT_FAC_FEMB_16
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.0001, 0.004]                           -> loguniform
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] learning_rate=0.0002168
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[2/10] learning_rate=0.0001597
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[3/10] learning_rate=0.0003197
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[4/10] learning_rate=0.0006935
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[5/10] learning_rate=0.0001019
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[6/10] learning_rate=0.001245
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[7/10] learning_rate=0.0006787
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[8/10] learning_rate=0.001242
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[9/10] learning_rate=0.002824
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[10/10] learning_rate=0.0005965
+  -> FAILED: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3762, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2395, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 174, in __init__
+    self._assert_no_legacy_router_keys(config)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 168, in _assert_no_legacy_router_keys
+    raise ValueError(
+ValueError: Legacy router config keys are not supported in FeaturedMoE_N3. Use stage_router_wrapper + stage_router_primitives only. Found: stage_router_type, stage_factored_group_router_source, stage_factored_group_logit_scale, stage_factored_intra_logit_scale, stage_factored_combine_mode
+
+[WARN] fmin ended with: 
+
+=================================================================
+  DONE  |  FeaturedMoE_N3 x lastfm0.03
+  Best MRR@20 = 0.0000  |  0/10 trials OK
+  Best HR@10  = 0.0000
+  Test MRR@20 = 0.0000  (best-valid checkpoint)
+  Test HR@10  = 0.0000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.0000 best_valid_hr10=0.0000 test_mrr20=0.0000 test_hr10=0.0000
+  Total time: 0.1 min
+  Best params:
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/lastfm0.03_FeaturedMoE_N3_p1_an_s_rxf_rout_fac_femb_16_20260320_083306_576508_pid156773.json
+  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/normal/phase_lfm_allinone_v1/P1/lastfm0.03/FMoEN3/lastfm0.03_FeaturedMoE_N3_p1_an_s_rxf_rout_fac_femb_16_20260320_083306_576508_pid156773.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=156773 start=2026-03-20T08:33:06 end=2026-03-20T08:33:10

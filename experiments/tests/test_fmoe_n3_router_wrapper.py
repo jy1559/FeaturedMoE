@@ -17,6 +17,7 @@ from models.FeaturedMoE_N3.feature_config import (  # noqa: E402
 )
 from models.FeaturedMoE_N3.router_wrapper import (  # noqa: E402
     GroupConditionalIntraRouter,
+    GroupConditionalResidualJointWrapper,
     GroupSharedIntraProductWrapper,
     GroupScalarRouter,
     PrimitiveRoutingSpec,
@@ -24,6 +25,7 @@ from models.FeaturedMoE_N3.router_wrapper import (  # noqa: E402
     StageGroupRouter,
     StageJointExpertRouter,
     StageSharedIntraRouter,
+    required_primitives_for_wrapper,
 )
 from models.FeaturedMoE_N3.stage_modules import N3StageBlock, StageRuntimeConfigN3  # noqa: E402
 
@@ -166,21 +168,31 @@ def test_wrapper_probability_products_match_expected_values():
 
     w3 = GroupSharedIntraProductWrapper()
     w5 = ScalarGroupConditionalProductWrapper()
+    w6 = GroupConditionalResidualJointWrapper()
 
     out_w3 = w3(primitives=primitives, stage_temperature=1.0, n_groups=n_groups, n_experts_per_group=n_per_group, params={})
     out_w5 = w5(primitives=primitives, stage_temperature=1.0, n_groups=n_groups, n_experts_per_group=n_per_group, params={})
+    out_w6 = w6(
+        primitives=primitives,
+        stage_temperature=1.0,
+        n_groups=n_groups,
+        n_experts_per_group=n_per_group,
+        params={"alpha_struct": 1.0, "alpha_a": 1.0},
+    )
 
     expected_w3 = (b_probs.unsqueeze(-1) * c_probs.unsqueeze(-2)).reshape(1, 1, -1)
     expected_w5 = (e_probs.unsqueeze(-1) * d_probs).reshape(1, 1, -1)
+    expected_w6 = torch.log((b_probs.unsqueeze(-1) * d_probs).reshape(1, 1, -1).clamp(min=1e-8)) + primitives["a_joint"]["scaled_logits"]
 
     got_w3 = torch.exp(out_w3["scaled_logits"])
     got_w5 = torch.exp(out_w5["scaled_logits"])
 
     assert torch.allclose(got_w3, expected_w3, atol=1e-6)
     assert torch.allclose(got_w5, expected_w5, atol=1e-6)
+    assert torch.allclose(out_w6["scaled_logits"], expected_w6, atol=1e-6)
 
 
-@pytest.mark.parametrize("wrapper", ["w1_flat", "w2_a_plus_d", "w3_bxc", "w4_bxd", "w5_exd"])
+@pytest.mark.parametrize("wrapper", ["w1_flat", "w2_a_plus_d", "w3_bxc", "w4_bxd", "w5_exd", "w6_bxd_plus_a"])
 def test_stage_block_wrapper_forward_is_finite(wrapper):
     torch.manual_seed(2026)
     cfg = _build_mid_stage_cfg(wrapper=wrapper, d_top_k=0, expert_scale=3)
@@ -202,6 +214,7 @@ def test_stage_block_wrapper_forward_is_finite(wrapper):
     assert "final_expert_probs" in router_aux
     assert "wrapper_alias" in router_aux
     assert "primitive_outputs" in router_aux
+    assert set(router_aux["primitive_outputs"].keys()) == set(required_primitives_for_wrapper(wrapper))
 
 
 def test_stage_block_supports_mixed_primitive_sources():

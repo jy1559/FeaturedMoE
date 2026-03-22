@@ -1207,6 +1207,18 @@ def _write_csv_file(path: Path, rows: list[dict]) -> None:
             writer.writerow({k: _ser(v) for k, v in row.items()})
 
 
+def _write_csv_with_schema(path: Path, rows: list[dict], *, fieldnames: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fn = list(fieldnames or [])
+    if not fn:
+        fn = sorted({key for row in rows for key in row.keys()})
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fn)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: _ser(v) for k, v in row.items()})
+
+
 def _copy_if_exists(src: str | Path | None, dst: Path) -> str:
     src_path = Path(str(src or "")).expanduser()
     if not src_path.exists() or not src_path.is_file():
@@ -1253,14 +1265,18 @@ def _write_bundle_summary_md(path: Path, payload: dict) -> None:
         f"- result_json: {payload.get('result_json', '')}",
         f"- special_metrics: {payload.get('special_metrics_json', '')}",
         f"- special_log: {payload.get('special_log_json', '')}",
-        f"- diag_trial_summary: {payload.get('diag_trial_summary_csv', '')}",
-        f"- diag_best_valid: {payload.get('diag_best_valid_json', '')}",
-        f"- diag_best_valid_overview: {payload.get('diag_best_valid_overview_json', '')}",
-        f"- diag_best_valid_overview_md: {payload.get('diag_best_valid_overview_md', '')}",
-        f"- diag_early_valid: {payload.get('diag_early_valid_json', '')}",
-        f"- diag_test: {payload.get('diag_test_json', '')}",
-        f"- diag_collapse: {payload.get('diag_collapse_json', '')}",
-        f"- diag_epoch_trace: {payload.get('diag_epoch_trace_csv', '')}",
+        f"- diag_dir: {payload.get('diag_dir', '')}",
+        f"- diag_meta: {payload.get('diag_meta_json', '')}",
+        f"- diag_tier_a_final: {payload.get('diag_tier_a_final_csv', '')}",
+        f"- diag_tier_b_internal: {payload.get('diag_tier_b_internal_csv', '')}",
+        f"- diag_viz_manifest: {payload.get('diag_viz_manifest_json', '')}",
+        f"- diag_viz_feature_pca: {payload.get('diag_viz_feature_pca_csv_gz', '')}",
+        f"- diag_viz_router_input_pca: {payload.get('diag_viz_router_input_pca_csv_gz', '')}",
+        f"- diag_viz_group_feature_pca: {payload.get('diag_viz_group_feature_pca_csv_gz', '')}",
+        f"- diag_raw_trial_summary: {payload.get('diag_raw_trial_summary_csv', '')}",
+        f"- diag_raw_best_valid: {payload.get('diag_raw_best_valid_json', '')}",
+        f"- diag_raw_test: {payload.get('diag_raw_test_json', '')}",
+        f"- diag_raw_epoch_trace: {payload.get('diag_raw_epoch_trace_csv', '')}",
         f"- feature_ablation: {payload.get('feature_ablation_json', '')}",
         "",
     ]
@@ -1324,26 +1340,37 @@ def _write_logging_bundle(
     )
     bundle_dir.mkdir(parents=True, exist_ok=True)
 
+    def _copy_diag(src_key: str, rel_path: str) -> str:
+        return _copy_if_exists(data_payload.get(src_key), bundle_dir / rel_path)
+
     out = {
         "bundle_dir": str(bundle_dir.resolve()),
         "result_json": _copy_if_exists(result_path, bundle_dir / "result.json"),
         "special_metrics_json": _copy_if_exists(data_payload.get("special_result_file"), bundle_dir / "special_metrics.json"),
         "special_log_json": _copy_if_exists(data_payload.get("special_log_file"), bundle_dir / "special_log.json"),
-        "diag_trial_summary_csv": _copy_if_exists(data_payload.get("diag_trial_summary_file"), bundle_dir / "diag_trial_summary.csv"),
-        "diag_best_valid_json": _copy_if_exists(data_payload.get("diag_best_valid_file"), bundle_dir / "diag_best_valid.json"),
-        "diag_best_valid_overview_json": _copy_if_exists(data_payload.get("diag_best_valid_overview_file"), bundle_dir / "diag_best_valid_overview.json"),
-        "diag_best_valid_overview_md": _copy_if_exists(data_payload.get("diag_best_valid_overview_md_file"), bundle_dir / "diag_best_valid_overview.md"),
-        "diag_early_valid_json": _copy_if_exists(data_payload.get("diag_early_valid_file"), bundle_dir / "diag_early_valid.json"),
-        "diag_test_json": _copy_if_exists(data_payload.get("diag_test_file"), bundle_dir / "diag_test.json"),
-        "diag_collapse_json": _copy_if_exists(data_payload.get("diag_collapse_file"), bundle_dir / "diag_collapse.json"),
-        "diag_epoch_trace_csv": _copy_if_exists(data_payload.get("diag_epoch_trace_file"), bundle_dir / "diag_epoch_trace.csv"),
+        "diag_dir": str((bundle_dir / "diag").resolve()),
+        "diag_meta_json": _copy_diag("diag_meta_file", "diag/meta.json"),
+        "diag_tier_a_final_csv": _copy_diag("diag_tier_a_final_file", "diag/tier_a_final/final_metrics.csv"),
+        "diag_tier_b_internal_csv": _copy_diag("diag_tier_b_internal_file", "diag/tier_b_internal/internal_metrics.csv"),
+        "diag_viz_manifest_json": _copy_diag("diag_viz_manifest_file", "diag/tier_c_viz/viz_manifest.json"),
+        "diag_viz_feature_pca_csv_gz": _copy_diag("diag_viz_feature_pca_file", "diag/tier_c_viz/viz_feature_pca.csv.gz"),
+        "diag_viz_router_input_pca_csv_gz": _copy_diag("diag_viz_router_input_pca_file", "diag/tier_c_viz/viz_router_input_pca.csv.gz"),
+        "diag_viz_group_feature_pca_csv_gz": _copy_diag("diag_viz_group_feature_pca_file", "diag/tier_c_viz/viz_group_feature_pca.csv.gz"),
+        "diag_raw_trial_summary_csv": _copy_diag("diag_raw_trial_summary_file", "diag/raw/trial_summary.csv"),
+        "diag_raw_best_valid_json": _copy_diag("diag_raw_best_valid_file", "diag/raw/best_valid_diag.json"),
+        "diag_raw_best_valid_overview_json": _copy_diag("diag_raw_best_valid_overview_file", "diag/raw/best_valid_overview.json"),
+        "diag_raw_best_valid_overview_md": _copy_diag("diag_raw_best_valid_overview_md_file", "diag/raw/best_valid_overview.md"),
+        "diag_raw_early_valid_json": _copy_diag("diag_raw_early_valid_file", "diag/raw/early_valid_diag.json"),
+        "diag_raw_test_json": _copy_diag("diag_raw_test_file", "diag/raw/test_diag.json"),
+        "diag_raw_collapse_json": _copy_diag("diag_raw_collapse_file", "diag/raw/collapse_diag.json"),
+        "diag_raw_epoch_trace_csv": _copy_diag("diag_raw_epoch_trace_file", "diag/raw/epoch_trace.csv"),
         "feature_ablation_json": _copy_if_exists(data_payload.get("feature_ablation_file"), bundle_dir / "feature_ablation.json"),
     }
 
-    overview_rows = _extract_overview_rows(out.get("diag_best_valid_overview_json"))
+    overview_rows = _extract_overview_rows(out.get("diag_raw_best_valid_overview_json"))
     if overview_rows:
-        _write_csv_file(bundle_dir / "diag_overview_table.csv", overview_rows)
-        out["diag_overview_table_csv"] = str((bundle_dir / "diag_overview_table.csv").resolve())
+        _write_csv_file(bundle_dir / "diag" / "raw" / "overview_table.csv", overview_rows)
+        out["diag_overview_table_csv"] = str((bundle_dir / "diag" / "raw" / "overview_table.csv").resolve())
     else:
         out["diag_overview_table_csv"] = ""
 
@@ -1395,7 +1422,7 @@ def _write_logging_bundle(
         "best_params": summary_payload["best_params"],
         "stage_overview": overview_rows,
         "feature_ablation_available": bool(out.get("feature_ablation_json")),
-        "diag_available": bool(out.get("diag_best_valid_json")),
+        "diag_available": bool(out.get("diag_meta_json") or out.get("diag_tier_a_final_csv")),
         "special_available": bool(out.get("special_metrics_json")),
     }
     _write_json_file(bundle_dir / "analysis_card.json", analysis_card)
@@ -1423,33 +1450,24 @@ def _diag_artifact_paths(
     run_axis: str,
     run_phase: str,
 ) -> dict[str, Path]:
-    if _use_unified_logging_layout():
-        base_dir = result_file.parent
-        return {
-            "trial_summary": base_dir / "diag_trial_summary.csv",
-            "best_valid_diag": base_dir / "diag_best_valid.json",
-            "best_valid_overview": base_dir / "diag_best_valid_overview.json",
-            "best_valid_overview_md": base_dir / "diag_best_valid_overview.md",
-            "early_valid_diag": base_dir / "diag_early_valid.json",
-            "test_diag": base_dir / "diag_test.json",
-            "collapse_diag": base_dir / "diag_collapse.json",
-            "epoch_trace": base_dir / "diag_epoch_trace.csv",
-        }
-
-    dataset_dir = _safe_slug(_canonical_dataset_name(dataset))
-    model_tag = _model_tag(model)
-    axis_tag = _safe_slug(run_axis or "axis")
-    phase_bucket = _phase_bucket(run_phase)
-    diag_root = result_file.parent / "diag" / axis_tag / phase_bucket / dataset_dir / model_tag
+    del dataset, model, run_group, run_axis, run_phase
+    diag_root = result_file.parent / "diag"
     return {
-        "trial_summary": diag_root / "trial_summary.csv",
-        "best_valid_diag": diag_root / "best_valid_diag.json.gz",
-        "best_valid_overview": diag_root / "best_valid_overview.json",
-        "best_valid_overview_md": diag_root / "best_valid_overview.md",
-        "early_valid_diag": diag_root / "early_valid_diag.json.gz",
-        "test_diag": diag_root / "test_diag.json.gz",
-        "collapse_diag": diag_root / "collapse_diag.json.gz",
-        "epoch_trace": diag_root / "epoch_trace.csv.gz",
+        "meta": diag_root / "meta.json",
+        "tier_a_final": diag_root / "tier_a_final" / "final_metrics.csv",
+        "tier_b_internal": diag_root / "tier_b_internal" / "internal_metrics.csv",
+        "tier_c_manifest": diag_root / "tier_c_viz" / "viz_manifest.json",
+        "tier_c_feature_pca": diag_root / "tier_c_viz" / "viz_feature_pca.csv.gz",
+        "tier_c_router_input_pca": diag_root / "tier_c_viz" / "viz_router_input_pca.csv.gz",
+        "tier_c_group_feature_pca": diag_root / "tier_c_viz" / "viz_group_feature_pca.csv.gz",
+        "raw_trial_summary": diag_root / "raw" / "trial_summary.csv",
+        "raw_best_valid_diag": diag_root / "raw" / "best_valid_diag.json",
+        "raw_best_valid_overview": diag_root / "raw" / "best_valid_overview.json",
+        "raw_best_valid_overview_md": diag_root / "raw" / "best_valid_overview.md",
+        "raw_early_valid_diag": diag_root / "raw" / "early_valid_diag.json",
+        "raw_test_diag": diag_root / "raw" / "test_diag.json",
+        "raw_collapse_diag": diag_root / "raw" / "collapse_diag.json",
+        "raw_epoch_trace": diag_root / "raw" / "epoch_trace.csv",
     }
 
 
@@ -1457,6 +1475,45 @@ def _diag_scalar_metrics(diag_payload: dict | None) -> dict:
     if not isinstance(diag_payload, dict):
         return {}
     return dict(diag_payload.get("scalar_metrics", {}) or {})
+
+
+def _diag_tier_rows(diag_payload: dict | None, *, tier_key: str) -> list[dict]:
+    if not isinstance(diag_payload, dict):
+        return []
+    tiers = dict(diag_payload.get("diag_tiers", {}) or {})
+    rows = list(tiers.get(tier_key, []) or [])
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        out.append(dict(row))
+    return out
+
+
+def _diag_viz_rows(diag_payload: dict | None, *, key: str) -> list[dict]:
+    if not isinstance(diag_payload, dict):
+        return []
+    tiers = dict(diag_payload.get("diag_tiers", {}) or {})
+    tier_c = dict(tiers.get("tier_c_viz", {}) or {})
+    rows = list(tier_c.get(key, []) or [])
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        out.append(dict(row))
+    return out
+
+
+def _write_csv_gz_with_schema(path: Path, rows: list[dict], *, fieldnames: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fn = list(fieldnames or [])
+    if not fn:
+        fn = sorted({key for row in rows for key in row.keys()})
+    with gzip.open(path, "wt", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fn)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: _ser(v) for k, v in row.items()})
 
 
 def _metric_name_token(name: str) -> str:
@@ -2882,81 +2939,161 @@ def _save_results(
         bool(trial.get("valid_diag") or trial.get("early_valid_diag") or trial.get("test_diag"))
         for trial in normalized_trials
     )
-
-    unified_layout = _use_unified_logging_layout()
-
     if has_any_diag and trial_summary_rows:
-        _write_csv_file(diag_paths["trial_summary"], trial_summary_rows)
+        _write_csv_file(diag_paths["raw_trial_summary"], trial_summary_rows)
     if has_any_diag and epoch_trace_rows:
-        if unified_layout:
-            _write_csv_file(diag_paths["epoch_trace"], epoch_trace_rows)
-        else:
-            _write_csv_gz_file(diag_paths["epoch_trace"], epoch_trace_rows)
+        _write_csv_file(diag_paths["raw_epoch_trace"], epoch_trace_rows)
 
-    if ok:
-        collapse_row = min(ok, key=lambda x: float(x.get("mrr@20", 0.0) or 0.0))
-        if bt.get("valid_diag"):
-            if unified_layout:
-                _write_json_file(diag_paths["best_valid_diag"], bt.get("valid_diag") or {})
-            else:
-                _write_json_gz_file(diag_paths["best_valid_diag"], bt.get("valid_diag") or {})
-            overview_payload = _build_diag_overview_payload(bt.get("valid_diag") or {})
-            _write_json_file(diag_paths["best_valid_overview"], overview_payload)
-            diag_paths["best_valid_overview_md"].write_text(
-                _diag_overview_markdown(overview_payload),
-                encoding="utf-8",
-            )
-        if bt.get("early_valid_diag"):
-            if unified_layout:
-                _write_json_file(diag_paths["early_valid_diag"], bt.get("early_valid_diag") or {})
-            else:
-                _write_json_gz_file(diag_paths["early_valid_diag"], bt.get("early_valid_diag") or {})
-        if bt.get("test_diag"):
-            if unified_layout:
-                _write_json_file(diag_paths["test_diag"], bt.get("test_diag") or {})
-            else:
-                _write_json_gz_file(diag_paths["test_diag"], bt.get("test_diag") or {})
-        if collapse_row.get("valid_diag"):
-            collapse_payload = copy.deepcopy(collapse_row.get("valid_diag") or {})
-            if collapse_row.get("feature_ablation_metrics"):
-                collapse_payload["feature_ablation"] = collapse_row.get("feature_ablation_metrics") or {}
-            if unified_layout:
-                _write_json_file(diag_paths["collapse_diag"], collapse_payload)
-            else:
-                _write_json_gz_file(diag_paths["collapse_diag"], collapse_payload)
+    tier_a_rows: list[dict] = []
+    tier_b_rows: list[dict] = []
+    viz_feature_rows: list[dict] = []
+    viz_router_input_rows: list[dict] = []
+    viz_group_feature_rows: list[dict] = []
+    overview_payload = {"split": "", "feature_mode": "", "stages": []}
+    collapse_row = min(ok, key=lambda x: float(x.get("mrr@20", 0.0) or 0.0)) if ok else {}
+
+    if ok and bt.get("valid_diag"):
+        best_valid_diag_payload = bt.get("valid_diag") or {}
+        _write_json_file(diag_paths["raw_best_valid_diag"], best_valid_diag_payload)
+        overview_payload = _build_diag_overview_payload(best_valid_diag_payload)
+        _write_json_file(diag_paths["raw_best_valid_overview"], overview_payload)
+        diag_paths["raw_best_valid_overview_md"].write_text(
+            _diag_overview_markdown(overview_payload),
+            encoding="utf-8",
+        )
+        tier_a_rows = _diag_tier_rows(best_valid_diag_payload, tier_key="tier_a_final")
+        tier_b_rows = _diag_tier_rows(best_valid_diag_payload, tier_key="tier_b_internal")
+        viz_feature_rows = _diag_viz_rows(best_valid_diag_payload, key="viz_feature_pca")
+        viz_router_input_rows = _diag_viz_rows(best_valid_diag_payload, key="viz_router_input_pca")
+        viz_group_feature_rows = _diag_viz_rows(best_valid_diag_payload, key="viz_group_feature_pca")
+
+    if ok and bt.get("early_valid_diag"):
+        _write_json_file(diag_paths["raw_early_valid_diag"], bt.get("early_valid_diag") or {})
+    if ok and bt.get("test_diag"):
+        _write_json_file(diag_paths["raw_test_diag"], bt.get("test_diag") or {})
+    if collapse_row and collapse_row.get("valid_diag"):
+        collapse_payload = copy.deepcopy(collapse_row.get("valid_diag") or {})
+        if collapse_row.get("feature_ablation_metrics"):
+            collapse_payload["feature_ablation"] = collapse_row.get("feature_ablation_metrics") or {}
+        _write_json_file(diag_paths["raw_collapse_diag"], collapse_payload)
+
+    tier_fieldnames = [
+        "stage_name",
+        "stage_key",
+        "split",
+        "aggregation_level",
+        "node_kind",
+        "node_name",
+        "route_space",
+        "support_size",
+        "wrapper_name",
+        "source_type",
+        "temperature",
+        "top_k",
+        "entropy_norm",
+        "n_eff_norm",
+        "top1_monopoly_norm",
+        "jitter_adj_norm",
+        "knn_consistency_score",
+        "knn_consistency_js",
+        "n_eff",
+        "cv_usage",
+        "top1_max_frac",
+        "entropy_mean",
+    ]
+    _write_csv_with_schema(diag_paths["tier_a_final"], tier_a_rows, fieldnames=tier_fieldnames)
+    _write_csv_with_schema(diag_paths["tier_b_internal"], tier_b_rows, fieldnames=tier_fieldnames)
+
+    viz_manifest = {
+        "schema_version": "p8_router_diag_v1",
+        "split": str(overview_payload.get("split", "")),
+        "feature_mode": str(overview_payload.get("feature_mode", "")),
+        "row_counts": {
+            "viz_feature_pca": len(viz_feature_rows),
+            "viz_router_input_pca": len(viz_router_input_rows),
+            "viz_group_feature_pca": len(viz_group_feature_rows),
+        },
+    }
+    _write_json_file(diag_paths["tier_c_manifest"], viz_manifest)
+    _write_csv_gz_with_schema(
+        diag_paths["tier_c_feature_pca"],
+        viz_feature_rows,
+        fieldnames=["pc1", "pc2", "stage_name", "aggregation_level", "wrapper_name", "final_top1_group", "final_top1_expert", "final_confidence", "session_length", "group_feature_scores"],
+    )
+    _write_csv_gz_with_schema(
+        diag_paths["tier_c_router_input_pca"],
+        viz_router_input_rows,
+        fieldnames=["pc1", "pc2", "stage_name", "aggregation_level", "node_name", "top1_label", "confidence", "wrapper_name"],
+    )
+    _write_csv_gz_with_schema(
+        diag_paths["tier_c_group_feature_pca"],
+        viz_group_feature_rows,
+        fieldnames=["pc1", "pc2", "stage_name", "aggregation_level", "group_name", "final_top1_group", "final_top1_expert", "primitive_top1", "confidence"],
+    )
+
+    meta_payload = {
+        "schema_version": "p8_router_diag_v1",
+        "model": model,
+        "dataset": dataset_canonical,
+        "run_group": run_group,
+        "run_axis": run_axis,
+        "run_phase": run_phase,
+        "split": str(overview_payload.get("split", "")),
+        "feature_mode": str(overview_payload.get("feature_mode", "")),
+        "paths": {
+            "tier_a_final": str(diag_paths["tier_a_final"].resolve()),
+            "tier_b_internal": str(diag_paths["tier_b_internal"].resolve()),
+            "tier_c_manifest": str(diag_paths["tier_c_manifest"].resolve()),
+            "tier_c_feature_pca": str(diag_paths["tier_c_feature_pca"].resolve()),
+            "tier_c_router_input_pca": str(diag_paths["tier_c_router_input_pca"].resolve()),
+            "tier_c_group_feature_pca": str(diag_paths["tier_c_group_feature_pca"].resolve()),
+            "raw_trial_summary": str(diag_paths["raw_trial_summary"].resolve()) if has_any_diag and trial_summary_rows else "",
+            "raw_best_valid_diag": str(diag_paths["raw_best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else "",
+            "raw_best_valid_overview": str(diag_paths["raw_best_valid_overview"].resolve()) if ok and bt.get("valid_diag") else "",
+            "raw_early_valid_diag": str(diag_paths["raw_early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else "",
+            "raw_test_diag": str(diag_paths["raw_test_diag"].resolve()) if ok and bt.get("test_diag") else "",
+            "raw_collapse_diag": str(diag_paths["raw_collapse_diag"].resolve()) if collapse_row and collapse_row.get("valid_diag") else "",
+            "raw_epoch_trace": str(diag_paths["raw_epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else "",
+        },
+        "row_counts": {
+            "tier_a_final": len(tier_a_rows),
+            "tier_b_internal": len(tier_b_rows),
+            "viz_feature_pca": len(viz_feature_rows),
+            "viz_router_input_pca": len(viz_router_input_rows),
+            "viz_group_feature_pca": len(viz_group_feature_rows),
+        },
+    }
+    _write_json_file(diag_paths["meta"], meta_payload)
 
     feature_ablation_path = ""
     if ok and bt.get("feature_ablation_metrics"):
-        if unified_layout:
-            p = path.parent / "feature_ablation.json"
-            _write_json_file(
-                p,
-                {
-                    "best_trial": int(bt.get("trial", 0) or 0),
-                    "mrr@20": _ser(bt.get("mrr@20", 0.0)),
-                    "feature_ablation_metrics": bt.get("feature_ablation_metrics") or {},
-                },
-            )
-            feature_ablation_path = str(p.resolve())
-        else:
-            p = diag_paths["trial_summary"].parent / "feature_ablation.json"
-            _write_json_file(
-                p,
-                {
-                    "best_trial": int(bt.get("trial", 0) or 0),
-                    "mrr@20": _ser(bt.get("mrr@20", 0.0)),
-                    "feature_ablation_metrics": bt.get("feature_ablation_metrics") or {},
-                },
-            )
-            feature_ablation_path = str(p.resolve())
-    data["diag_trial_summary_file"] = str(diag_paths["trial_summary"].resolve()) if has_any_diag and trial_summary_rows else ""
-    data["diag_best_valid_file"] = str(diag_paths["best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else ""
-    data["diag_best_valid_overview_file"] = str(diag_paths["best_valid_overview"].resolve()) if ok and bt.get("valid_diag") else ""
-    data["diag_best_valid_overview_md_file"] = str(diag_paths["best_valid_overview_md"].resolve()) if ok and bt.get("valid_diag") else ""
-    data["diag_early_valid_file"] = str(diag_paths["early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else ""
-    data["diag_test_file"] = str(diag_paths["test_diag"].resolve()) if ok and bt.get("test_diag") else ""
-    data["diag_collapse_file"] = str(diag_paths["collapse_diag"].resolve()) if ok and collapse_row.get("valid_diag") else ""
-    data["diag_epoch_trace_file"] = str(diag_paths["epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else ""
+        p = path.parent / "feature_ablation.json"
+        _write_json_file(
+            p,
+            {
+                "best_trial": int(bt.get("trial", 0) or 0),
+                "mrr@20": _ser(bt.get("mrr@20", 0.0)),
+                "feature_ablation_metrics": bt.get("feature_ablation_metrics") or {},
+            },
+        )
+        feature_ablation_path = str(p.resolve())
+
+    data["diag_dir"] = str((path.parent / "diag").resolve())
+    data["diag_meta_file"] = str(diag_paths["meta"].resolve())
+    data["diag_tier_a_final_file"] = str(diag_paths["tier_a_final"].resolve())
+    data["diag_tier_b_internal_file"] = str(diag_paths["tier_b_internal"].resolve())
+    data["diag_viz_manifest_file"] = str(diag_paths["tier_c_manifest"].resolve())
+    data["diag_viz_feature_pca_file"] = str(diag_paths["tier_c_feature_pca"].resolve())
+    data["diag_viz_router_input_pca_file"] = str(diag_paths["tier_c_router_input_pca"].resolve())
+    data["diag_viz_group_feature_pca_file"] = str(diag_paths["tier_c_group_feature_pca"].resolve())
+    data["diag_raw_trial_summary_file"] = str(diag_paths["raw_trial_summary"].resolve()) if has_any_diag and trial_summary_rows else ""
+    data["diag_raw_best_valid_file"] = str(diag_paths["raw_best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else ""
+    data["diag_raw_best_valid_overview_file"] = str(diag_paths["raw_best_valid_overview"].resolve()) if ok and bt.get("valid_diag") else ""
+    data["diag_raw_best_valid_overview_md_file"] = str(diag_paths["raw_best_valid_overview_md"].resolve()) if ok and bt.get("valid_diag") else ""
+    data["diag_raw_early_valid_file"] = str(diag_paths["raw_early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else ""
+    data["diag_raw_test_file"] = str(diag_paths["raw_test_diag"].resolve()) if ok and bt.get("test_diag") else ""
+    data["diag_raw_collapse_file"] = str(diag_paths["raw_collapse_diag"].resolve()) if collapse_row and collapse_row.get("valid_diag") else ""
+    data["diag_raw_epoch_trace_file"] = str(diag_paths["raw_epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else ""
     data["feature_ablation_file"] = feature_ablation_path
 
     bundle_payload = _write_logging_bundle(
@@ -2978,14 +3115,22 @@ def _save_results(
         "normal_result_mirror_file": str(mirror_paths["normal_result"].resolve()),
         "special_result_file": str(mirror_paths["special_result"].resolve()) if special_payload else "",
         "special_log_file": str(mirror_paths["special_log"].resolve()) if special_payload else "",
-        "diag_trial_summary_file": str(diag_paths["trial_summary"].resolve()) if has_any_diag and trial_summary_rows else "",
-        "diag_best_valid_file": str(diag_paths["best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else "",
-        "diag_best_valid_overview_file": str(diag_paths["best_valid_overview"].resolve()) if ok and bt.get("valid_diag") else "",
-        "diag_best_valid_overview_md_file": str(diag_paths["best_valid_overview_md"].resolve()) if ok and bt.get("valid_diag") else "",
-        "diag_early_valid_file": str(diag_paths["early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else "",
-        "diag_test_file": str(diag_paths["test_diag"].resolve()) if ok and bt.get("test_diag") else "",
-        "diag_collapse_file": str(diag_paths["collapse_diag"].resolve()) if ok and collapse_row.get("valid_diag") else "",
-        "diag_epoch_trace_file": str(diag_paths["epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else "",
+        "diag_dir": str((path.parent / "diag").resolve()),
+        "diag_meta_file": str(diag_paths["meta"].resolve()),
+        "diag_tier_a_final_file": str(diag_paths["tier_a_final"].resolve()),
+        "diag_tier_b_internal_file": str(diag_paths["tier_b_internal"].resolve()),
+        "diag_viz_manifest_file": str(diag_paths["tier_c_manifest"].resolve()),
+        "diag_viz_feature_pca_file": str(diag_paths["tier_c_feature_pca"].resolve()),
+        "diag_viz_router_input_pca_file": str(diag_paths["tier_c_router_input_pca"].resolve()),
+        "diag_viz_group_feature_pca_file": str(diag_paths["tier_c_group_feature_pca"].resolve()),
+        "diag_raw_trial_summary_file": str(diag_paths["raw_trial_summary"].resolve()) if has_any_diag and trial_summary_rows else "",
+        "diag_raw_best_valid_file": str(diag_paths["raw_best_valid_diag"].resolve()) if ok and bt.get("valid_diag") else "",
+        "diag_raw_best_valid_overview_file": str(diag_paths["raw_best_valid_overview"].resolve()) if ok and bt.get("valid_diag") else "",
+        "diag_raw_best_valid_overview_md_file": str(diag_paths["raw_best_valid_overview_md"].resolve()) if ok and bt.get("valid_diag") else "",
+        "diag_raw_early_valid_file": str(diag_paths["raw_early_valid_diag"].resolve()) if ok and bt.get("early_valid_diag") else "",
+        "diag_raw_test_file": str(diag_paths["raw_test_diag"].resolve()) if ok and bt.get("test_diag") else "",
+        "diag_raw_collapse_file": str(diag_paths["raw_collapse_diag"].resolve()) if collapse_row and collapse_row.get("valid_diag") else "",
+        "diag_raw_epoch_trace_file": str(diag_paths["raw_epoch_trace"].resolve()) if has_any_diag and epoch_trace_rows else "",
         "feature_ablation_file": feature_ablation_path,
         "logging_bundle_dir": bundle_payload.get("bundle_dir", ""),
         "logging_bundle_summary_file": bundle_payload.get("run_summary_json", ""),

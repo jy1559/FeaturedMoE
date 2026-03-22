@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -329,6 +329,43 @@ class ScalarGroupConditionalProductWrapper(nn.Module):
         }
 
 
+class GroupConditionalResidualJointWrapper(nn.Module):
+    alias = "w6_bxd_plus_a"
+    name = "GroupConditionalResidualJointWrapper"
+
+    def forward(
+        self,
+        *,
+        primitives: Dict[str, Dict[str, torch.Tensor | float | Optional[int] | str]],
+        stage_temperature: float,
+        n_groups: int,
+        n_experts_per_group: int,
+        params: Dict[str, object],
+    ) -> Dict[str, object]:
+        alpha_struct = float(params.get("alpha_struct", 1.0))
+        alpha_a = float(params.get("alpha_a", 1.0))
+        b_probs = primitives["b_group"]["probs"]
+        d_probs = primitives["d_cond"]["probs"]
+        z_a = primitives["a_joint"]["scaled_logits"]
+        joint = b_probs.unsqueeze(-1) * d_probs
+        z_struct = _joint_prob_to_logit(joint).reshape(*joint.shape[:-2], int(n_groups) * int(n_experts_per_group))
+        scaled_logits = alpha_struct * z_struct + alpha_a * z_a
+        probs = F.softmax(scaled_logits, dim=-1)
+        return {
+            "scaled_logits": scaled_logits,
+            "raw_logits": scaled_logits * _safe_temperature(stage_temperature),
+            "group_probs": _group_probs_from_flat(probs, n_groups=n_groups, n_experts_per_group=n_experts_per_group),
+            "intra_probs": d_probs,
+            "group_logits": primitives["b_group"]["scaled_logits"],
+            "name": self.name,
+            "alias": self.alias,
+            "wrapper_internal": {
+                "alpha_struct": alpha_struct,
+                "alpha_a": alpha_a,
+            },
+        }
+
+
 _WRAPPER_ALIASES = {
     "w1_flat": "w1_flat",
     "flat_joint_wrapper": "w1_flat",
@@ -341,6 +378,17 @@ _WRAPPER_ALIASES = {
     "group_conditional_product_wrapper": "w4_bxd",
     "w5_exd": "w5_exd",
     "scalar_group_conditional_product_wrapper": "w5_exd",
+    "w6_bxd_plus_a": "w6_bxd_plus_a",
+    "group_conditional_residual_joint_wrapper": "w6_bxd_plus_a",
+}
+
+_WRAPPER_REQUIRED_PRIMITIVES = {
+    "w1_flat": ("a_joint",),
+    "w2_a_plus_d": ("a_joint", "d_cond"),
+    "w3_bxc": ("b_group", "c_shared"),
+    "w4_bxd": ("b_group", "d_cond"),
+    "w5_exd": ("e_scalar", "d_cond"),
+    "w6_bxd_plus_a": ("a_joint", "b_group", "d_cond"),
 }
 
 
@@ -363,4 +411,14 @@ def build_wrapper_module(name: str) -> nn.Module:
         return GroupConditionalProductWrapper()
     if wrapper == "w5_exd":
         return ScalarGroupConditionalProductWrapper()
+    if wrapper == "w6_bxd_plus_a":
+        return GroupConditionalResidualJointWrapper()
     raise ValueError(f"Unsupported stage_router_wrapper: {name}")
+
+
+def required_primitives_for_wrapper(name: str) -> Tuple[str, ...]:
+    wrapper = normalize_wrapper_name(name)
+    required = _WRAPPER_REQUIRED_PRIMITIVES.get(wrapper)
+    if required is None:
+        raise ValueError(f"Unsupported stage_router_wrapper: {name}")
+    return tuple(required)

@@ -5,9 +5,9 @@
 - run_group: fmoe_n3
 - run_axis: phase_lfm_allinone_v1
 - run_phase: P0_AN_L_expert_scale_suite_ES_6
-- best_mrr@20: 0.3994
-- test_mrr@20: 0.3778
-- test_hr@10: 0.4535
+- best_mrr@20: 0.403
+- test_mrr@20: 0.3808
+- test_hr@10: 0.453
 
 ## Artifacts
 

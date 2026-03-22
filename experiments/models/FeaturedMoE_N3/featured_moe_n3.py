@@ -32,6 +32,23 @@ logger = logging.getLogger(__name__)
 
 
 _PLAIN_TOKENS = {"layer", "attn", "ffn"}
+_LEGACY_ROUTER_KEYS = (
+    "stage_router_type",
+    "stage_factored_group_router_source",
+    "stage_factored_group_logit_scale",
+    "stage_factored_intra_logit_scale",
+    "stage_factored_combine_mode",
+)
+
+
+def _is_effectively_empty(value) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    if isinstance(value, (list, tuple, set, dict)):
+        return len(value) == 0
+    return False
 
 
 def _set_config_key(config_obj, key: str, value) -> None:
@@ -133,7 +150,28 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         _set_config_key(config, "fmoe_v2_layout_id", 0)
         _set_config_key(config, "fmoe_stage_execution_mode", "serial")
 
+    @staticmethod
+    def _assert_no_legacy_router_keys(config) -> None:
+        cfg = getattr(config, "final_config_dict", None)
+        if not isinstance(cfg, dict):
+            return
+        found = []
+        for key in _LEGACY_ROUTER_KEYS:
+            if key not in cfg:
+                continue
+            val = cfg.get(key)
+            if _is_effectively_empty(val):
+                continue
+            found.append(key)
+        if found:
+            joined = ", ".join(found)
+            raise ValueError(
+                "Legacy router config keys are not supported in FeaturedMoE_N3. "
+                f"Use stage_router_wrapper + stage_router_primitives only. Found: {joined}"
+            )
+
     def __init__(self, config, dataset):
+        self._assert_no_legacy_router_keys(config)
         self._ensure_layout_catalog(config)
         super().__init__(config, dataset)
 
@@ -412,6 +450,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             split_name=split_name,
             stage_family_features=self.feature_spec["stage_family_features"],
             stage_expert_names=self._stage_expert_names,
+            stage_router_granularity=self.stage_router_granularity,
             all_feature_columns=self.feature_base_fields,
             max_positions=int(self.max_seq_length),
             feature_mode=self._feature_ablation_tag(),
@@ -552,13 +591,30 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             teacher = prior_map.get(stage_key)
             if student is None or teacher is None:
                 continue
+            if (not torch.is_tensor(student)) or (not torch.is_tensor(teacher)):
+                continue
             if student.size(-1) <= 1 or teacher.size(-1) != student.size(-1):
                 continue
-            mask = self._sequence_valid_mask(item_seq_len, student.size(1), student.device).float()
-            teacher_prob = teacher.detach()
+
+            teacher_prob = teacher.detach().to(device=student.device, dtype=student.dtype)
+            # group_prior can be either [B, G] (session-level) or [B, S, G] (token-level).
+            # Align to student [B, S, G] (or [B, G]) shape using safe broadcasting.
+            while teacher_prob.ndim < student.ndim:
+                teacher_prob = teacher_prob.unsqueeze(1)
+            if teacher_prob.ndim != student.ndim:
+                continue
+            try:
+                teacher_prob = torch.broadcast_to(teacher_prob, student.shape)
+            except RuntimeError:
+                continue
+
             teacher_prob = teacher_prob / teacher_prob.sum(dim=-1, keepdim=True).clamp(min=1e-8)
             student_prob = student / student.sum(dim=-1, keepdim=True).clamp(min=1e-8)
             kl = (teacher_prob * (teacher_prob.clamp(min=1e-8).log() - student_prob.clamp(min=1e-8).log())).sum(dim=-1)
+            if student.ndim >= 3:
+                mask = self._sequence_valid_mask(item_seq_len, student.size(1), student.device).float()
+            else:
+                mask = torch.ones_like(kl, dtype=kl.dtype, device=kl.device)
             denom = mask.sum().clamp(min=1.0)
             losses.append((kl * mask).sum() / denom)
         return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
