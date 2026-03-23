@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 
 GROUP_ORDER: Tuple[str, ...] = ("Tempo", "Focus", "Memory", "Exposure")
@@ -105,6 +105,127 @@ def normalize_stage_family_mask(raw_value) -> Dict[str, List[str]]:
     return out
 
 
+def _parse_positive_int(raw_value: Any) -> int:
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return 0
+    return value if value > 0 else 0
+
+
+def normalize_stage_family_topk(raw_value) -> Dict[str, Dict[str, int]]:
+    out: Dict[str, Dict[str, int]] = {stage: {} for stage in STAGE_NAMES}
+    if raw_value is None:
+        return out
+
+    # Allow scalar shorthand: apply same top-k to all stages/families.
+    if isinstance(raw_value, (int, float, str)):
+        topk = _parse_positive_int(raw_value)
+        if topk <= 0:
+            return out
+        return {
+            stage: {family: int(topk) for family in GROUP_ORDER}
+            for stage in STAGE_NAMES
+        }
+
+    if not isinstance(raw_value, dict):
+        return out
+
+    # Allow flat family map shorthand: {"Tempo": 2, "Focus": 1, ...}
+    flat_family_map = {}
+    for family in GROUP_ORDER:
+        val = raw_value.get(family)
+        if val is None:
+            continue
+        topk = _parse_positive_int(val)
+        if topk > 0:
+            flat_family_map[family] = int(topk)
+    if flat_family_map:
+        for stage in STAGE_NAMES:
+            out[stage] = dict(flat_family_map)
+        return out
+
+    for stage in STAGE_NAMES:
+        stage_raw = raw_value.get(stage, raw_value.get(stage.capitalize(), None))
+        if stage_raw is None:
+            continue
+        if isinstance(stage_raw, (int, float, str)):
+            topk = _parse_positive_int(stage_raw)
+            if topk > 0:
+                out[stage] = {family: int(topk) for family in GROUP_ORDER}
+            continue
+        if not isinstance(stage_raw, dict):
+            continue
+        stage_map: Dict[str, int] = {}
+        for family in GROUP_ORDER:
+            val = stage_raw.get(family)
+            if val is None:
+                continue
+            topk = _parse_positive_int(val)
+            if topk > 0:
+                stage_map[family] = int(topk)
+        out[stage] = stage_map
+    return out
+
+
+def normalize_stage_family_custom(raw_value) -> Dict[str, Dict[str, List[str]]]:
+    out: Dict[str, Dict[str, List[str]]] = {stage: {} for stage in STAGE_NAMES}
+    if raw_value is None or not isinstance(raw_value, dict):
+        return out
+
+    # Allow flat family map shorthand: {"Tempo": [...], "Focus": [...], ...}
+    flat_family_map: Dict[str, List[str]] = {}
+    for family in GROUP_ORDER:
+        val = raw_value.get(family)
+        if val is None:
+            continue
+        if isinstance(val, str):
+            selected = [val.strip()] if val.strip() else []
+        else:
+            try:
+                selected = [str(v).strip() for v in list(val) if str(v).strip()]
+            except Exception:
+                selected = []
+        if selected:
+            flat_family_map[family] = selected
+    if flat_family_map:
+        for stage in STAGE_NAMES:
+            out[stage] = {family: list(cols) for family, cols in flat_family_map.items()}
+        return out
+
+    for stage in STAGE_NAMES:
+        stage_raw = raw_value.get(stage, raw_value.get(stage.capitalize(), None))
+        if stage_raw is None or not isinstance(stage_raw, dict):
+            continue
+        stage_map: Dict[str, List[str]] = {}
+        for family in GROUP_ORDER:
+            val = stage_raw.get(family)
+            if val is None:
+                continue
+            if isinstance(val, str):
+                selected = [val.strip()] if val.strip() else []
+            else:
+                try:
+                    selected = [str(v).strip() for v in list(val) if str(v).strip()]
+                except Exception:
+                    selected = []
+            if selected:
+                stage_map[family] = selected
+        out[stage] = stage_map
+    return out
+
+
+def normalize_feature_drop_keywords(raw_value) -> List[str]:
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        tokens = [tok.strip().lower() for tok in raw_value.split(",") if tok.strip()]
+        return tokens
+    if isinstance(raw_value, (list, tuple, set)):
+        return [str(tok).strip().lower() for tok in raw_value if str(tok).strip()]
+    return []
+
+
 def stage_scope_map(macro_history_window: int) -> Dict[str, str]:
     macro_window = normalize_macro_window(macro_history_window)
     return {
@@ -118,8 +239,14 @@ def build_stage_feature_spec(
     *,
     macro_history_window: int,
     stage_feature_family_mask,
+    stage_feature_family_topk=None,
+    stage_feature_family_custom=None,
+    stage_feature_drop_keywords=None,
 ) -> Dict[str, object]:
     family_mask = normalize_stage_family_mask(stage_feature_family_mask)
+    family_topk = normalize_stage_family_topk(stage_feature_family_topk)
+    family_custom = normalize_stage_family_custom(stage_feature_family_custom)
+    drop_keywords = normalize_feature_drop_keywords(stage_feature_drop_keywords)
     scopes = stage_scope_map(macro_history_window)
 
     stage_all_features: Dict[str, List[str]] = {}
@@ -130,10 +257,27 @@ def build_stage_feature_spec(
         scope = scopes[stage]
         scope_families = FAMILIES[scope]
         active_groups = set(family_mask[stage])
-        family_features = {
-            group_name: list(scope_families[group_name]) if group_name in active_groups else []
-            for group_name in GROUP_ORDER
-        }
+        stage_custom = dict(family_custom.get(stage, {}) or {})
+        stage_topk = dict(family_topk.get(stage, {}) or {})
+        family_features: Dict[str, List[str]] = {}
+        for group_name in GROUP_ORDER:
+            if group_name not in active_groups:
+                family_features[group_name] = []
+                continue
+            cols = list(scope_families[group_name])
+            custom_cols = list(stage_custom.get(group_name, []) or [])
+            if custom_cols:
+                custom_set = set(custom_cols)
+                cols = [name for name in cols if name in custom_set]
+            if drop_keywords:
+                cols = [
+                    name for name in cols
+                    if not any(keyword in str(name).lower() for keyword in drop_keywords)
+                ]
+            topk = _parse_positive_int(stage_topk.get(group_name))
+            if topk > 0:
+                cols = cols[:topk]
+            family_features[group_name] = cols
         stage_family_features[stage] = family_features
         stage_all_features[stage] = _unique_preserve_order(
             family_features[group_name] for group_name in GROUP_ORDER if family_features[group_name]
@@ -147,6 +291,9 @@ def build_stage_feature_spec(
         "macro_history_window": normalize_macro_window(macro_history_window),
         "stage_scopes": scopes,
         "stage_family_mask": family_mask,
+        "stage_family_topk": family_topk,
+        "stage_family_custom": family_custom,
+        "stage_feature_drop_keywords": list(drop_keywords),
         "stage_all_features": stage_all_features,
         "stage_family_features": stage_family_features,
         "stage_experts": stage_experts,

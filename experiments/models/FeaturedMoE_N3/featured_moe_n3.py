@@ -39,6 +39,18 @@ _LEGACY_ROUTER_KEYS = (
     "stage_factored_intra_logit_scale",
     "stage_factored_combine_mode",
 )
+_FEATURE_PERTURB_MODES = {
+    "none",
+    "zero",
+    "shuffle",
+    "global_permute",
+    "batch_permute",
+    "family_permute",
+    "position_shift",
+    "role_swap",
+    "stage_mismatch",
+}
+_FEATURE_PERTURB_APPLIES = {"none", "train", "eval", "both"}
 
 
 def _is_effectively_empty(value) -> bool:
@@ -125,6 +137,28 @@ def _parse_stage_nested_map(raw_value, *, default_value: Optional[dict] = None) 
         value = raw_value.get(stage, raw_value.get(stage.capitalize(), None))
         if isinstance(value, dict):
             out[stage] = copy.deepcopy(value)
+    return out
+
+
+def _parse_family_tokens(raw_value) -> List[str]:
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        text = str(raw_value).strip()
+        if not text:
+            return []
+        parts = [tok.strip() for tok in text.split(",") if tok.strip()]
+    elif isinstance(raw_value, (list, tuple, set)):
+        parts = [str(tok).strip() for tok in raw_value if str(tok).strip()]
+    else:
+        parts = [str(raw_value).strip()] if str(raw_value).strip() else []
+
+    valid = {str(name).lower(): str(name).lower() for name in GROUP_ORDER}
+    out: List[str] = []
+    for token in parts:
+        key = token.lower()
+        if key in valid and key not in out:
+            out.append(key)
     return out
 
 
@@ -227,6 +261,21 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         )
         self.residual_shared_ffn_scale = float(resolver.get("residual_shared_ffn_scale", 1.0))
         self.stage_feature_family_mask = resolver.get("stage_feature_family_mask", {}) or {}
+        self.stage_feature_family_topk = resolver.get("stage_feature_family_topk", {}) or {}
+        self.stage_feature_family_custom = resolver.get("stage_feature_family_custom", {}) or {}
+        self.stage_feature_drop_keywords = resolver.get("stage_feature_drop_keywords", []) or []
+        self.stage_family_dropout_prob = _parse_stage_float_map(
+            resolver.get("stage_family_dropout_prob", None),
+            default_value=0.0,
+        )
+        self.stage_feature_dropout_prob = _parse_stage_float_map(
+            resolver.get("stage_feature_dropout_prob", None),
+            default_value=0.0,
+        )
+        self.stage_feature_dropout_scope = _parse_stage_str_map(
+            resolver.get("stage_feature_dropout_scope", None),
+            default_value="token",
+        )
         self.dense_hidden_scale = float(resolver.get("dense_hidden_scale", 1.0))
         self.rule_agreement_lambda = float(resolver.get("rule_agreement_lambda", 0.0))
         self.group_coverage_lambda = float(resolver.get("group_coverage_lambda", 0.0))
@@ -248,6 +297,18 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         self.route_prior_bias_scale = float(resolver.get("route_prior_bias_scale", 0.5))
         self.fmoe_diag_logging = bool(resolver.get("fmoe_diag_logging", True))
         self.fmoe_diag_sample_sessions = max(int(resolver.get("fmoe_diag_sample_sessions", 256)), 0)
+        self.feature_perturb_mode = str(resolver.get("feature_perturb_mode", "none")).lower().strip()
+        if self.feature_perturb_mode not in _FEATURE_PERTURB_MODES:
+            self.feature_perturb_mode = "none"
+        self.feature_perturb_apply = str(resolver.get("feature_perturb_apply", "none")).lower().strip()
+        if self.feature_perturb_apply not in _FEATURE_PERTURB_APPLIES:
+            self.feature_perturb_apply = "none"
+        self.feature_perturb_family = _parse_family_tokens(resolver.get("feature_perturb_family", ""))
+        try:
+            self.feature_perturb_shift = int(resolver.get("feature_perturb_shift", 1))
+        except Exception:
+            self.feature_perturb_shift = 1
+        self.feature_perturb_shift = max(self.feature_perturb_shift, 1)
 
         self._feature_ablation_mode = "none"
         self._feature_ablation_family: Optional[str] = None
@@ -262,6 +323,9 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         self.feature_spec = build_stage_feature_spec(
             macro_history_window=self.macro_history_window,
             stage_feature_family_mask=self.stage_feature_family_mask,
+            stage_feature_family_topk=self.stage_feature_family_topk,
+            stage_feature_family_custom=self.stage_feature_family_custom,
+            stage_feature_drop_keywords=self.stage_feature_drop_keywords,
         )
 
         # If feature_meta_v3 is unavailable (common on datasets without v3 engineering),
@@ -281,6 +345,17 @@ class FeaturedMoE_N3(FeaturedMoE_N):
                     requested_feature_mode,
                 )
 
+        # Keep feature tensors aligned with stage feature spec for structural portability ablations.
+        active_stage_features = set()
+        for stage_name in STAGE_NAMES:
+            for col_name in list(self.feature_spec.get("stage_all_features", {}).get(stage_name, []) or []):
+                active_stage_features.add(str(col_name))
+        if active_stage_features:
+            effective_feature_columns = [
+                col for col in effective_feature_columns
+                if str(col) in active_stage_features
+            ]
+
         self.feature_base_fields = list(effective_feature_columns)
         self.feature_fields = [feature_list_field(col) for col in self.feature_base_fields]
         self.n_features = len(self.feature_fields)
@@ -299,6 +374,18 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             self._feature_family_ablation_indices[family_name.lower()] = sorted(
                 {int(col2idx[col]) for col in family_cols if col in col2idx}
             )
+        self._feature_stage_indices = {}
+        self._feature_stage_family_indices = {}
+        for stage_name in STAGE_NAMES:
+            stage_cols = list((self.feature_spec["stage_all_features"].get(stage_name, {}) or []) or [])
+            self._feature_stage_indices[stage_name] = [int(col2idx[col]) for col in stage_cols if col in col2idx]
+            fam_map = {}
+            for family_name in GROUP_ORDER:
+                fam_cols = list(
+                    (self.feature_spec["stage_family_features"].get(stage_name, {}) or {}).get(family_name, []) or []
+                )
+                fam_map[family_name.lower()] = [int(col2idx[col]) for col in fam_cols if col in col2idx]
+            self._feature_stage_family_indices[stage_name] = fam_map
         expert_hidden_by_stage = self._parse_stage_int_map(
             resolver.get("expert_hidden_by_stage", {}),
             default_value=self.d_expert_hidden,
@@ -348,6 +435,9 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             residual_alpha_fixed=self.residual_alpha_fixed,
             residual_alpha_init=self.residual_alpha_init,
             residual_shared_ffn_scale=self.residual_shared_ffn_scale,
+            stage_family_dropout_prob=self.stage_family_dropout_prob,
+            stage_feature_dropout_prob=self.stage_feature_dropout_prob,
+            stage_feature_dropout_scope=self.stage_feature_dropout_scope,
             col2idx=col2idx,
         )
         self.stage_executor.apply(self._init_weights)
@@ -387,6 +477,12 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "residual_shared_ffn_scale": self.residual_shared_ffn_scale,
             "macro_history_window": self.macro_history_window,
             "stage_feature_family_mask": self.stage_feature_family_mask,
+            "stage_feature_family_topk": self.stage_feature_family_topk,
+            "stage_feature_family_custom": self.stage_feature_family_custom,
+            "stage_feature_drop_keywords": self.stage_feature_drop_keywords,
+            "stage_family_dropout_prob": dict(self.stage_family_dropout_prob),
+            "stage_feature_dropout_prob": dict(self.stage_feature_dropout_prob),
+            "stage_feature_dropout_scope": dict(self.stage_feature_dropout_scope),
             "dense_hidden_scale": self.dense_hidden_scale,
             "group_prior_align_lambda": self.group_prior_align_lambda,
             "feature_group_bias_lambda": self.feature_group_bias_lambda,
@@ -405,12 +501,17 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "layer_norm_eps": self.layer_norm_eps,
             "fmoe_special_logging": bool(self.fmoe_special_logging),
             "fmoe_diag_logging": bool(self.fmoe_diag_logging),
+            "feature_perturb_mode": self.feature_perturb_mode,
+            "feature_perturb_apply": self.feature_perturb_apply,
+            "feature_perturb_family": list(self.feature_perturb_family),
+            "feature_perturb_shift": self.feature_perturb_shift,
         }.items():
             _set_config_key(config, key, value)
 
         logger.info(
             "FeaturedMoE_N3 init: layer_layout=%s compute=%s router_mode=%s router_source=%s "
-            "feature_injection=%s routing=%s feature_groups=%s uses_stage=%s diag=%s meta_loaded=%s",
+            "feature_injection=%s routing=%s feature_groups=%s uses_stage=%s diag=%s "
+            "perturb=(mode=%s apply=%s family=%s shift=%s) meta_loaded=%s",
             self.layer_layout,
             self.stage_compute_mode,
             self.stage_router_mode,
@@ -420,6 +521,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             self.feature_spec["stage_family_mask"],
             self._uses_stage_tokens,
             self._supports_diag,
+            self.feature_perturb_mode,
+            self.feature_perturb_apply,
+            self.feature_perturb_family,
+            self.feature_perturb_shift,
             bool(self.feature_meta_v3),
         )
 
@@ -433,10 +538,201 @@ class FeaturedMoE_N3(FeaturedMoE_N):
 
     def _feature_ablation_tag(self) -> str:
         if self._feature_ablation_mode == "none":
+            base_tag = "none"
+        elif self._feature_ablation_family:
+            base_tag = f"{self._feature_ablation_mode}:{self._feature_ablation_family}"
+        else:
+            base_tag = self._feature_ablation_mode
+        perturb_tag = self._feature_perturb_tag()
+        if perturb_tag == "none":
+            return base_tag
+        if base_tag == "none":
+            return perturb_tag
+        return f"{base_tag}|{perturb_tag}"
+
+    def _feature_perturb_tag(self) -> str:
+        if self.feature_perturb_mode == "none" or self.feature_perturb_apply == "none":
             return "none"
-        if self._feature_ablation_family:
-            return f"{self._feature_ablation_mode}:{self._feature_ablation_family}"
-        return self._feature_ablation_mode
+        family_tag = ""
+        if self.feature_perturb_family:
+            family_tag = ":" + "+".join(self.feature_perturb_family)
+        return (
+            f"perturb:{self.feature_perturb_mode}"
+            f"@{self.feature_perturb_apply}"
+            f"{family_tag}"
+            f"#shift{int(self.feature_perturb_shift)}"
+        )
+
+    def _should_apply_feature_perturb(self) -> bool:
+        if self.feature_perturb_mode == "none":
+            return False
+        if self.feature_perturb_apply == "none":
+            return False
+        if self.feature_perturb_apply == "both":
+            return True
+        if self.feature_perturb_apply == "train":
+            return bool(self.training)
+        if self.feature_perturb_apply == "eval":
+            return not bool(self.training)
+        return False
+
+    def _selected_perturb_families(self) -> List[str]:
+        if self.feature_perturb_family:
+            return [name for name in self.feature_perturb_family if name in self._feature_family_ablation_indices]
+        return [str(name).lower() for name in GROUP_ORDER]
+
+    def _selected_feature_indices_for_perturb(self, feature_dim: int) -> List[int]:
+        if feature_dim <= 0:
+            return []
+        families = self._selected_perturb_families()
+        selected = []
+        for family in families:
+            selected.extend(list(self._feature_family_ablation_indices.get(family, []) or []))
+        if selected:
+            return sorted({int(idx) for idx in selected if 0 <= int(idx) < int(feature_dim)})
+        return list(range(int(feature_dim)))
+
+    @staticmethod
+    def _copy_indices(
+        out: torch.Tensor,
+        src: torch.Tensor,
+        *,
+        dst_indices: List[int],
+        src_indices: List[int],
+    ) -> None:
+        if not dst_indices or not src_indices:
+            return
+        width = min(len(dst_indices), len(src_indices))
+        if width <= 0:
+            return
+        out[..., dst_indices[:width]] = src[..., src_indices[:width]]
+
+    def _apply_role_swap(self, feat: torch.Tensor) -> torch.Tensor:
+        out = feat.clone()
+        families = self._selected_perturb_families()
+        pair_lookup = {
+            "tempo": "exposure",
+            "exposure": "tempo",
+            "focus": "memory",
+            "memory": "focus",
+        }
+        if not families:
+            pairs = [("tempo", "exposure"), ("focus", "memory")]
+        elif len(families) == 1:
+            fam = str(families[0]).lower()
+            mate = pair_lookup.get(fam, "")
+            pairs = [(fam, mate)] if mate else []
+        else:
+            pairs = []
+            cursor = 0
+            while cursor + 1 < len(families):
+                pairs.append((str(families[cursor]).lower(), str(families[cursor + 1]).lower()))
+                cursor += 2
+
+        for left, right in pairs:
+            left_idx = list(self._feature_family_ablation_indices.get(left, []) or [])
+            right_idx = list(self._feature_family_ablation_indices.get(right, []) or [])
+            width = min(len(left_idx), len(right_idx))
+            if width <= 0:
+                continue
+            li = left_idx[:width]
+            ri = right_idx[:width]
+            out[..., li] = feat[..., ri]
+            out[..., ri] = feat[..., li]
+        return out
+
+    def _apply_stage_mismatch(self, feat: torch.Tensor) -> torch.Tensor:
+        out = feat.clone()
+        selected_families = set(self._selected_perturb_families())
+        rotate_map = {"macro": "mid", "mid": "micro", "micro": "macro"}
+        for dst_stage, src_stage in rotate_map.items():
+            if selected_families:
+                dst_idx = []
+                src_idx = []
+                for fam in selected_families:
+                    dst_idx.extend(list((self._feature_stage_family_indices.get(dst_stage, {}) or {}).get(fam, []) or []))
+                    src_idx.extend(list((self._feature_stage_family_indices.get(src_stage, {}) or {}).get(fam, []) or []))
+            else:
+                dst_idx = list(self._feature_stage_indices.get(dst_stage, []) or [])
+                src_idx = list(self._feature_stage_indices.get(src_stage, []) or [])
+            self._copy_indices(out, feat, dst_indices=dst_idx, src_indices=src_idx)
+        return out
+
+    def _apply_feature_perturb(self, feat: torch.Tensor) -> torch.Tensor:
+        if not torch.is_tensor(feat):
+            return feat
+        if feat.ndim != 3:
+            return feat
+        if feat.size(-1) <= 0:
+            return feat
+        if not self._should_apply_feature_perturb():
+            return feat
+
+        mode = self.feature_perturb_mode
+        selected_idx = self._selected_feature_indices_for_perturb(int(feat.size(-1)))
+        if mode == "zero":
+            if not selected_idx:
+                return torch.zeros_like(feat)
+            out = feat.clone()
+            out[..., selected_idx] = 0.0
+            return out
+        if mode == "shuffle":
+            if feat.size(0) <= 1:
+                return feat
+            perm = torch.randperm(feat.size(0), device=feat.device)
+            if not selected_idx:
+                return feat.index_select(0, perm)
+            out = feat.clone()
+            shuffled = feat.index_select(0, perm)
+            out[..., selected_idx] = shuffled[..., selected_idx]
+            return out
+        if mode == "global_permute":
+            flat = feat.reshape(-1, feat.size(-1))
+            if flat.size(0) <= 1:
+                return feat
+            perm = torch.randperm(flat.size(0), device=feat.device)
+            if not selected_idx:
+                return flat.index_select(0, perm).view_as(feat)
+            out = feat.clone().reshape(-1, feat.size(-1))
+            src = flat.index_select(0, perm)
+            out[:, selected_idx] = src[:, selected_idx]
+            return out.view_as(feat)
+        if mode == "batch_permute":
+            if feat.size(1) <= 1:
+                return feat
+            out = feat.clone()
+            for batch_idx in range(feat.size(0)):
+                perm = torch.randperm(feat.size(1), device=feat.device)
+                if not selected_idx:
+                    out[batch_idx] = feat[batch_idx].index_select(0, perm)
+                else:
+                    out[batch_idx, :, selected_idx] = feat[batch_idx].index_select(0, perm)[:, selected_idx]
+            return out
+        if mode == "family_permute":
+            if feat.size(0) <= 1:
+                return feat
+            out = feat.clone()
+            for family in self._selected_perturb_families():
+                fam_idx = list(self._feature_family_ablation_indices.get(family, []) or [])
+                if not fam_idx:
+                    continue
+                perm = torch.randperm(feat.size(0), device=feat.device)
+                out[..., fam_idx] = feat.index_select(0, perm)[..., fam_idx]
+            return out
+        if mode == "position_shift":
+            shift = int(self.feature_perturb_shift)
+            if feat.size(1) <= 1 or shift <= 0:
+                return feat
+            if not selected_idx:
+                return torch.roll(feat, shifts=shift, dims=1)
+            out = feat.clone()
+            out[..., selected_idx] = torch.roll(feat[..., selected_idx], shifts=shift, dims=1)
+            return out
+        if mode == "role_swap":
+            return self._apply_role_swap(feat)
+        if mode == "stage_mismatch":
+            return self._apply_stage_mismatch(feat)
+        return feat
 
     @property
     def feature_family_names(self) -> List[str]:
@@ -519,7 +815,9 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             feat_list.append(values.to(device=device))
 
         feat = torch.stack(feat_list, dim=-1)
-        return self._apply_feature_ablation(feat)
+        feat = self._apply_feature_ablation(feat)
+        feat = self._apply_feature_perturb(feat)
+        return feat
 
     def _update_eval_diagnostics(self, *, interaction, feat, item_seq_len, aux_data) -> None:
         if self.training or self._diag_collector is None:

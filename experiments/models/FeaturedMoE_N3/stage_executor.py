@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .stage_modules import (
     N3StageBlock,
@@ -28,6 +29,54 @@ _STAGE_TOKENS = {
     "micro_ffn",
 }
 _VALID_TOKENS = _PLAIN_TOKENS | _STAGE_TOKENS
+_BUNDLE_AGGS = {"sum", "mean", "learned", "router"}
+
+
+def _parse_bundle_token(token: str) -> Optional[tuple[list[str], str]]:
+    text = str(token or "").lower().strip()
+    if not text.startswith("bundle_"):
+        return None
+    parts = [p for p in text.split("_") if p]
+    if len(parts) < 4:
+        return None
+    agg = parts[-1]
+    if agg not in _BUNDLE_AGGS:
+        return None
+    stage_names = parts[1:-1]
+    if len(stage_names) not in {2, 3}:
+        return None
+    if any(stage not in _STAGE_NAMES for stage in stage_names):
+        return None
+    if len(set(stage_names)) != len(stage_names):
+        return None
+    return list(stage_names), agg
+
+
+class _BundleMergeRouter(nn.Module):
+    def __init__(
+        self,
+        *,
+        d_model: int,
+        n_features: int,
+        d_hidden: int,
+        n_branches: int,
+        dropout: float,
+    ):
+        super().__init__()
+        d_in = int(d_model) + int(max(n_features, 1))
+        d_hid = int(max(d_hidden, 8))
+        self.net = nn.Sequential(
+            nn.Linear(d_in, d_hid),
+            nn.GELU(),
+            nn.Dropout(float(dropout)),
+            nn.Linear(d_hid, int(n_branches)),
+        )
+
+    def forward(self, *, hidden: torch.Tensor, feat: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        x = torch.cat([hidden, feat], dim=-1)
+        logits = self.net(x)
+        weights = F.softmax(logits, dim=-1)
+        return weights, logits
 
 
 class StageExecutorN3(nn.Module):
@@ -73,13 +122,23 @@ class StageExecutorN3(nn.Module):
         residual_alpha_fixed: Dict[str, float],
         residual_alpha_init: Dict[str, float],
         residual_shared_ffn_scale: float,
+        stage_family_dropout_prob: Dict[str, float],
+        stage_feature_dropout_prob: Dict[str, float],
+        stage_feature_dropout_scope: Dict[str, str],
         col2idx: Dict[str, int],
     ):
         super().__init__()
         self.layer_layout = [str(token).lower().strip() for token in list(layer_layout or [])]
         if not self.layer_layout:
             raise ValueError("layer_layout cannot be empty.")
-        unknown = [token for token in self.layer_layout if token not in _VALID_TOKENS]
+
+        unknown = []
+        for token in self.layer_layout:
+            if token in _VALID_TOKENS:
+                continue
+            if _parse_bundle_token(token) is not None:
+                continue
+            unknown.append(token)
         if unknown:
             raise ValueError(f"Unsupported layer_layout tokens: {unknown}")
 
@@ -88,10 +147,13 @@ class StageExecutorN3(nn.Module):
         self.ffn_blocks = nn.ModuleList()
         self.stage_attn_blocks = nn.ModuleList()
         self.stage_blocks = nn.ModuleDict()
+        self.bundle_learned_logits = nn.ParameterList()
+        self.bundle_router_modules = nn.ModuleList()
         self.global_residual_alpha = nn.Parameter(torch.tensor(0.0))
         self.compiled_ops: List[dict] = []
 
         self._stage_counts = defaultdict(int)
+        self._n_all_features = int(max(len(col2idx), 1))
         self._stage_all_features = {stage: list(stage_all_features.get(stage, [])) for stage in _STAGE_NAMES}
         self._stage_family_features = {
             stage: {name: list(cols) for name, cols in dict(stage_family_features.get(stage, {}) or {}).items()}
@@ -144,11 +206,58 @@ class StageExecutorN3(nn.Module):
                     residual_alpha_fixed=float(residual_alpha_fixed.get(stage_name, 0.5)),
                     residual_alpha_init=float(residual_alpha_init.get(stage_name, 0.0)),
                     shared_ffn_scale=float(residual_shared_ffn_scale),
+                    stage_family_dropout_prob=float(stage_family_dropout_prob.get(stage_name, 0.0)),
+                    stage_feature_dropout_prob=float(stage_feature_dropout_prob.get(stage_name, 0.0)),
+                    stage_feature_dropout_scope=str(stage_feature_dropout_scope.get(stage_name, "token")),
                 )
                 self.stage_blocks[stage_name] = N3StageBlock(cfg)
 
         op_idx = 0
         for token in self.layer_layout:
+            bundle = _parse_bundle_token(token)
+            if bundle is not None:
+                op_idx += 1
+                stage_names, agg = bundle
+                stage_entries = []
+                for stage_name in stage_names:
+                    self._stage_counts[stage_name] += 1
+                    stage_entries.append(
+                        {
+                            "stage": stage_name,
+                            "stage_key": f"{stage_name}@{self._stage_counts[stage_name]}",
+                        }
+                    )
+
+                learned_index = None
+                router_index = None
+                if agg == "learned":
+                    self.bundle_learned_logits.append(nn.Parameter(torch.zeros(len(stage_names), dtype=torch.float32)))
+                    learned_index = len(self.bundle_learned_logits) - 1
+                elif agg == "router":
+                    self.bundle_router_modules.append(
+                        _BundleMergeRouter(
+                            d_model=d_model,
+                            n_features=self._n_all_features,
+                            d_hidden=d_router_hidden,
+                            n_branches=len(stage_names),
+                            dropout=dropout,
+                        )
+                    )
+                    router_index = len(self.bundle_router_modules) - 1
+
+                self.compiled_ops.append(
+                    {
+                        "kind": "bundle",
+                        "agg": agg,
+                        "token": token,
+                        "name": f"{op_idx:02d}_{token}.bundle",
+                        "stage_entries": stage_entries,
+                        "learned_index": learned_index,
+                        "router_index": router_index,
+                    }
+                )
+                continue
+
             if token == "layer":
                 op_idx += 1
                 self.layer_blocks.append(
@@ -221,14 +330,19 @@ class StageExecutorN3(nn.Module):
                 }
             )
 
-        self.requires_features = any(
-            op["kind"] == "stage" and self.stage_blocks[op["stage"]].requires_features
-            for op in self.compiled_ops
-        )
-        self.supports_diagnostics = any(
-            op["kind"] == "stage" and self.stage_blocks[op["stage"]].supports_diagnostics
-            for op in self.compiled_ops
-        )
+        self.requires_features = False
+        self.supports_diagnostics = False
+        for op in self.compiled_ops:
+            if op["kind"] == "stage":
+                block = self.stage_blocks[op["stage"]]
+                self.requires_features = self.requires_features or bool(block.requires_features)
+                self.supports_diagnostics = self.supports_diagnostics or bool(block.supports_diagnostics)
+                continue
+            if op["kind"] == "bundle":
+                for ent in op["stage_entries"]:
+                    block = self.stage_blocks[ent["stage"]]
+                    self.requires_features = self.requires_features or bool(block.requires_features)
+                    self.supports_diagnostics = self.supports_diagnostics or bool(block.supports_diagnostics)
 
     def stage_n_experts(self) -> int:
         return max((int(self.stage_blocks[name].n_experts) for name in _STAGE_NAMES), default=0)
@@ -262,6 +376,67 @@ class StageExecutorN3(nn.Module):
                 router_temperature=stage_temperatures.get(stage_name),
                 top_k=top_k,
             )
+
+    def _merge_bundle(
+        self,
+        *,
+        base_hidden: torch.Tensor,
+        feat: Optional[torch.Tensor],
+        branch_hiddens: list[torch.Tensor],
+        agg: str,
+        learned_index: Optional[int],
+        router_index: Optional[int],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+        if not branch_hiddens:
+            return base_hidden, None, None
+        if len(branch_hiddens) == 1:
+            ones = torch.ones(
+                base_hidden.size(0),
+                base_hidden.size(1),
+                1,
+                device=base_hidden.device,
+                dtype=base_hidden.dtype,
+            )
+            zeros = torch.zeros_like(ones)
+            return branch_hiddens[0], ones, zeros
+
+        deltas = torch.stack([h - base_hidden for h in branch_hiddens], dim=-2)
+
+        if agg == "sum":
+            merged = base_hidden + deltas.sum(dim=-2)
+            return merged, None, None
+
+        if agg == "mean":
+            merged = base_hidden + deltas.mean(dim=-2)
+            return merged, None, None
+
+        if agg == "learned":
+            if learned_index is None:
+                raise RuntimeError("learned bundle op missing learned_index")
+            raw = self.bundle_learned_logits[learned_index]
+            w = F.softmax(raw, dim=-1)
+            weights = w.view(1, 1, -1).expand(base_hidden.size(0), base_hidden.size(1), -1)
+            logits = raw.view(1, 1, -1).expand_as(weights)
+            merged = base_hidden + (weights.unsqueeze(-1) * deltas).sum(dim=-2)
+            return merged, weights, logits
+
+        if agg == "router":
+            if router_index is None:
+                raise RuntimeError("router bundle op missing router_index")
+            if feat is None:
+                feat_in = base_hidden.new_zeros(base_hidden.size(0), base_hidden.size(1), self._n_all_features)
+            else:
+                feat_in = feat
+                if feat_in.size(-1) < self._n_all_features:
+                    pad = feat_in.new_zeros(feat_in.size(0), feat_in.size(1), self._n_all_features - feat_in.size(-1))
+                    feat_in = torch.cat([feat_in, pad], dim=-1)
+                elif feat_in.size(-1) > self._n_all_features:
+                    feat_in = feat_in[..., : self._n_all_features]
+            weights, logits = self.bundle_router_modules[router_index](hidden=base_hidden, feat=feat_in)
+            merged = base_hidden + (weights.unsqueeze(-1) * deltas).sum(dim=-2)
+            return merged, weights, logits
+
+        raise RuntimeError(f"Unsupported bundle agg: {agg}")
 
     def forward(
         self,
@@ -298,6 +473,47 @@ class StageExecutorN3(nn.Module):
                 continue
             if kind == "stage_attn":
                 out = self.stage_attn_blocks[op["index"]](out, attention_mask)
+                continue
+
+            if kind == "bundle":
+                branch_hiddens = []
+                for entry in op["stage_entries"]:
+                    stage_key = entry["stage_key"]
+                    next_hidden, weights, logits, stage_router_aux, stage_dense_aux = self.stage_blocks[entry["stage"]](
+                        out,
+                        feat,
+                        item_seq_len=item_seq_len,
+                        alpha_override=self.global_residual_alpha,
+                    )
+                    branch_hiddens.append(next_hidden)
+                    if weights is not None:
+                        gate_weights[stage_key] = weights
+                    if logits is not None:
+                        gate_logits[stage_key] = logits
+                    for aux_name, aux_tensor in dict(stage_router_aux or {}).items():
+                        router_aux.setdefault(aux_name, {})[stage_key] = aux_tensor
+                    if stage_dense_aux:
+                        dense_aux[stage_key] = dict(stage_dense_aux)
+
+                merged_hidden, merge_w, merge_l = self._merge_bundle(
+                    base_hidden=out,
+                    feat=feat,
+                    branch_hiddens=branch_hiddens,
+                    agg=str(op["agg"]),
+                    learned_index=op.get("learned_index"),
+                    router_index=op.get("router_index"),
+                )
+                out = merged_hidden
+                if merge_w is not None:
+                    bundle_key = str(op.get("name", "bundle"))
+                    router_aux.setdefault("bundle_merge_weights", {})[bundle_key] = merge_w
+                    if merge_l is not None:
+                        router_aux.setdefault("bundle_merge_logits", {})[bundle_key] = merge_l
+                    entropy = -(merge_w.clamp(min=1e-8) * merge_w.clamp(min=1e-8).log()).sum(dim=-1)
+                    dense_aux[bundle_key] = {
+                        "merge_weight_max": merge_w.max(dim=-1).values.detach(),
+                        "merge_entropy": entropy.detach(),
+                    }
                 continue
 
             stage_key = op["stage_key"]

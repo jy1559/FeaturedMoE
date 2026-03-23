@@ -33,6 +33,7 @@ _VALID_ROUTER_MODE = {"none", "learned", "rule_soft"}
 _VALID_ROUTER_SOURCE = {"hidden", "feature", "both"}
 _VALID_FEATURE_ENCODER = {"linear", "complex"}
 _VALID_FEATURE_INJECTION = {"none", "film", "gated_bias", "group_gated_bias"}
+_VALID_FEATURE_DROPOUT_SCOPE = {"session", "token"}
 _VALID_RESIDUAL_MODE = {
     "base",
     "shared_only",
@@ -122,6 +123,9 @@ class StageRuntimeConfigN3:
     residual_alpha_fixed: float
     residual_alpha_init: float
     shared_ffn_scale: float
+    stage_family_dropout_prob: float
+    stage_feature_dropout_prob: float
+    stage_feature_dropout_scope: str
 
 
 class SASRecStyleAttentionBlock(nn.Module):
@@ -324,6 +328,9 @@ class N3StageBlock(nn.Module):
         self.current_top_k = _normalize_top_k(cfg.top_k, n_experts=1_000_000)
         self.current_router_temperature = max(float(cfg.router_temperature), 1e-6)
         self.current_alpha_scale = 1.0
+        self.stage_family_dropout_prob = min(max(float(cfg.stage_family_dropout_prob), 0.0), 0.999999)
+        self.stage_feature_dropout_prob = min(max(float(cfg.stage_feature_dropout_prob), 0.0), 0.999999)
+        self.stage_feature_dropout_scope = str(cfg.stage_feature_dropout_scope or "token").lower().strip()
         self.d_model = int(cfg.d_model)
         self.d_feat_emb = int(cfg.d_feat_emb)
         self.stage_residual_mode = str(cfg.stage_residual_mode).lower().strip()
@@ -366,6 +373,8 @@ class N3StageBlock(nn.Module):
             raise ValueError(f"Unsupported stage_feature_injection: {cfg.stage_feature_injection}")
         if self.routing_granularity not in _VALID_ROUTER_GRANULARITY:
             raise ValueError(f"Unsupported routing_granularity: {cfg.routing_granularity}")
+        if self.stage_feature_dropout_scope not in _VALID_FEATURE_DROPOUT_SCOPE:
+            self.stage_feature_dropout_scope = "token"
         if self.stage_name == "micro" and self.routing_granularity != "token":
             raise ValueError("micro routing_granularity must be 'token'")
         if self.stage_compute_mode == "dense_plain" and self.stage_router_mode != "none":
@@ -676,6 +685,42 @@ class N3StageBlock(nn.Module):
         if feat is None or self.stage_feat_idx.numel() <= 0:
             return torch.zeros(batch_size, seq_len, 0, device=device)
         return feat.index_select(-1, self.stage_feat_idx.to(device=feat.device))
+
+    def _apply_stochastic_feature_dropout(
+        self,
+        stage_raw_feat: torch.Tensor,
+        valid_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        if (not self.training) or stage_raw_feat.size(-1) <= 0:
+            return stage_raw_feat
+
+        out = stage_raw_feat
+        valid_f = valid_mask.unsqueeze(-1).to(dtype=out.dtype)
+        inv_valid_f = 1.0 - valid_f
+
+        if self.stage_feature_dropout_prob > 0:
+            keep_prob = max(1.0 - float(self.stage_feature_dropout_prob), 1e-6)
+            mask = (torch.rand_like(out) < keep_prob).to(dtype=out.dtype) / keep_prob
+            mask = mask * valid_f + inv_valid_f
+            out = out * mask
+
+        if self.stage_family_dropout_prob > 0 and self.group_feature_local_indices:
+            keep_prob = max(1.0 - float(self.stage_family_dropout_prob), 1e-6)
+            if self.stage_feature_dropout_scope == "session":
+                family_mask_shape = (out.size(0), 1, 1)
+            else:
+                family_mask_shape = (out.size(0), out.size(1), 1)
+            for local_idx in self.group_feature_local_indices:
+                if not local_idx:
+                    continue
+                family_mask = (
+                    (torch.rand(family_mask_shape, device=out.device) < keep_prob).to(dtype=out.dtype) / keep_prob
+                )
+                family_mask = family_mask * valid_f + inv_valid_f
+                idx = torch.tensor(local_idx, dtype=torch.long, device=out.device)
+                selected = out.index_select(-1, idx)
+                out.scatter_(-1, idx.view(1, 1, -1).expand(out.size(0), out.size(1), -1), selected * family_mask)
+        return out
 
     def _feature_context(
         self,
@@ -1009,6 +1054,7 @@ class N3StageBlock(nn.Module):
             seq_len=seq_len,
             device=hidden.device,
         )
+        stage_raw_feat = self._apply_stochastic_feature_dropout(stage_raw_feat, valid_mask)
         encoded_feat = self.feature_encoder(stage_raw_feat)
         feature_context, raw_feature_context = self._feature_context(
             stage_raw_feat=stage_raw_feat,
