@@ -162,6 +162,27 @@ def _parse_family_tokens(raw_value) -> List[str]:
     return out
 
 
+def _parse_keyword_tokens(raw_value) -> List[str]:
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        text = str(raw_value).strip()
+        if not text:
+            return []
+        parts = [tok.strip() for tok in text.split(",") if tok.strip()]
+    elif isinstance(raw_value, (list, tuple, set)):
+        parts = [str(tok).strip() for tok in raw_value if str(tok).strip()]
+    else:
+        parts = [str(raw_value).strip()] if str(raw_value).strip() else []
+
+    out: List[str] = []
+    for token in parts:
+        lowered = str(token).lower()
+        if lowered and lowered not in out:
+            out.append(lowered)
+    return out
+
+
 class FeaturedMoE_N3(FeaturedMoE_N):
     """N3 branch with explicit layer_layout and stage-wise controls."""
 
@@ -304,6 +325,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         if self.feature_perturb_apply not in _FEATURE_PERTURB_APPLIES:
             self.feature_perturb_apply = "none"
         self.feature_perturb_family = _parse_family_tokens(resolver.get("feature_perturb_family", ""))
+        self.feature_perturb_keywords = _parse_keyword_tokens(resolver.get("feature_perturb_keywords", []))
         try:
             self.feature_perturb_shift = int(resolver.get("feature_perturb_shift", 1))
         except Exception:
@@ -504,6 +526,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "feature_perturb_mode": self.feature_perturb_mode,
             "feature_perturb_apply": self.feature_perturb_apply,
             "feature_perturb_family": list(self.feature_perturb_family),
+            "feature_perturb_keywords": list(self.feature_perturb_keywords),
             "feature_perturb_shift": self.feature_perturb_shift,
         }.items():
             _set_config_key(config, key, value)
@@ -511,7 +534,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         logger.info(
             "FeaturedMoE_N3 init: layer_layout=%s compute=%s router_mode=%s router_source=%s "
             "feature_injection=%s routing=%s feature_groups=%s uses_stage=%s diag=%s "
-            "perturb=(mode=%s apply=%s family=%s shift=%s) meta_loaded=%s",
+            "perturb=(mode=%s apply=%s family=%s keywords=%s shift=%s) meta_loaded=%s",
             self.layer_layout,
             self.stage_compute_mode,
             self.stage_router_mode,
@@ -524,6 +547,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             self.feature_perturb_mode,
             self.feature_perturb_apply,
             self.feature_perturb_family,
+            self.feature_perturb_keywords,
             self.feature_perturb_shift,
             bool(self.feature_meta_v3),
         )
@@ -556,10 +580,14 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         family_tag = ""
         if self.feature_perturb_family:
             family_tag = ":" + "+".join(self.feature_perturb_family)
+        keyword_tag = ""
+        if self.feature_perturb_keywords:
+            keyword_tag = ":kw=" + "+".join(self.feature_perturb_keywords)
         return (
             f"perturb:{self.feature_perturb_mode}"
             f"@{self.feature_perturb_apply}"
             f"{family_tag}"
+            f"{keyword_tag}"
             f"#shift{int(self.feature_perturb_shift)}"
         )
 
@@ -581,9 +609,24 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             return [name for name in self.feature_perturb_family if name in self._feature_family_ablation_indices]
         return [str(name).lower() for name in GROUP_ORDER]
 
+    def _selected_feature_indices_by_keywords(self, feature_dim: int) -> List[int]:
+        if feature_dim <= 0:
+            return []
+        if not self.feature_perturb_keywords:
+            return []
+        selected = []
+        for col_name, col_idx in dict(self._feature_col2idx or {}).items():
+            col_text = str(col_name).lower()
+            if any(keyword in col_text for keyword in self.feature_perturb_keywords):
+                selected.append(int(col_idx))
+        return sorted({int(idx) for idx in selected if 0 <= int(idx) < int(feature_dim)})
+
     def _selected_feature_indices_for_perturb(self, feature_dim: int) -> List[int]:
         if feature_dim <= 0:
             return []
+        if self.feature_perturb_keywords:
+            # Explicit keyword targeting has priority over family-based selection.
+            return self._selected_feature_indices_by_keywords(feature_dim)
         families = self._selected_perturb_families()
         selected = []
         for family in families:
@@ -609,25 +652,27 @@ class FeaturedMoE_N3(FeaturedMoE_N):
 
     def _apply_role_swap(self, feat: torch.Tensor) -> torch.Tensor:
         out = feat.clone()
-        families = self._selected_perturb_families()
-        pair_lookup = {
-            "tempo": "exposure",
-            "exposure": "tempo",
-            "focus": "memory",
-            "memory": "focus",
-        }
-        if not families:
+        if not self.feature_perturb_family:
+            # Canonical default swap pair for full-family role sanity.
             pairs = [("tempo", "exposure"), ("focus", "memory")]
-        elif len(families) == 1:
-            fam = str(families[0]).lower()
-            mate = pair_lookup.get(fam, "")
-            pairs = [(fam, mate)] if mate else []
         else:
-            pairs = []
-            cursor = 0
-            while cursor + 1 < len(families):
-                pairs.append((str(families[cursor]).lower(), str(families[cursor + 1]).lower()))
-                cursor += 2
+            families = self._selected_perturb_families()
+            if len(families) == 1:
+                fam = str(families[0]).lower()
+                pair_lookup = {
+                    "tempo": "exposure",
+                    "exposure": "tempo",
+                    "focus": "memory",
+                    "memory": "focus",
+                }
+                mate = pair_lookup.get(fam, "")
+                pairs = [(fam, mate)] if mate else []
+            else:
+                pairs = []
+                cursor = 0
+                while cursor + 1 < len(families):
+                    pairs.append((str(families[cursor]).lower(), str(families[cursor + 1]).lower()))
+                    cursor += 2
 
         for left, right in pairs:
             left_idx = list(self._feature_family_ablation_indices.get(left, []) or [])

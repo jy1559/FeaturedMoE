@@ -1,0 +1,272 @@
+# Phase 10~13 Verification Plan (Intent + Metric + Special/Diag)
+
+## 0) Scope / Snapshot (2026-03-25 UTC)
+- 참조 문서(의도/축):
+  - `experiments/run/fmoe_n3/docs/plans/phase_10_13_specified/phase10_feature_portability.md`
+  - `experiments/run/fmoe_n3/docs/plans/phase_10_13_specified/phase11_stage_semantics.md`
+  - `experiments/run/fmoe_n3/docs/plans/phase_10_13_specified/phase12_layout_composition.md`
+  - `experiments/run/fmoe_n3/docs/plans/phase_10_13_specified/phase13_feature_sanity.md`
+- 집계 소스:
+  - `experiments/run/artifacts/logs/fmoe_n3/phase10_feature_portability_v1/P10/KuaiRecLargeStrictPosV2_0.2/summary.csv`
+  - `experiments/run/artifacts/logs/fmoe_n3/phase11_stage_semantics_v1/KuaiRecLargeStrictPosV2_0.2/summary.csv`
+  - `experiments/run/artifacts/logs/fmoe_n3/phase12_layout_composition_v1/KuaiRecLargeStrictPosV2_0.2/summary.csv`
+  - `experiments/run/artifacts/logs/fmoe_n3/phase13_feature_sanity_v1/KuaiRecLargeStrictPosV2_0.2/summary.csv`
+- 상태:
+  - `P10`: `22/24` complete
+  - `P11`: `24/24` complete
+  - `P12`: `32/32` complete
+  - `P13`: `21/24` complete
+- 이번 재정렬에서 **성능 집계 제외**:
+  - `P10` 재구현 중 2개: `P10-22_NO_CATEGORY_NO_TIMESTAMP`, `P10-23_COMMON_TEMPLATE_NO_CATEGORY`
+  - `P13` 재구현 중 2개: `P13-01_CATEGORY_ZERO_DATA`, `P13-14_FEATURE_ROLE_SWAP`
+  - `P13-09_TRAIN_BATCH_PERMUTE_ALL`: 장시간/효율 이슈로 wide 1차 제외
+- 원칙:
+  - selection은 성능 단독이 아니라 `metric + special + diag + phase 의도`로 결정
+
+## 1) CLI 입력 형식 정리
+`phase_10_13_verification_wrapper.sh`는 쉘 변수를 자동 해석하지 않는다.
+
+- 권장:
+  - `--settings "P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,..."`
+- `${P11_4}` 방식은 같은 shell 세션에서 직접 변수 선언했을 때만 동작한다.
+
+## 2) Selection Lens (논문용)
+1. 메인: `best valid MRR@20`
+2. 서브: `test MRR@20`
+3. special: cold(`target_popularity_abs <=5`), long session(`session_len 11+`) MRR@20
+4. diag: `top1_max_frac`, `cv_usage`, `entropy_mean`, `feature_group_knn_mean_score`
+
+해석 규칙:
+- `top1_max_frac`가 매우 높고(`~0.8+`) `cv_usage`도 높으면 expert concentration/collapse 가능성.
+- `align`가 높아도 concentration이 과도하면 “좋은 specialization”보다 “경직된 routing”일 수 있다.
+
+## 3) Phase별 결과 재요약 (의도 연결)
+
+### 3.1 P10 (Feature portability / compact template)
+- best valid: `P10-14_Focus_Memory_Exposure` = `0.0824`
+- best test: `P10-20_FAMILY_DROPOUT` = `0.1622`
+- anchor: `P10-00_FULL` = valid `0.0813`, test `0.1618`
+
+관찰:
+1. `stochastic(FAMILY/FEATURE_DROPOUT)`은 valid가 최고는 아니어도 test가 가장 강하고 diag도 안정적(`P10-20`: top1 `0.152`, cv `0.085`).
+2. `compactness`는 `TOP2_PER_GROUP`가 강하고(`0.0812/0.1608`), `COMMON_TEMPLATE`는 top1 `0.963`, cv `1.914`로 collapse stress-control 가치가 큼.
+3. `availability`에서 `NO_CATEGORY`는 valid는 높지만(top valid 2위), top1 `0.747`, cv `1.251`로 과집중 경향.
+4. `FULL`은 top1 `0.166`, cv `0.122`로 비교적 균형된 anchor.
+
+해석:
+- portability claim은 `TOP2/TOP1/COMMON_TEMPLATE + NO_CATEGORY/NO_TIMESTAMP + dropout`의 축 조합으로 방어하는 것이 가장 설득력 있음.
+
+### 3.2 P11 (Stage semantics / order / granularity)
+- best valid: `P11-17_MICRO_MACRO_MID` = `0.0832`
+- best test: `P11-14_MACRO_MICRO_MID` = `0.1623`
+- anchor: `P11-00_MACRO_MID_MICRO` = valid `0.0829`, test `0.1573`
+
+관찰:
+1. `order_permutation` 축이 성능 상위권을 지배.
+2. `P11-00`은 valid는 높지만 top1 `1.0`, cv `2.271`로 과집중 extreme.
+3. `P11-14`는 test 최고 + 비교적 안정적 diag(top1 `0.276`, cv `0.122`)이라 main comparison으로 적합.
+4. `routing_granularity`(`P11-20/19`)는 성능은 중상위, router behavior claim에 필수.
+5. `P11-22_LAYER_ONLY_BASELINE`은 성능이 낮아도 “그냥 dense depth 증가 효과 아님”을 보여주는 control이라 반드시 포함.
+
+### 3.3 P12 (Layout / composition)
+- best valid: `P12-07_MICRO_REPEATED` = `0.0823`
+- best test: `P12-09_MID_NOLOCALATTN` = `0.1622`
+- anchor: `P12-00_ATTN_ONESHOT` = valid `0.0802`, test `0.1615`
+
+관찰:
+1. `layout_variants`가 평균적으로 가장 강함.
+2. `bundle_pair_then_follow`는 일부 경쟁 가능(`P12-18`), 하지만 `bundle_all`/`bundle_chain`은 명확히 하락.
+3. `P12-18`은 bundle 대표로 유효하나 align(`0.942`)이 layout 상위군보다 낮아 구조적 trade-off를 보여줌.
+4. `P12-19_BUNDLE_ALL_SUM`은 강한 negative control(성능 하위권).
+
+해석:
+- “같은 stage set이라도 compose 방식이 중요하다”는 메시지는 `layout 상위 + bundle 대표 + bundle_all/chain negative` 조합이 가장 선명.
+
+### 3.4 P13 (Feature sanity / alignment)
+- completed best valid: `P13-00_FULL_DATA` = `0.0812`
+- completed best test: `P13-10_TRAIN_PERMUTE_TEMPO` = `0.1620`
+- 제외/보류: `P13-01`, `P13-14`(재구현), `P13-09`(시간 이슈)
+
+관찰:
+1. `train_corruption(10/11/12/13)`이 anchor 근처 성능으로 유지되어 “alignment 파괴 강도/유형” 비교에 유용.
+2. `eval_perturb`의 `ALL_SHUFFLE`은 성능 하락이 명확(`0.0770/0.1556`)한 strong negative control.
+3. `EVAL_ALL_ZERO`는 top1 `1.0`으로 extreme collapse control.
+4. `EVAL_ZERO_TEMPO`는 top1 `0.974`, cv `1.767`로 비정상 집중이 커서 diag stress 비교에 필수.
+5. `semantic_mismatch`의 `P13-15/16`은 성능이 높고 claim 본문 연결성이 큼.
+
+해석:
+- 이 phase는 “높은 성능”보다 “망가뜨렸을 때 왜/어떻게 무너지는지”를 보여주는 구성이 핵심.
+
+## 4) Phase별 우선순위 (4/8/12)
+아래는 **우선순위 순서**다. 앞에서부터 4/8/12를 자른다.
+
+### 4.1 P10 Priority
+1. `P10-00_FULL` (anchor, 균형 diag)
+2. `P10-15_TOP2_PER_GROUP` (compact template 핵심)
+3. `P10-18_NO_CATEGORY` (availability 핵심 반박 대응)
+4. `P10-21_FEATURE_DROPOUT` (generalization + 안정 diag)
+5. `P10-20_FAMILY_DROPOUT` (stochastic 대조)
+6. `P10-22_NO_CATEGORY_NO_TIMESTAMP` (`PENDING_REIMPL`, availability_plus 핵심)
+7. `P10-23_COMMON_TEMPLATE_NO_CATEGORY` (`PENDING_REIMPL`, compactness_plus 핵심)
+8. `P10-19_NO_TIMESTAMP` (availability 보강)
+9. `P10-16_TOP1_PER_GROUP` (compact 극단)
+10. `P10-17_COMMON_TEMPLATE` (collapse 진단 포인트)
+11. `P10-14_Focus_Memory_Exposure` (best valid, 과집중 해석용)
+12. `P10-06_Tempo_Memory` (subset 비교용)
+
+#### 4.1.1 P10 이미 완료한 12개 대비 델타
+- 확인 기준:
+  - `experiments/run/artifacts/logs/fmoe_n3/phase10_13_verification_wrapper_v1/KuaiRecLargeStrictPosV2_0.2/summary.csv`
+  - `run_complete` 기준 P10 설정 12개 완료 확인
+- 이전 완료 12개:
+  - `P10-00_FULL,P10-06_Tempo_Memory,P10-14_Focus_Memory_Exposure,P10-15_TOP2_PER_GROUP,P10-16_TOP1_PER_GROUP,P10-17_COMMON_TEMPLATE,P10-18_NO_CATEGORY,P10-19_NO_TIMESTAMP,P10-20_FAMILY_DROPOUT,P10-21_FEATURE_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY`
+- 현재 권장 `P10_12`:
+  - `P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP,P10-16_TOP1_PER_GROUP,P10-17_COMMON_TEMPLATE,P10-14_Focus_Memory_Exposure,P10-06_Tempo_Memory`
+- 집합 비교 결과:
+  - overlap: `12/12`
+  - 새로 추가해야 하는 비겹침 setting: `없음`
+  - 빠진 setting: `없음`
+- 즉, **P10은 재정렬(우선순위/해석)만 바뀌었고 setting 구성 자체는 동일**하다.
+- 다시 안 돌리고 갈 경우:
+  - 추가 실행 필요 없음 (`0개`)
+- 다시 돌릴 경우:
+  - 이유는 setting 추가가 아니라 `lr space / max-evals` 변경 반영 목적이다.
+
+### 4.2 P11 Priority
+1. `P11-00_MACRO_MID_MICRO` (anchor)
+2. `P11-14_MACRO_MICRO_MID` (best test + 안정 diag)
+3. `P11-17_MICRO_MACRO_MID` (best valid, order stress)
+4. `P11-22_LAYER_ONLY_BASELINE` (dense control 필수)
+5. `P11-20_SESSION_TOKEN_TOKEN` (granularity 가설 핵심)
+6. `P11-19_TOKEN_TOKEN_TOKEN` (granularity 대조)
+7. `P11-03_MACRO_MID` (micro 필요성)
+8. `P11-23_LAYER2_MACRO_MID_MICRO` (depth control)
+9. `P11-18_MICRO_MID_MACRO` (order 보강)
+10. `P11-16_MID_MICRO_MACRO` (order 보강)
+11. `P11-07_LAYER_MACRO_MID_MICRO` (prepend-layer 대조)
+12. `P11-01_MID_MICRO` (macro 제거 ablation)
+
+### 4.3 P12 Priority
+1. `P12-00_ATTN_ONESHOT` (anchor)
+2. `P12-07_MICRO_REPEATED` (best valid)
+3. `P12-09_MID_NOLOCALATTN` (best test)
+4. `P12-18_BUNDLE_MACROMICRO_LEARNED` (bundle 대표)
+5. `P12-02_ATTN_MICRO_BEFORE` (attention placement)
+6. `P12-08_MACRO_NOLOCALATTN` (local-attn ablation)
+7. `P12-06_MID_REPEATED` (repeated-stage 보강)
+8. `P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED` (router-conditioned bundle)
+9. `P12-05_MACRO_REPEATED` (repeated-stage 보강)
+10. `P12-19_BUNDLE_ALL_SUM` (all-stage negative)
+11. `P12-03_NO_ATTN_ONLY_MOEFFN` (attn 제거 negative)
+12. `P12-26_BUNDLE_MACROMID_THEN_MIDMICRO_SUM` (chain negative)
+
+### 4.4 P13 Priority
+1. `P13-00_FULL_DATA` (anchor)
+2. `P13-14_FEATURE_ROLE_SWAP` (`PENDING_REIMPL`, semantic mismatch 핵심)
+3. `P13-15_STAGE_MISMATCH_ASSIGN` (semantic mismatch 핵심)
+4. `P13-03_EVAL_ALL_SHUFFLE` (strong negative control)
+5. `P13-01_CATEGORY_ZERO_DATA` (`PENDING_REIMPL`, data-condition claim 핵심)
+6. `P13-02_EVAL_ALL_ZERO` (extreme collapse control)
+7. `P13-10_TRAIN_PERMUTE_TEMPO` (train corruption 대표, best test)
+8. `P13-11_TRAIN_PERMUTE_FOCUS` (family corruption 비교)
+9. `P13-16_POSITION_SHIFT_FEATURE` (semantic shift 보강)
+10. `P13-22_TRAIN_POSITION_SHIFT_PLUS2` (shift 강도 비교)
+11. `P13-13_TRAIN_PERMUTE_EXPOSURE` (family corruption 비교)
+12. `P13-17_EVAL_ZERO_TEMPO` (diag stress control)
+
+## 5) Copy-Paste Settings Strings
+```text
+P10_4  = P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT
+P10_8  = P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP
+P10_12 = P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP,P10-16_TOP1_PER_GROUP,P10-17_COMMON_TEMPLATE,P10-14_Focus_Memory_Exposure,P10-06_Tempo_Memory
+
+P11_4  = P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE
+P11_8  = P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO
+P11_12 = P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO,P11-18_MICRO_MID_MACRO,P11-16_MID_MICRO_MACRO,P11-07_LAYER_MACRO_MID_MICRO,P11-01_MID_MICRO
+
+P12_4  = P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED
+P12_8  = P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED
+P12_12 = P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED,P12-05_MACRO_REPEATED,P12-19_BUNDLE_ALL_SUM,P12-03_NO_ATTN_ONLY_MOEFFN,P12-26_BUNDLE_MACROMID_THEN_MIDMICRO_SUM
+
+P13_4  = P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE
+P13_8  = P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS
+P13_12 = P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS,P13-16_POSITION_SHIFT_FEATURE,P13-22_TRAIN_POSITION_SHIFT_PLUS2,P13-13_TRAIN_PERMUTE_EXPOSURE,P13-17_EVAL_ZERO_TEMPO
+
+ALL_16 = P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE
+ALL_32 = P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP,P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO,P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED,P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS
+ALL_48 = P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP,P10-16_TOP1_PER_GROUP,P10-17_COMMON_TEMPLATE,P10-14_Focus_Memory_Exposure,P10-06_Tempo_Memory,P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO,P11-18_MICRO_MID_MACRO,P11-16_MID_MICRO_MACRO,P11-07_LAYER_MACRO_MID_MICRO,P11-01_MID_MICRO,P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED,P12-05_MACRO_REPEATED,P12-19_BUNDLE_ALL_SUM,P12-03_NO_ATTN_ONLY_MOEFFN,P12-26_BUNDLE_MACROMID_THEN_MIDMICRO_SUM,P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS,P13-16_POSITION_SHIFT_FEATURE,P13-22_TRAIN_POSITION_SHIFT_PLUS2,P13-13_TRAIN_PERMUTE_EXPOSURE,P13-17_EVAL_ZERO_TEMPO
+```
+
+`PENDING_REIMPL` 설정이 아직 준비되지 않았으면:
+- P10 대체: `P10-22 -> P10-16`, `P10-23 -> P10-17`
+- P13 대체: `P13-14 -> P13-16`, `P13-01 -> P13-22`
+
+## 6) 단일 Phase 실행 CLI 예시
+공통 기본값:
+- `--hparams H3`
+- `--seeds 1,2,3,4`
+- `--max-evals 20`
+- `--search-lr-min 1.5e-4 --search-lr-max 8e-3`
+- `--gpus 0,1,2,3,4,5,6,7`
+
+```bash
+# P10 4 / 8 / 12
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP,P10-16_TOP1_PER_GROUP,P10-17_COMMON_TEMPLATE,P10-14_Focus_Memory_Exposure,P10-06_Tempo_Memory" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+
+# P11 4 / 8 / 12
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO,P11-18_MICRO_MID_MACRO,P11-16_MID_MICRO_MACRO,P11-07_LAYER_MACRO_MID_MICRO,P11-01_MID_MICRO" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+
+# P12 4 / 8 / 12
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED,P12-05_MACRO_REPEATED,P12-19_BUNDLE_ALL_SUM,P12-03_NO_ATTN_ONLY_MOEFFN,P12-26_BUNDLE_MACROMID_THEN_MIDMICRO_SUM" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+
+# P13 4 / 8 / 12
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS,P13-16_POSITION_SHIFT_FEATURE,P13-22_TRAIN_POSITION_SHIFT_PLUS2,P13-13_TRAIN_PERMUTE_EXPOSURE,P13-17_EVAL_ZERO_TEMPO" --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+```
+
+## 7) Multi-Phase 실행 (16/32/48)
+```bash
+# 16 settings (4 phase x 4)
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh \
+  --settings "P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE" \
+  --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+
+# 32 settings (4 phase x 8)
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh \
+  --settings "P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP,P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO,P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED,P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS" \
+  --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+
+# 48 settings (4 phase x 12)
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh \
+  --settings "P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP,P10-16_TOP1_PER_GROUP,P10-17_COMMON_TEMPLATE,P10-14_Focus_Memory_Exposure,P10-06_Tempo_Memory,P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO,P11-18_MICRO_MID_MACRO,P11-16_MID_MICRO_MACRO,P11-07_LAYER_MACRO_MID_MICRO,P11-01_MID_MICRO,P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED,P12-05_MACRO_REPEATED,P12-19_BUNDLE_ALL_SUM,P12-03_NO_ATTN_ONLY_MOEFFN,P12-26_BUNDLE_MACROMID_THEN_MIDMICRO_SUM,P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS,P13-16_POSITION_SHIFT_FEATURE,P13-22_TRAIN_POSITION_SHIFT_PLUS2,P13-13_TRAIN_PERMUTE_EXPOSURE,P13-17_EVAL_ZERO_TEMPO" \
+  --hparams H3 --seeds 1,2,3,4 --max-evals 20 --search-lr-min 1.5e-4 --search-lr-max 8e-3 --gpus 0,1,2,3,4,5,6,7
+```
+
+## 8) 실행 전략 (시간/신뢰 균형)
+- 기본 검증: `H3 only`, `seed=1,2,3,4`, `max-evals=20`, `lr=[1.5e-4, 8e-3]`
+- 8 settings 기준 예상(phase별): 대략 `6.3~6.6h` + 버퍼 `10~15%`
+- heavy 모드 증설 우선순위:
+1. seed 수 증가 (`1..6`)
+2. max-evals 증가 (`20 -> 24`)
+3. 일부 핵심 setting에만 `H1` 교차검증 추가
+
+## 9) 실행 전 체크
+```bash
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --list-settings
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE" --dry-run
+bash experiments/run/fmoe_n3/phase_10_13_verification_wrapper.sh --settings "P10-00_FULL,P10-15_TOP2_PER_GROUP,P10-18_NO_CATEGORY,P10-21_FEATURE_DROPOUT,P10-20_FAMILY_DROPOUT,P10-22_NO_CATEGORY_NO_TIMESTAMP,P10-23_COMMON_TEMPLATE_NO_CATEGORY,P10-19_NO_TIMESTAMP,P11-00_MACRO_MID_MICRO,P11-14_MACRO_MICRO_MID,P11-17_MICRO_MACRO_MID,P11-22_LAYER_ONLY_BASELINE,P11-20_SESSION_TOKEN_TOKEN,P11-19_TOKEN_TOKEN_TOKEN,P11-03_MACRO_MID,P11-23_LAYER2_MACRO_MID_MICRO,P12-00_ATTN_ONESHOT,P12-07_MICRO_REPEATED,P12-09_MID_NOLOCALATTN,P12-18_BUNDLE_MACROMICRO_LEARNED,P12-02_ATTN_MICRO_BEFORE,P12-08_MACRO_NOLOCALATTN,P12-06_MID_REPEATED,P12-24_BUNDLE_MACROMID_ROUTER_CONDITIONED,P13-00_FULL_DATA,P13-14_FEATURE_ROLE_SWAP,P13-15_STAGE_MISMATCH_ASSIGN,P13-03_EVAL_ALL_SHUFFLE,P13-01_CATEGORY_ZERO_DATA,P13-02_EVAL_ALL_ZERO,P13-10_TRAIN_PERMUTE_TEMPO,P13-11_TRAIN_PERMUTE_FOCUS" --dry-run
+```
+
+## 10) 업데이트 규칙
+- 재구현 중인 `P10-22/23`, `P13-01/14`가 완료되면:
+1. Section 3의 phase 요약 수치(valid/test/special/diag) 갱신
+2. Section 4의 각 phase 우선순위 미세조정
+3. Section 5/6/7 settings 문자열 유지 여부 최종 확정
+- `P13-09`는 별도 단독 실행 결과가 생길 때만 우선순위 재평가.

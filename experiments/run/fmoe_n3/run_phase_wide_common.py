@@ -288,6 +288,72 @@ def _verify_special_diag_from_result(result_json_path: str) -> tuple[bool, bool,
     return special_ok, diag_ok, detail
 
 
+def _extract_valid_mrr_from_payload(payload: Dict[str, Any]) -> Optional[float]:
+    candidates = [
+        payload.get("best_mrr@20"),
+        payload.get("best_mrr"),
+    ]
+    best_valid_result = payload.get("best_valid_result")
+    if isinstance(best_valid_result, dict):
+        candidates.append(best_valid_result.get("mrr@20"))
+    for value in candidates:
+        metric = _metric_to_float(value)
+        if metric is not None:
+            return metric
+    return None
+
+
+def _extract_test_mrr_from_payload(payload: Dict[str, Any]) -> Optional[float]:
+    candidates = [
+        payload.get("test_mrr@20"),
+        payload.get("test_mrr"),
+    ]
+    test_result = payload.get("test_result")
+    if isinstance(test_result, dict):
+        candidates.append(test_result.get("mrr@20"))
+    for value in candidates:
+        metric = _metric_to_float(value)
+        if metric is not None:
+            return metric
+    return None
+
+
+def _find_latest_result_row_for_run_phase(dataset: str, axis: str, run_phase: str) -> Optional[Dict[str, Any]]:
+    result_root = ARTIFACT_ROOT / "results" / "fmoe_n3"
+    if not result_root.exists():
+        return None
+    latest: Optional[Dict[str, Any]] = None
+    latest_mtime = -1.0
+    for path in result_root.glob("*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(payload.get("run_axis", "")) != str(axis):
+            continue
+        if str(payload.get("dataset", "")) != str(dataset):
+            continue
+        if str(payload.get("run_phase", "")).strip() != str(run_phase):
+            continue
+        try:
+            mtime = float(path.stat().st_mtime)
+        except Exception:
+            mtime = 0.0
+        if mtime < latest_mtime:
+            continue
+        latest_mtime = mtime
+        latest = {
+            "run_phase": str(run_phase),
+            "best_mrr": _extract_valid_mrr_from_payload(payload),
+            "test_mrr": _extract_test_mrr_from_payload(payload),
+            "n_completed": int(payload.get("n_completed", 0) or 0),
+            "interrupted": bool(payload.get("interrupted", False)),
+            "path": str(path),
+            "mtime": mtime,
+        }
+    return latest
+
+
 def _get_result_row_for_run_phase(dataset: str, axis: str, run_phase: str, retries: int = 8, sleep_sec: float = 1.0) -> Optional[Dict[str, Any]]:
     for _ in range(max(int(retries), 1)):
         index = _load_result_index(dataset, axis)
@@ -373,6 +439,21 @@ def _record_run_complete_summary(
         if result_path:
             special_ok, diag_ok, detail = _verify_special_diag_from_result(result_path)
             print(f"[wide][logging-check] run={run_phase} {detail} result={result_path}")
+            if verify_logging and (not special_ok or not diag_ok):
+                latest_row = _find_latest_result_row_for_run_phase(dataset, axis, run_phase)
+                latest_path = str((latest_row or {}).get("path", "") or "")
+                if latest_path and latest_path != result_path:
+                    latest_special_ok, latest_diag_ok, latest_detail = _verify_special_diag_from_result(latest_path)
+                    print(f"[wide][logging-check] run={run_phase} fallback_latest {latest_detail} result={latest_path}")
+                    if latest_special_ok and latest_diag_ok:
+                        result_row = latest_row
+                        run_best = _metric_to_float(result_row.get("best_mrr"))
+                        test_mrr = _metric_to_float(result_row.get("test_mrr"))
+                        n_completed = int(result_row.get("n_completed", 0) or 0)
+                        interrupted = bool(result_row.get("interrupted", False))
+                        result_path = latest_path
+                        special_ok = latest_special_ok
+                        diag_ok = latest_diag_ok
             if verify_logging and (not special_ok or not diag_ok):
                 raise RuntimeError(
                     f"Logging verification failed for run_phase={run_phase} "

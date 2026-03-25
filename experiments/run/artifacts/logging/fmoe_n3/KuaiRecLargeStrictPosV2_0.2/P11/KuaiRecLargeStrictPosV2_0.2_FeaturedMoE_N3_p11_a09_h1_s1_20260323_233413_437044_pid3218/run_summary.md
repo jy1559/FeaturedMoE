@@ -5,9 +5,9 @@
 - run_group: fmoe_n3
 - run_axis: phase11_stage_semantics_v1
 - run_phase: P11_A09_H1_S1
-- best_mrr@20: 0.0787
-- test_mrr@20: 0.1598
-- test_hr@10: 0.1843
+- best_mrr@20: 0.0796
+- test_mrr@20: 0.1615
+- test_hr@10: 0.1881
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P11/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p11_a09_h1_s1_20260323_233413_437044_pid3218/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P11/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p11_a09_h1_s1_20260323_233413_437044_pid3218/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P11/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p11_a09_h1_s1_20260323_233413_437044_pid3218/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P11/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p11_a09_h1_s1_20260323_233413_437044_pid3218/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P11/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p11_a09_h1_s1_20260323_233413_437044_pid3218/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P11/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p11_a09_h1_s1_20260323_233413_437044_pid3218/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P11/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p11_a09_h1_s1_20260323_233413_437044_pid3218/diag/raw/epoch_trace.csv
 - feature_ablation: 

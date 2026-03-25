@@ -57,13 +57,13 @@ def _base_overrides(args: argparse.Namespace) -> Dict[str, Any]:
     overrides["stage_feature_family_mask"] = {}
     overrides["stage_feature_family_topk"] = {}
     overrides["stage_feature_family_custom"] = {}
-    overrides["stage_feature_drop_keywords"] = []
     overrides["stage_family_dropout_prob"] = _all_stage_map(0.0)
     overrides["stage_feature_dropout_prob"] = _all_stage_map(0.0)
     overrides["stage_feature_dropout_scope"] = _all_stage_map("token")
     overrides["feature_perturb_mode"] = "none"
     overrides["feature_perturb_apply"] = "none"
     overrides["feature_perturb_family"] = []
+    overrides["feature_perturb_keywords"] = []
     overrides["feature_perturb_shift"] = 1
     return overrides
 
@@ -102,9 +102,13 @@ def _build_settings(args: argparse.Namespace) -> list[Dict[str, Any]]:
             idx=1,
             key="CATEGORY_ZERO_DATA",
             group="data_condition",
-            detail="Category/theme feature proxies dropped (category-zero proxy)",
+            detail="Category/theme columns zeroed while feature shape is preserved",
             base=base,
-            extra_overrides={"stage_feature_drop_keywords": ["cat", "theme"]},
+            extra_overrides={
+                "feature_perturb_mode": "zero",
+                "feature_perturb_apply": "both",
+                "feature_perturb_keywords": ["cat", "theme"],
+            },
         )
     )
 

@@ -1107,7 +1107,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--only-setting", default="", help="Comma-separated subset of setting keys or IDs")
     parser.add_argument("--include-extra-24", dest="include_extra_24", action="store_true")
     parser.add_argument("--no-extra-24", dest="include_extra_24", action="store_false")
-    parser.set_defaults(include_extra_24=False)
+    parser.set_defaults(include_extra_24=True)
 
     parser.add_argument("--manifest-out", default="", help="Optional matrix JSON output path")
     parser.add_argument("--resume-from-logs", action="store_true", default=True)

@@ -970,13 +970,26 @@ def _build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) -
     return cmd
 
 
-def _log_path_from_row(*, log_dir: Path, row: Dict[str, Any]) -> Path:
+def _log_filename_from_row(*, row: Dict[str, Any]) -> str:
     axis_sid = f"{_sanitize_token(row.get('axis_id', 'A'), upper=True)}{_sanitize_token(row.get('setting_uid', 'X'), upper=True)}"
     axis_desc = _sanitize_token(str(row.get("axis_desc", AXIS_DESC)), upper=False)
     setting_desc = _setting_desc_for_filename(row)
     hparam_num = int(row.get("hparam_num", _hparam_num(str(row.get("hparam_id", "H1")))))
     seed_id = int(row.get("seed_id", 1))
-    filename = f"{PHASE_ID}_{axis_sid}_{axis_desc}_{setting_desc}_H{hparam_num}_S{seed_id}.log"
+    return f"{PHASE_ID}_{axis_sid}_{axis_desc}_{setting_desc}_H{hparam_num}_S{seed_id}.log"
+
+
+def _log_path_from_row(*, log_dir: Path, row: Dict[str, Any]) -> Path:
+    filename = _log_filename_from_row(row=row)
+    source_phase = _sanitize_token(str(row.get("source_phase", "PXX")), upper=True)
+    setting_folder = _sanitize_token(str(row.get("setting_key", "") or row.get("setting_uid", "setting")), upper=True)
+    return log_dir / source_phase / setting_folder / filename
+
+
+def _legacy_flat_log_path_from_row(*, log_dir: Path, row: Dict[str, Any]) -> Path:
+    # Backward compatibility with pre-folder layout:
+    # <log_dir>/<filename>.log
+    return log_dir / _log_filename_from_row(row=row)
     return log_dir / filename
 
 
@@ -988,6 +1001,7 @@ def _write_log_preamble(
     args: argparse.Namespace,
     cmd: list[str],
 ) -> None:
+    log_file.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         f"[{PHASE_NAME}_SETTING_HEADER]",
         (
@@ -1103,16 +1117,27 @@ def _launch_rows(
 
     runnable: list[Dict[str, Any]] = []
     skipped = 0
+    skipped_legacy = 0
     for row in rows:
         lp = _log_path_from_row(log_dir=log_dir, row=row)
+        legacy_lp = _legacy_flat_log_path_from_row(log_dir=log_dir, row=row)
         row["log_path"] = str(lp)
-        if bool(getattr(args, "resume_from_logs", True)) and _is_completed_log(lp):
-            skipped += 1
-            continue
+        row["legacy_log_path"] = str(legacy_lp)
+        if bool(getattr(args, "resume_from_logs", True)):
+            if _is_completed_log(lp):
+                skipped += 1
+                continue
+            if legacy_lp != lp and _is_completed_log(legacy_lp):
+                skipped += 1
+                skipped_legacy += 1
+                continue
         runnable.append(row)
 
     if skipped > 0:
-        print(f"[{PHASE_ID}] resume_from_logs=on: skipped {skipped} completed runs by strict log-end marker")
+        msg = f"[{PHASE_ID}] resume_from_logs=on: skipped {skipped} completed runs by strict log-end marker"
+        if skipped_legacy > 0:
+            msg += f" (legacy flat-path hits={skipped_legacy})"
+        print(msg)
 
     if not runnable:
         print(f"[{PHASE_ID}] all runs are already completed by strict log markers")
