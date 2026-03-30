@@ -1,0 +1,87 @@
+[STAGEB_STRUCTURE_ANCHOR2_CORE5_SETTING_HEADER]
+run_phase=P17_SB_D00_M04_DIFSR_B2_S1 run_id=SB_LASTFM0_03_DIFSR_B2_S1 phase_id=P17 axis_id=SB model=DIFSR profile_id=B2 seed=1
+dataset=lastfm0.03 gpu=4 order=0 lr_band=LR4,LR3 lr_lo=0.0006840000000000001 lr_hi=0.004104
+max_evals=6 tune_epochs=40 tune_patience=6
+seed=170019
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name tune_lfm_small --max-evals 6 --tune-epochs 40 --tune-patience 6 --seed 170019 --run-group baseline --run-axis StageB_Structure_anchor2_core5 --run-phase P17_SB_D00_M04_DIFSR_B2_S1 model=difsr dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v3 gpu_id=4 log_wandb=false show_progress=false ++special_logging=true ++seed=170019 ++search={learning_rate:[0.0006840000000000001,0.004104]} ++search_space_type_overrides={learning_rate:"loguniform"} ++MAX_ITEM_LIST_LENGTH=10 ++weight_decay=0.0002 ++search.weight_decay=[0.0002] ++search_space_type_overrides.weight_decay=choice ++search.hidden_size=[128] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[128] ++search_space_type_overrides.embedding_size=choice ++search.n_layers=[1] ++search_space_type_overrides.n_layers=choice ++search.num_layers=[1] ++search_space_type_overrides.num_layers=choice ++search.dropout_ratio=[0.2] ++search_space_type_overrides.dropout_ratio=choice ++search.dropout_prob=[0.2] ++search_space_type_overrides.dropout_prob=choice ++search.hidden_dropout_prob=[0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.2] ++search_space_type_overrides.attn_dropout_prob=choice ++search.inner_size=[256] ++search_space_type_overrides.inner_size=choice ++search.n_heads=[4] ++search_space_type_overrides.n_heads=choice ++search.num_heads=[4] ++search_space_type_overrides.num_heads=choice ++dropout_ratio=0.2 ++hidden_size=128 ++embedding_size=128 ++n_layers=1 ++num_layers=1 ++n_heads=4 ++num_heads=4 ++inner_size=256 ++attribute_hidden_size=128 ++fusion_type=gate ++use_attribute_predictor=true ++lambda_attr=0.1 ++train_batch_size=3072 ++eval_batch_size=4096
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=516843 ts=2026-03-29T19:28:37
+
+=================================================================
+  Hyperopt TPE  |  DIFSR x lastfm0.03
+  max_evals=6  epochs=40  patience=6  wandb=off
+  batch_size(train/valid/test)=3072/4096/4096
+  track=baseline  axis=stageb_structure_anchor2_core5  phase=P17_SB_D00_M04_DIFSR_B2_S1
+=================================================================
+Changed knobs: fusion_type, learning_rate
+Tuned params(len>1): 2  (~2 discrete combos)
+Tuned groups: 2
+  [optimization]
+    learning_rate                   [0.0006840000000000001, 0.004104]         -> loguniform
+  [other]
+    fusion_type                     ['sum', 'gate']                           -> choice
+Fixed params(singleton/non-list): 12
+Fixed groups: 12
+  [optimization]
+    hidden_dropout_prob             0.2                                     
+    weight_decay                    0.0002                                  
+  [model_core]
+    attn_dropout_prob               0.2                                     
+    dropout_prob                    0.2                                     
+    dropout_ratio                   0.2                                     
+    embedding_size                  128                                     
+    hidden_size                     128                                     
+    inner_size                      256                                     
+    num_heads                       4                                       
+    num_layers                      1                                       
+  [other]
+    n_heads                         4                                       
+    n_layers                        1                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/6] fusion_type=gate, learning_rate=0.0008138
+  -> MRR@20=0.172700  best=0.172700  (full@40, trial=4.7min, avg=4.9min/trial, total=4.9min, ETA=24.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.172700 cur_best_hr10=0.245500 cur_test_mrr20=0.173700 cur_test_hr10=0.242600 run_best_mrr20=0.172700 run_best_hr10=0.245500 run_test_mrr20=0.173700 run_test_hr10=0.242600
+
+[2/6] fusion_type=sum, learning_rate=0.004007
+  -> MRR@20=0.213300  best=0.213300  (full@40, trial=4.4min, avg=4.7min/trial, total=9.3min, ETA=18.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.213300 cur_best_hr10=0.272100 cur_test_mrr20=0.212800 cur_test_hr10=0.267800 run_best_mrr20=0.213300 run_best_hr10=0.272100 run_test_mrr20=0.212800 run_test_hr10=0.267800
+
+[3/6] fusion_type=sum, learning_rate=0.0007182
+  -> MRR@20=0.150200  best=0.213300  (full@40, trial=4.4min, avg=4.6min/trial, total=13.7min, ETA=13.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.150200 cur_best_hr10=0.214200 cur_test_mrr20=0.146000 cur_test_hr10=0.208300 run_best_mrr20=0.213300 run_best_hr10=0.272100 run_test_mrr20=0.212800 run_test_hr10=0.267800
+
+[4/6] fusion_type=sum, learning_rate=0.000702
+  -> MRR@20=0.145400  best=0.213300  (full@40, trial=4.3min, avg=4.5min/trial, total=18.0min, ETA=9.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.145400 cur_best_hr10=0.207000 cur_test_mrr20=0.138600 cur_test_hr10=0.198200 run_best_mrr20=0.213300 run_best_hr10=0.272100 run_test_mrr20=0.212800 run_test_hr10=0.267800
+
+[5/6] fusion_type=sum, learning_rate=0.0007012
+  -> MRR@20=0.145200  best=0.213300  (full@40, trial=4.3min, avg=4.5min/trial, total=22.3min, ETA=4.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.145200 cur_best_hr10=0.206700 cur_test_mrr20=0.138300 cur_test_hr10=0.197900 run_best_mrr20=0.213300 run_best_hr10=0.272100 run_test_mrr20=0.212800 run_test_hr10=0.267800
+
+[6/6] fusion_type=sum, learning_rate=0.001382
+  -> MRR@20=0.224900  best=0.224900  (full@40, trial=4.3min, avg=4.4min/trial, total=26.6min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.224900 cur_best_hr10=0.279300 cur_test_mrr20=0.226700 cur_test_hr10=0.284500 run_best_mrr20=0.224900 run_best_hr10=0.279300 run_test_mrr20=0.226700 run_test_hr10=0.284500
+
+=================================================================
+  DONE  |  DIFSR x lastfm0.03
+  Best MRR@20 = 0.224900  |  6/6 trials OK
+  Best HR@10  = 0.279300
+  Test MRR@20 = 0.226700  (best-valid checkpoint)
+  Test HR@10  = 0.284500  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.224900 best_valid_hr10=0.279300 test_mrr20=0.226700 test_hr10=0.284500
+  Total time: 26.6 min
+  Best params:
+    fusion_type: sum
+    learning_rate: 0.00138178
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/lastfm0.03_DIFSR_p17_sb_d00_m04_difsr_b2_s1_20260329_192837_568058_pid516843.json
+  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/normal/stageb_structure_anchor2_core5/P17/lastfm0.03/DIFSR/lastfm0.03_DIFSR_p17_sb_d00_m04_difsr_b2_s1_20260329_192837_568058_pid516843.json
+  Special result -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/special/stageb_structure_anchor2_core5/P17/lastfm0.03/DIFSR/lastfm0.03_DIFSR_p17_sb_d00_m04_difsr_b2_s1_20260329_192837_568058_pid516843_special_metrics.json
+  Special log -> /workspace/jy1559/FMoE/experiments/run/artifacts/logs/baseline/special/stageb_structure_anchor2_core5/P17/lastfm0.03/DIFSR/lastfm0.03_DIFSR_p17_sb_d00_m04_difsr_b2_s1_20260329_192837_568058_pid516843_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=516843 start=2026-03-29T19:28:37 end=2026-03-29T19:55:11

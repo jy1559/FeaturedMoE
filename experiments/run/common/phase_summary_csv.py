@@ -143,7 +143,7 @@ def _to_float(raw: str | float | int | None) -> float | None:
 
 
 def _fmt_metric(value: float | None) -> str:
-    return "" if value is None else f"{value:.4f}"
+    return "" if value is None else f"{value:.6f}"
 
 
 def _format_float_token(value: float) -> str:

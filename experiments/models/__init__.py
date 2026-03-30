@@ -9,6 +9,9 @@ from importlib import import_module
 _MODEL_MODULES = {
 	"BiLSTM": "bilstm",
 	"CLRec": "clrec",
+	"DuoRec": "duorec",
+	"FEARec": "fearec",
+	"TiSASRec": "tisasrec",
 	"BSARec": "bsarec",
 	"FAME": "fame",
 	"SIGMA": "sigma",

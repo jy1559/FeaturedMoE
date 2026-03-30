@@ -16,6 +16,7 @@ from models.FeaturedMoE_N3.feature_config import (  # noqa: E402
     build_column_to_index,
     build_stage_feature_spec,
 )
+from models.FeaturedMoE_N3.featured_moe_n3 import FeaturedMoE_N3  # noqa: E402
 from models.FeaturedMoE_N3.stage_executor import StageExecutorN3  # noqa: E402
 from models.FeaturedMoE_N3.stage_modules import (  # noqa: E402
     SASRecStyleAttentionBlock,
@@ -33,8 +34,12 @@ def _build_executor(
     stage_feature_injection=None,
     stage_router_granularity=None,
     stage_feature_encoder_mode=None,
+    stage_spec=None,
 ):
-    spec = build_stage_feature_spec(macro_history_window=5, stage_feature_family_mask={})
+    spec = stage_spec if isinstance(stage_spec, dict) else build_stage_feature_spec(
+        macro_history_window=5,
+        stage_feature_family_mask={},
+    )
     return StageExecutorN3(
         layer_layout=layer_layout,
         d_model=16,
@@ -62,6 +67,8 @@ def _build_executor(
         stage_feature_injection=stage_feature_injection or {"macro": "none", "mid": "none", "micro": "none"},
         rule_router_cfg={"variant": "ratio_bins", "n_bins": 5, "feature_per_expert": 4},
         rule_bias_scale=0.0,
+        feature_group_bias_lambda=0.0,
+        feature_group_prior_temperature=1.0,
         stage_router_wrapper={"macro": "w1_flat", "mid": "w1_flat", "micro": "w1_flat"},
         stage_router_primitives={
             "macro": {
@@ -89,6 +96,13 @@ def _build_executor(
         mid_router_temperature=1.2,
         micro_router_temperature=1.2,
         dense_hidden_scale=1.0,
+        stage_residual_mode={"macro": "base", "mid": "base", "micro": "base"},
+        residual_alpha_fixed={"macro": 0.5, "mid": 0.5, "micro": 0.5},
+        residual_alpha_init={"macro": 0.0, "mid": 0.0, "micro": 0.0},
+        residual_shared_ffn_scale=1.0,
+        stage_family_dropout_prob={"macro": 0.0, "mid": 0.0, "micro": 0.0},
+        stage_feature_dropout_prob={"macro": 0.0, "mid": 0.0, "micro": 0.0},
+        stage_feature_dropout_scope={"macro": "token", "mid": "token", "micro": "token"},
         col2idx=build_column_to_index(ALL_FEATURE_COLUMNS),
     )
 
@@ -176,3 +190,87 @@ def test_dense_only_layout_has_no_diag_and_moe_layout_has_diag():
     moe_exec = _build_executor(layer_layout=["macro", "mid", "micro"])
     assert dense_exec.supports_diagnostics is False
     assert moe_exec.supports_diagnostics is True
+
+
+def test_route_consistency_min_sim_filters_low_similarity_pairs():
+    model = FeaturedMoE_N3.__new__(FeaturedMoE_N3)
+    model.route_consistency_pairs = 1
+    model.route_consistency_min_sim = 0.995
+    model.item_embedding = torch.nn.Embedding(8, 4)
+
+    gate = torch.tensor(
+        [
+            [[0.9, 0.1], [0.9, 0.1]],
+            [[0.1, 0.9], [0.1, 0.9]],
+        ],
+        dtype=torch.float32,
+    )
+    item_seq_len = torch.tensor([2, 2], dtype=torch.long)
+
+    feat_high_sim = torch.tensor(
+        [
+            [[1.0, 0.0], [1.0, 0.0]],
+            [[1.0, 0.001], [1.0, 0.001]],
+        ],
+        dtype=torch.float32,
+    )
+    feat_low_sim = torch.tensor(
+        [
+            [[1.0, 0.0], [1.0, 0.0]],
+            [[0.0, 1.0], [0.0, 1.0]],
+        ],
+        dtype=torch.float32,
+    )
+
+    high_loss = model._compute_route_consistency_loss({"mid": gate}, item_seq_len, feat_high_sim)
+    low_loss = model._compute_route_consistency_loss({"mid": gate}, item_seq_len, feat_low_sim)
+
+    assert float(high_loss.item()) > 0.0
+    assert float(low_loss.item()) == pytest.approx(0.0, abs=1e-8)
+
+
+def test_executor_handles_empty_stage_features_after_structural_drop():
+    drop_all_keywords = [
+        "mac",
+        "mid",
+        "mic",
+        "ctx",
+        "gap",
+        "pace",
+        "theme",
+        "cat",
+        "repeat",
+        "adj",
+        "item",
+        "novel",
+        "pop",
+        "valid",
+        "int",
+        "sess",
+        "suffix",
+        "delta",
+    ]
+    spec = build_stage_feature_spec(
+        macro_history_window=5,
+        stage_feature_family_mask={},
+        stage_feature_drop_keywords=drop_all_keywords,
+    )
+    assert all(len(spec["stage_all_features"][stage]) == 0 for stage in ("macro", "mid", "micro"))
+
+    executor = _build_executor(
+        layer_layout=["macro", "mid", "micro"],
+        stage_spec=spec,
+    )
+    hidden = torch.randn(2, 5, 16)
+    attn_mask = torch.zeros(2, 1, 5, 5)
+    feat = torch.randn(2, 5, len(ALL_FEATURE_COLUMNS))
+    item_seq_len = torch.tensor([5, 4], dtype=torch.long)
+
+    out, _, _, _, _, _, _ = executor(
+        hidden=hidden,
+        attention_mask=attn_mask,
+        feat=feat,
+        item_seq_len=item_seq_len,
+    )
+    assert out.shape == hidden.shape
+    assert torch.isfinite(out).all()

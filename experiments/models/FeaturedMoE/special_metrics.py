@@ -11,12 +11,24 @@ from .feature_config import feature_list_field
 
 
 _POPULARITY_BINS = (
+    ("cold_0", 0, 0),
+    ("rare_1_5", 1, 5),
+    ("6_20", 6, 20),
+    ("21_100", 21, 100),
+    ("101+", 101, None),
+)
+_POPULARITY_BINS_LEGACY = (
     ("<=5", 0, 5),
     ("6-20", 6, 20),
     ("21-100", 21, 100),
     (">100", 101, None),
 )
 _SESSION_LEN_BINS = (
+    ("<=7", 1, 7),
+    ("8-12", 8, 12),
+    ("13+", 13, None),
+)
+_SESSION_LEN_BINS_LEGACY = (
     ("1-2", 1, 2),
     ("3-5", 3, 5),
     ("6-10", 6, 10),
@@ -113,7 +125,9 @@ class SpecialMetricCollector:
         self.overall = _MetricAccumulator()
         self.slices = {
             "target_popularity_abs": {name: _MetricAccumulator() for name, _, _ in _POPULARITY_BINS},
+            "target_popularity_abs_legacy": {name: _MetricAccumulator() for name, _, _ in _POPULARITY_BINS_LEGACY},
             "session_len": {name: _MetricAccumulator() for name, _, _ in _SESSION_LEN_BINS},
+            "session_len_legacy": {name: _MetricAccumulator() for name, _, _ in _SESSION_LEN_BINS_LEGACY},
         }
         if self.new_user_field:
             self.slices["new_user"] = {
@@ -197,9 +211,21 @@ class SpecialMetricCollector:
                 ndcg20=ndcg_val,
                 mrr20=mrr_val,
             )
+            pop_bucket_legacy = _bucket_name(int(pop_count), _POPULARITY_BINS_LEGACY)
+            self.slices["target_popularity_abs_legacy"][pop_bucket_legacy].update(
+                hit20=hit_val,
+                ndcg20=ndcg_val,
+                mrr20=mrr_val,
+            )
 
             session_bucket = _bucket_name(int(session_len_values[idx]), _SESSION_LEN_BINS)
             self.slices["session_len"][session_bucket].update(
+                hit20=hit_val,
+                ndcg20=ndcg_val,
+                mrr20=mrr_val,
+            )
+            session_bucket_legacy = _bucket_name(int(session_len_values[idx]), _SESSION_LEN_BINS_LEGACY)
+            self.slices["session_len_legacy"][session_bucket_legacy].update(
                 hit20=hit_val,
                 ndcg20=ndcg_val,
                 mrr20=mrr_val,
@@ -246,7 +272,11 @@ def build_special_metric_config_snapshot(
 ) -> dict:
     return {
         "target_popularity_abs_bins": [name for name, _, _ in _POPULARITY_BINS],
+        "target_popularity_abs_bins_legacy": [name for name, _, _ in _POPULARITY_BINS_LEGACY],
         "session_len_bins": [name for name, _, _ in _SESSION_LEN_BINS],
+        "session_len_bins_legacy": [name for name, _, _ in _SESSION_LEN_BINS_LEGACY],
+        "item_count_source": "unknown",
+        "item_count_definition": "train_interaction_count_per_item",
         "new_user_enabled": bool(new_user_available),
         "feature_logging_available": bool(feature_available),
     }

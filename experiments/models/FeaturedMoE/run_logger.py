@@ -66,10 +66,16 @@ class RunLogger:
         root = Path(output_root or _DEFAULT_OUTPUT_ROOT)
 
         model_scope = _derive_model_scope(self.config)
+        axis = _sanitize_token(str(self.config.get("run_axis", "")))
         dataset = _sanitize_token(str(self.config.get("dataset", "")))
         phase = _sanitize_token(str(self.config.get("fmoe_phase", self.config.get("phase", "P0"))))
         run_id = _sanitize_token(str(self.config.get("fmoe_run_id", "")))
-        if model_scope and dataset and phase and run_id:
+        arch = _sanitize_token(str(self.config.get("fmoe_architecture_id", "")))
+        hparam = _sanitize_token(str(self.config.get("fmoe_hparam_id", self.config.get("phase_hparam_id", ""))))
+        layout = str(self.config.get("fmoe_logging_layout", "")).strip().lower()
+        if layout == "axis_dataset_arch_hparam" and model_scope and axis and dataset and arch and hparam and run_id:
+            self.run_dir = root / model_scope / axis / dataset / arch / hparam / run_id
+        elif model_scope and dataset and phase and run_id:
             self.run_dir = root / model_scope / dataset / phase / run_id
         else:
             self.run_dir = root / run_name

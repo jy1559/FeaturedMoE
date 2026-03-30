@@ -311,11 +311,20 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         )
         self.route_consistency_lambda = float(resolver.get("route_consistency_lambda", 0.0))
         self.route_consistency_pairs = max(int(resolver.get("route_consistency_pairs", 4)), 1)
+        self.route_consistency_min_sim = float(resolver.get("route_consistency_min_sim", -1.0))
         self.route_sharpness_lambda = float(resolver.get("route_sharpness_lambda", 0.0))
         self.route_monopoly_lambda = float(resolver.get("route_monopoly_lambda", 0.0))
         self.route_monopoly_tau = float(resolver.get("route_monopoly_tau", 0.0))
         self.route_prior_lambda = float(resolver.get("route_prior_lambda", 0.0))
         self.route_prior_bias_scale = float(resolver.get("route_prior_bias_scale", 0.5))
+        self.intra_group_bias_mode = _parse_stage_str_map(
+            resolver.get("intra_group_bias_mode", None),
+            default_value="none",
+        )
+        self.intra_group_bias_scale = _parse_stage_float_map(
+            resolver.get("intra_group_bias_scale", None),
+            default_value=0.0,
+        )
         self.fmoe_diag_logging = bool(resolver.get("fmoe_diag_logging", True))
         self.fmoe_diag_sample_sessions = max(int(resolver.get("fmoe_diag_sample_sessions", 256)), 0)
         self.feature_perturb_mode = str(resolver.get("feature_perturb_mode", "none")).lower().strip()
@@ -450,6 +459,8 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             feature_group_prior_temperature=self.feature_group_prior_temperature,
             stage_router_wrapper=self.stage_router_wrapper,
             stage_router_primitives=self.stage_router_primitives,
+            intra_group_bias_mode=self.intra_group_bias_mode,
+            intra_group_bias_scale=self.intra_group_bias_scale,
             mid_router_temperature=self.mid_router_temperature,
             micro_router_temperature=self.micro_router_temperature,
             dense_hidden_scale=self.dense_hidden_scale,
@@ -514,11 +525,14 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "route_smoothness_stage_weight": dict(self.route_smoothness_stage_weight),
             "route_consistency_lambda": self.route_consistency_lambda,
             "route_consistency_pairs": self.route_consistency_pairs,
+            "route_consistency_min_sim": self.route_consistency_min_sim,
             "route_sharpness_lambda": self.route_sharpness_lambda,
             "route_monopoly_lambda": self.route_monopoly_lambda,
             "route_monopoly_tau": self.route_monopoly_tau,
             "route_prior_lambda": self.route_prior_lambda,
             "route_prior_bias_scale": self.route_prior_bias_scale,
+            "intra_group_bias_mode": dict(self.intra_group_bias_mode),
+            "intra_group_bias_scale": dict(self.intra_group_bias_scale),
             "hidden_act": self.hidden_act,
             "layer_norm_eps": self.layer_norm_eps,
             "fmoe_special_logging": bool(self.fmoe_special_logging),
@@ -1051,7 +1065,9 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         k = min(int(self.route_consistency_pairs), batch_size - 1)
         if k <= 0:
             return self.item_embedding.weight.new_tensor(0.0)
-        neigh_idx = sim.topk(k=k, dim=1).indices
+        neigh_pack = sim.topk(k=k, dim=1)
+        neigh_idx = neigh_pack.indices
+        neigh_sim = neigh_pack.values
 
         losses = []
         for weights in (gate_weights or {}).values():
@@ -1062,7 +1078,13 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             pj = session_prob.index_select(0, neigh_idx.reshape(-1)).reshape(batch_size, k, -1).clamp(min=1e-8)
             m = 0.5 * (pi + pj)
             js = 0.5 * ((pi * (pi.log() - m.log())).sum(dim=-1) + (pj * (pj.log() - m.log())).sum(dim=-1))
-            losses.append(js.mean())
+            min_sim = float(self.route_consistency_min_sim)
+            if min_sim > -1.0:
+                pair_mask = neigh_sim >= min_sim
+                if bool(pair_mask.any()):
+                    losses.append(js[pair_mask].mean())
+            else:
+                losses.append(js.mean())
         return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
 
     def _compute_route_sharpness_loss(

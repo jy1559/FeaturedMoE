@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: KuaiRecLargeStrictPosV2_0.2
+- run_group: fmoe_n3
+- run_axis: phase10_13_verification_wrapper_v1
+- run_phase: P10_13_2_AP10_23_H3_S1
+- best_mrr@20: 0.0804
+- test_mrr@20: 0.1619
+- test_hr@10: 0.1889
+
+## Artifacts
+
+- result_json: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/result.json
+- special_metrics: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/special_metrics.json
+- special_log: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/special_log.json
+- diag_dir: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag
+- diag_meta: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/meta.json
+- diag_tier_a_final: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_23_h3_s1_20260326_123156_430016_pid175986/diag/raw/epoch_trace.csv
+- feature_ablation: 

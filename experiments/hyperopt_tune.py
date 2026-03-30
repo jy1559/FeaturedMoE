@@ -1010,7 +1010,16 @@ def _set_nested_value(cfg: dict, dotted_key: str, value):
 def _dropout_target_keys(model_name: str) -> list[str]:
     model_key = str(model_name or "").strip().lower()
     targets = ["hidden_dropout_prob"]
-    if model_key in {"sasrec", "bsarec", "fenrec", "patt"}:
+    if model_key in {
+        "sasrec",
+        "bsarec",
+        "fenrec",
+        "patt",
+        "duorec",
+        "tisasrec",
+        "fearec",
+        "difsr",
+    }:
         targets.append("attn_dropout_prob")
     return targets
 
@@ -1982,7 +1991,9 @@ def configure_data_cache(cfg_dict: dict):
     max_len = _resolve_cache_max_len(cfg_dict)
     eval_args = cfg_dict.get("eval_args", {}) or {}
     split_cfg = eval_args.get("split", {}) if isinstance(eval_args, dict) else {}
-    split_tag = "session" if isinstance(split_cfg, dict) and "RS" in split_cfg else "inter"
+    has_pre_split = bool(cfg_dict.get("benchmark_filename"))
+    is_session_split = (isinstance(split_cfg, dict) and "RS" in split_cfg) or has_pre_split
+    split_tag = "session" if is_session_split else "inter"
     anchor_len = _get_large_dataset_cache_anchor_len(cfg_dict)
     if _is_large_dataset_cache_target(cfg_dict) and int(max_len) != int(anchor_len):
         # Keep experiment MAX_ITEM_LIST_LENGTH unchanged, but skip disk cache writes.
@@ -2656,8 +2667,8 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 best_disp = best_mrr20 if best_mrr20 > -1e8 else 0.0
                 print(
                     f"    Ep {epoch+1:>3}/{max_epochs:<3}\tEVAL    \t"
-                    f"train_loss {train_loss:7.4f}\tvalid M@20 {mrr20:7.4f}\t"
-                    f"best M@20 {best_disp:7.4f}\tlr {epoch_lr:8.2e}\t"
+                    f"train_loss {train_loss:7.4f}\tvalid M@20 {mrr20:9.6f}\t"
+                    f"best M@20 {best_disp:9.6f}\tlr {epoch_lr:8.2e}\t"
                     f"pat {no_improve:>2}/{patience:<2}\t"
                     f"time {epoch_time:6.2f}s"
                 )
@@ -3815,7 +3826,7 @@ def main():
                 else f"full@{result['epochs_run']}"
             )
             print(
-                f"  -> MRR@20={mrr20:.4f}  best={best_so_far:.4f}  "
+                f"  -> MRR@20={mrr20:.6f}  best={best_so_far:.6f}  "
                 f"({stop_label}, trial={_format_duration(result['elapsed'])}, "
                 f"avg={_format_duration(avg_trial_sec)}/trial, "
                 f"total={_format_duration(elapsed_total)}, "
@@ -3823,14 +3834,14 @@ def main():
             )
             print(
                 "[TRIAL_METRICS] "
-                f"cur_best_mrr20={float(mrr20):.4f} "
-                f"cur_best_hr10={current_best_hr10:.4f} "
-                f"cur_test_mrr20={current_test_mrr20:.4f} "
-                f"cur_test_hr10={current_test_hr10:.4f} "
-                f"run_best_mrr20={run_best_metrics['best_mrr@20']:.4f} "
-                f"run_best_hr10={run_best_metrics['best_hr@10']:.4f} "
-                f"run_test_mrr20={run_best_metrics['test_mrr@20']:.4f} "
-                f"run_test_hr10={run_best_metrics['test_hr@10']:.4f}"
+                f"cur_best_mrr20={float(mrr20):.6f} "
+                f"cur_best_hr10={current_best_hr10:.6f} "
+                f"cur_test_mrr20={current_test_mrr20:.6f} "
+                f"cur_test_hr10={current_test_hr10:.6f} "
+                f"run_best_mrr20={run_best_metrics['best_mrr@20']:.6f} "
+                f"run_best_hr10={run_best_metrics['best_hr@10']:.6f} "
+                f"run_test_mrr20={run_best_metrics['test_mrr@20']:.6f} "
+                f"run_test_hr10={run_best_metrics['test_hr@10']:.6f}"
             )
 
             trial_record = {
@@ -4084,16 +4095,16 @@ def main():
     total_time = time.time() - global_t0
     print(f"\n{'=' * 65}")
     print(f"  DONE  |  {model} x {dataset}")
-    print(f"  Best MRR@20 = {best_mrr:.4f}  |  {len(ok_trials)}/{args.max_evals} trials OK")
-    print(f"  Best HR@10  = {best_hr10:.4f}")
-    print(f"  Test MRR@20 = {test_mrr20:.4f}  (best-valid checkpoint)")
-    print(f"  Test HR@10  = {test_hr10:.4f}  (best-valid checkpoint)")
+    print(f"  Best MRR@20 = {best_mrr:.6f}  |  {len(ok_trials)}/{args.max_evals} trials OK")
+    print(f"  Best HR@10  = {best_hr10:.6f}")
+    print(f"  Test MRR@20 = {test_mrr20:.6f}  (best-valid checkpoint)")
+    print(f"  Test HR@10  = {test_hr10:.6f}  (best-valid checkpoint)")
     print(
         "[RUN_METRICS] "
-        f"best_valid_mrr20={best_mrr:.4f} "
-        f"best_valid_hr10={best_hr10:.4f} "
-        f"test_mrr20={test_mrr20:.4f} "
-        f"test_hr10={test_hr10:.4f}"
+        f"best_valid_mrr20={best_mrr:.6f} "
+        f"best_valid_hr10={best_hr10:.6f} "
+        f"test_mrr20={test_mrr20:.6f} "
+        f"test_hr10={test_hr10:.6f}"
     )
     print(f"  Total time: {total_time / 60:.1f} min")
     print(f"  Best params:")

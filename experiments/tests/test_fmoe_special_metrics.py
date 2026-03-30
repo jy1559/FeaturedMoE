@@ -53,9 +53,15 @@ def test_special_metric_collector_aggregates_expected_slices(tmp_path):
     summary = collector.finalize()
     assert summary["overall"]["count"] == 3
     assert "target_popularity_abs" in summary["slices"]
-    assert "<=5" in summary["slices"]["target_popularity_abs"]
-    assert "21-100" in summary["slices"]["target_popularity_abs"]
+    assert "cold_0" in summary["slices"]["target_popularity_abs"]
+    assert "rare_1_5" in summary["slices"]["target_popularity_abs"]
+    assert "21_100" in summary["slices"]["target_popularity_abs"]
+    assert "target_popularity_abs_legacy" in summary["slices"]
+    assert "<=5" in summary["slices"]["target_popularity_abs_legacy"]
     assert "session_len" in summary["slices"]
+    assert "<=7" in summary["slices"]["session_len"]
+    assert "session_len_legacy" in summary["slices"]
+    assert "1-2" in summary["slices"]["session_len_legacy"]
     assert "new_user" in summary["slices"]
 
     logger = RunLogger(run_name="special_metrics_test", config={"model": "FeaturedMoE_N"}, output_root=tmp_path)

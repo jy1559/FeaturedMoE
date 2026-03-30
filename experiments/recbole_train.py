@@ -130,6 +130,35 @@ _WANDB_MODULE = None
 _WANDB_IMPORT_ERROR = ""
 
 
+def _cfg_get(cfg_obj, key, default=None):
+    """Safely read key from both dict-like and RecBole Config objects."""
+    if cfg_obj is None:
+        return default
+    if isinstance(cfg_obj, dict):
+        return cfg_obj.get(key, default)
+    try:
+        return cfg_obj[key]
+    except Exception:
+        return getattr(cfg_obj, key, default)
+
+
+def _build_item_counts_from_loader(data_loader):
+    """Build per-item interaction counts from a RecBole data loader dataset."""
+    dataset = getattr(data_loader, "dataset", None)
+    if dataset is None:
+        return None
+    inter_feat = getattr(dataset, "inter_feat", None)
+    iid_field = getattr(dataset, "iid_field", None)
+    n_items = int(getattr(dataset, "item_num", 0))
+    if inter_feat is None or iid_field is None or n_items <= 0:
+        return None
+    item_ids = inter_feat[iid_field]
+    if not torch.is_tensor(item_ids):
+        item_ids = torch.as_tensor(item_ids)
+    item_ids = item_ids.long().clamp(min=0)
+    return torch.bincount(item_ids, minlength=n_items)[:n_items].cpu()
+
+
 def _get_wandb_module():
     """Import wandb with clear diagnostics for shadowing/missing package."""
     global _WANDB_MODULE, _WANDB_IMPORT_ERROR
@@ -457,7 +486,9 @@ def configure_data_cache(cfg_dict):
     max_len = _resolve_cache_max_len(cfg_dict)
     eval_args = cfg_dict.get("eval_args", {}) or {}
     split_cfg = eval_args.get("split", {}) if isinstance(eval_args, dict) else {}
-    split_tag = "session" if isinstance(split_cfg, dict) and "RS" in split_cfg else "inter"
+    has_pre_split = bool(cfg_dict.get("benchmark_filename"))
+    is_session_split = (isinstance(split_cfg, dict) and "RS" in split_cfg) or has_pre_split
+    split_tag = "session" if is_session_split else "inter"
     anchor_len = _get_large_dataset_cache_anchor_len(cfg_dict)
     if _is_large_dataset_cache_target(cfg_dict) and int(max_len) != int(anchor_len):
         # Keep experiment MAX_ITEM_LIST_LENGTH unchanged, but skip disk cache writes.
@@ -709,10 +740,11 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     trainer_cls = get_trainer(config['MODEL_TYPE'], config['model'])
     trainer = trainer_cls(config, model)
     setattr(trainer, '_disable_patch_logging', True)  # bypass patched valid/train hooks
-    special_logging_enabled = bool(config.get("special_logging", cfg_i.get("special_logging", False)))
+    trainer._fmoe_special_item_counts_train = _build_item_counts_from_loader(train_data)
+    special_logging_enabled = bool(_cfg_get(config, "special_logging", cfg_i.get("special_logging", False)))
     if model_name_l in _FEATURE_AWARE_MOE_MODELS:
         special_logging_enabled = special_logging_enabled or bool(
-            config.get("fmoe_special_logging", cfg_i.get("fmoe_special_logging", True))
+            _cfg_get(config, "fmoe_special_logging", cfg_i.get("fmoe_special_logging", True))
         )
     best_valid_special_metrics = None
     last_valid_special_metrics = None
@@ -955,8 +987,8 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     if best_model_state is not None:
         trainer.model.load_state_dict(best_model_state)
 
-    diag_logging_enabled = bool(config.get("fmoe_diag_logging", cfg_i.get("fmoe_diag_logging", False)))
-    best_only_logging = bool(config.get("fmoe_best_only_logging", cfg_i.get("fmoe_best_only_logging", True)))
+    diag_logging_enabled = bool(_cfg_get(config, "fmoe_diag_logging", cfg_i.get("fmoe_diag_logging", False)))
+    best_only_logging = bool(_cfg_get(config, "fmoe_best_only_logging", cfg_i.get("fmoe_best_only_logging", True)))
     valid_diag_metrics = None
     test_diag_metrics = None
 
@@ -1080,10 +1112,9 @@ def main():
 
         eval_args = cfg_i.get("eval_args", {})
         split_config = eval_args.get("split", {})
-        if isinstance(split_config, dict):
-            eval_mode = "session" if "RS" in split_config else "inter"
-        else:
-            eval_mode = "session" if cfg_i.get("benchmark_filename") else "inter"
+        has_pre_split = bool(cfg_i.get("benchmark_filename"))
+        is_session_split = (isinstance(split_config, dict) and "RS" in split_config) or has_pre_split
+        eval_mode = "session" if is_session_split else "inter"
 
         dataset_abbrev = {
             'amazon_beauty': 'AMA',

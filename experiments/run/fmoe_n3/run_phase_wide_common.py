@@ -240,6 +240,8 @@ def _write_log_preamble(
     cmd: list[str],
     phase_name: str,
 ) -> None:
+    # Support nested log layouts (e.g., dataset/H1/*.log) safely.
+    log_file.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         f"[{phase_name}_SETTING_HEADER]",
         (
@@ -505,6 +507,7 @@ def launch_wide_rows(
     fieldnames: list[str],
     extra_cols: list[str],
     build_command: Callable[[Dict[str, Any], str, argparse.Namespace], list[str]],
+    build_log_path: Optional[Callable[[Path, Dict[str, Any], str], Path]] = None,
     verify_logging: bool = True,
 ) -> int:
     if not rows:
@@ -522,8 +525,10 @@ def launch_wide_rows(
 
     runnable: list[Dict[str, Any]] = []
     skipped = 0
+    if build_log_path is None:
+        build_log_path = _log_path_from_row
     for row in rows:
-        lp = _log_path_from_row(log_dir=log_dir, row=row, phase_id=phase_id)
+        lp = build_log_path(log_dir=log_dir, row=row, phase_id=phase_id)
         row["log_path"] = str(lp)
         if bool(getattr(args, "resume_from_logs", True)) and _is_completed_log(lp):
             skipped += 1

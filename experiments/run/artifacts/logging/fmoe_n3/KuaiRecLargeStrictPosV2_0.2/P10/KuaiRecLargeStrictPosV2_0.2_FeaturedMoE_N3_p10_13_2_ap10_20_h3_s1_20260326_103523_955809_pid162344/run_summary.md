@@ -5,9 +5,9 @@
 - run_group: fmoe_n3
 - run_axis: phase10_13_verification_wrapper_v1
 - run_phase: P10_13_2_AP10_20_H3_S1
-- best_mrr@20: 0.0819
-- test_mrr@20: 0.1584
-- test_hr@10: 0.1835
+- best_mrr@20: 0.0822
+- test_mrr@20: 0.1601
+- test_hr@10: 0.186
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_20_h3_s1_20260326_103523_955809_pid162344/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_20_h3_s1_20260326_103523_955809_pid162344/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_20_h3_s1_20260326_103523_955809_pid162344/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_20_h3_s1_20260326_103523_955809_pid162344/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_20_h3_s1_20260326_103523_955809_pid162344/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_20_h3_s1_20260326_103523_955809_pid162344/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/KuaiRecLargeStrictPosV2_0.2/P10/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p10_13_2_ap10_20_h3_s1_20260326_103523_955809_pid162344/diag/raw/epoch_trace.csv
 - feature_ablation: 

@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..FeaturedMoE.moe_stages import _scaled_expert_names
-from ..FeaturedMoE.routers import Router, RuleSoftRouter
+from ..FeaturedMoE.routers import Router, RuleSoftRouter, build_group_local_stat_logits_12way
 from ..FeaturedMoE_N.stage_modules import _normalize_top_k, _softmax_with_top_k
 from .router_wrapper import (
     GroupConditionalIntraRouter,
@@ -34,6 +34,7 @@ _VALID_ROUTER_SOURCE = {"hidden", "feature", "both"}
 _VALID_FEATURE_ENCODER = {"linear", "complex"}
 _VALID_FEATURE_INJECTION = {"none", "film", "gated_bias", "group_gated_bias"}
 _VALID_FEATURE_DROPOUT_SCOPE = {"session", "token"}
+_VALID_INTRA_GROUP_BIAS = {"none", "gls_stats12"}
 _VALID_RESIDUAL_MODE = {
     "base",
     "shared_only",
@@ -126,6 +127,8 @@ class StageRuntimeConfigN3:
     stage_family_dropout_prob: float
     stage_feature_dropout_prob: float
     stage_feature_dropout_scope: str
+    intra_group_bias_mode: str = "none"
+    intra_group_bias_scale: float = 0.0
 
 
 class SASRecStyleAttentionBlock(nn.Module):
@@ -331,6 +334,10 @@ class N3StageBlock(nn.Module):
         self.stage_family_dropout_prob = min(max(float(cfg.stage_family_dropout_prob), 0.0), 0.999999)
         self.stage_feature_dropout_prob = min(max(float(cfg.stage_feature_dropout_prob), 0.0), 0.999999)
         self.stage_feature_dropout_scope = str(cfg.stage_feature_dropout_scope or "token").lower().strip()
+        self.intra_group_bias_mode = str(cfg.intra_group_bias_mode or "none").lower().strip()
+        if self.intra_group_bias_mode not in _VALID_INTRA_GROUP_BIAS:
+            self.intra_group_bias_mode = "none"
+        self.intra_group_bias_scale = float(cfg.intra_group_bias_scale)
         self.d_model = int(cfg.d_model)
         self.d_feat_emb = int(cfg.d_feat_emb)
         self.stage_residual_mode = str(cfg.stage_residual_mode).lower().strip()
@@ -930,6 +937,12 @@ class N3StageBlock(nn.Module):
                 aux["rule_target_logits"] = rule_logits / self.current_router_temperature
                 if self.rule_bias_scale > 0:
                     raw_logits = raw_logits + self.rule_bias_scale * self._align_bias_tensor_to_logits(rule_logits, raw_logits)
+                if self.intra_group_bias_mode != "none" and self.intra_group_bias_scale > 0:
+                    intra_group_bias_logits = self._compute_intra_group_bias_logits(rule_input)
+                    if torch.is_tensor(intra_group_bias_logits) and intra_group_bias_logits.size(-1) > 0:
+                        aligned_bias = self._align_bias_tensor_to_logits(intra_group_bias_logits, raw_logits)
+                        raw_logits = raw_logits + self.intra_group_bias_scale * aligned_bias
+                        aux["intra_group_bias_logits"] = aligned_bias
 
         scaled_logits = raw_logits / self.current_router_temperature
         weights = _softmax_with_top_k(scaled_logits, self.current_top_k)
@@ -982,6 +995,29 @@ class N3StageBlock(nn.Module):
             group_idx = int(self.expert_group_idx[expert_idx].item())
             pieces.append(group_tensor[..., group_idx : group_idx + 1])
         return torch.cat(pieces, dim=-1)
+
+    def _compute_intra_group_bias_logits(self, stage_raw_feat: torch.Tensor) -> torch.Tensor:
+        if self.intra_group_bias_mode == "none" or self.intra_group_bias_scale <= 0:
+            return stage_raw_feat.new_zeros(*stage_raw_feat.shape[:-1], self.n_experts)
+        if stage_raw_feat.size(-1) <= 0 or self.n_experts <= 0:
+            return stage_raw_feat.new_zeros(*stage_raw_feat.shape[:-1], self.n_experts)
+
+        feat_dim = int(stage_raw_feat.size(-1))
+        feature_groups = []
+        for local_idx in self.group_feature_local_indices:
+            cleaned = [int(idx) for idx in list(local_idx or []) if 0 <= int(idx) < feat_dim]
+            feature_groups.append(cleaned or [0])
+        if not feature_groups:
+            feature_groups = [[0]]
+
+        if self.intra_group_bias_mode == "gls_stats12":
+            return build_group_local_stat_logits_12way(
+                stage_raw_feat,
+                feature_groups=feature_groups,
+                expert_scale=max(int(self.experts_per_group), 1),
+                stat_sharpness=16.0,
+            )
+        return stage_raw_feat.new_zeros(*stage_raw_feat.shape[:-1], self.n_experts)
 
     @staticmethod
     def _align_bias_tensor_to_logits(bias_tensor: torch.Tensor, target_logits: torch.Tensor) -> torch.Tensor:

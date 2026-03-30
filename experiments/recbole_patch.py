@@ -9,6 +9,7 @@ import json
 import hashlib
 import importlib
 import importlib.util
+import time as _time
 from pathlib import Path
 
 _PATCH_DIR = Path(__file__).resolve().parent
@@ -60,9 +61,11 @@ from copy import copy
 
 from recbole.data.dataset.sequential_dataset import SequentialDataset
 from recbole.data.interaction import Interaction
-from recbole.utils.enum_type import FeatureType
+from recbole.utils.enum_type import FeatureType, ModelType
 import recbole.utils.utils as recbole_utils
 import recbole.quick_start.quick_start as quick_start_module
+import recbole.data as recbole_data_module
+import recbole.data.utils as recbole_data_utils
 
 
 def _config_get(config_obj, key, default=None):
@@ -110,6 +113,12 @@ _original_get_model = recbole_utils.get_model
 _CUSTOM_MODEL_SPECS = {
     'BiLSTM': ('bilstm', 'BiLSTM'),
     'CLRec': ('clrec', 'CLRec'),
+    'DuoRec': ('duorec', 'DuoRec'),
+    'duorec': ('duorec', 'DuoRec'),
+    'FEARec': ('fearec', 'FEARec'),
+    'fearec': ('fearec', 'FEARec'),
+    'TiSASRec': ('tisasrec', 'TiSASRec'),
+    'tisasrec': ('tisasrec', 'TiSASRec'),
     'BSARec': ('bsarec', 'BSARec'),
     'FAME': ('fame', 'FAME'),
     'SIGMA': ('sigma', 'SIGMA'),
@@ -223,6 +232,79 @@ def _patched_get_flops(model, dataset, device, logger, transform=None, verbose=F
 # Apply patch to both modules
 recbole_utils.get_flops = _patched_get_flops
 quick_start_module.get_flops = _patched_get_flops
+
+
+# ============ Patch: create_dataset cache auto-recovery ============
+_original_create_dataset = recbole_data_utils.create_dataset
+
+
+def _resolve_dataset_cache_file(config):
+    """Resolve RecBole dataset cache file path used by create_dataset()."""
+    dataset_module = importlib.import_module("recbole.data.dataset")
+    model_name = str(config["model"])
+    if hasattr(dataset_module, model_name + "Dataset"):
+        dataset_class = getattr(dataset_module, model_name + "Dataset")
+    else:
+        model_type = config["MODEL_TYPE"]
+        type2class = {
+            ModelType.GENERAL: "Dataset",
+            ModelType.SEQUENTIAL: "SequentialDataset",
+            ModelType.CONTEXT: "Dataset",
+            ModelType.KNOWLEDGE: "KnowledgeBasedDataset",
+            ModelType.TRADITIONAL: "Dataset",
+            ModelType.DECISIONTREE: "Dataset",
+        }
+        dataset_class = getattr(dataset_module, type2class[model_type])
+
+    default_file = Path(str(config["checkpoint_dir"])) / f'{config["dataset"]}-{dataset_class.__name__}.pth'
+    configured = str(config["dataset_save_path"]) if "dataset_save_path" in config else ""
+    return Path(configured) if configured else default_file
+
+
+def _patched_create_dataset(config):
+    """Recover from corrupted dataset cache files and rebuild safely."""
+    try:
+        return _original_create_dataset(config)
+    except Exception as exc:
+        cache_file = None
+        try:
+            cache_file = _resolve_dataset_cache_file(config)
+        except Exception:
+            cache_file = None
+
+        recoverable = isinstance(exc, (TypeError, EOFError, pickle.UnpicklingError, AttributeError, ValueError))
+        if not recoverable:
+            raise
+
+        logger = recbole_data_utils.getLogger()
+        if cache_file is not None and cache_file.exists():
+            try:
+                backup = cache_file.with_name(f"{cache_file.name}.corrupt_{int(_time.time())}")
+                cache_file.rename(backup)
+                logger.warning(f"[CacheRecover] moved corrupted dataset cache -> {backup}")
+            except Exception:
+                try:
+                    cache_file.unlink()
+                    logger.warning(f"[CacheRecover] removed corrupted dataset cache -> {cache_file}")
+                except Exception:
+                    logger.warning(f"[CacheRecover] failed to move/remove corrupted cache: {cache_file}")
+
+        # Avoid reusing a shared cache path during this process after recovery.
+        try:
+            if "save_dataset" in config:
+                config["save_dataset"] = False
+            if "dataset_save_path" in config:
+                config["dataset_save_path"] = ""
+        except Exception:
+            pass
+
+        logger.warning(f"[CacheRecover] rebuilding dataset after cache load failure: {exc}")
+        return _original_create_dataset(config)
+
+
+recbole_data_utils.create_dataset = _patched_create_dataset
+if hasattr(recbole_data_module, "create_dataset"):
+    recbole_data_module.create_dataset = _patched_create_dataset
 
 
 # ============ Helper: Convert interaction format to sequence format ============
@@ -920,10 +1002,19 @@ def begin_special_eval(trainer, data_loader, *, split_name: str):
         default_new_user_field,
     )
 
-    item_counts = getattr(trainer, "_fmoe_special_item_counts", None)
+    item_count_source = "unknown"
+    item_counts = getattr(trainer, "_fmoe_special_item_counts_train", None)
+    if item_counts is not None:
+        item_count_source = "train_split"
+    if item_counts is None:
+        item_counts = getattr(trainer, "_fmoe_special_item_counts", None)
+        if item_counts is not None:
+            item_count_source = "cached_loader"
     if item_counts is None:
         item_counts = _build_special_metric_item_counts(data_loader)
         trainer._fmoe_special_item_counts = item_counts
+        if item_counts is not None:
+            item_count_source = "eval_loader_fallback"
     if item_counts is None:
         return
 
@@ -958,6 +1049,7 @@ def begin_special_eval(trainer, data_loader, *, split_name: str):
     snapshot["split"] = str(split_name)
     snapshot["item_seq_len_field"] = str(item_seq_len_field)
     snapshot["new_user_field"] = str(new_user_field or "")
+    snapshot["item_count_source"] = str(item_count_source)
 
     trainer._fmoe_special_metric_collector = SpecialMetricCollector(
         split_name=split_name,

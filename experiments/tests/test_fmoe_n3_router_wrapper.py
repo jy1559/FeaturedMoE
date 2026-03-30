@@ -82,6 +82,9 @@ def _build_mid_stage_cfg(*, wrapper: str, d_top_k: int = 0, expert_scale: int = 
         residual_alpha_fixed=0.5,
         residual_alpha_init=0.0,
         shared_ffn_scale=1.0,
+        stage_family_dropout_prob=0.0,
+        stage_feature_dropout_prob=0.0,
+        stage_feature_dropout_scope="token",
     )
 
 
@@ -258,3 +261,25 @@ def test_w5_with_d_top1_enforces_one_expert_per_group():
     active = (gate_w > 0).sum(dim=-1)
     assert int(active.min().item()) == 4
     assert int(active.max().item()) == 4
+
+
+def test_stage_block_intra_group_bias_gls_adds_bias_logits():
+    torch.manual_seed(2031)
+    cfg = _build_mid_stage_cfg(wrapper="w4_bxd", d_top_k=0, expert_scale=3)
+    cfg.rule_bias_scale = 0.0
+    cfg.feature_group_bias_lambda = 0.0
+    cfg.intra_group_bias_mode = "gls_stats12"
+    cfg.intra_group_bias_scale = 0.12
+    stage = N3StageBlock(cfg)
+
+    hidden = torch.randn(2, 5, 16)
+    feat = torch.randn(2, 5, len(ALL_FEATURE_COLUMNS))
+    item_seq_len = torch.tensor([5, 4], dtype=torch.long)
+
+    _, gate_w, gate_l, router_aux, _ = stage(hidden, feat, item_seq_len=item_seq_len)
+    bias_logits = router_aux.get("intra_group_bias_logits")
+
+    assert torch.is_tensor(bias_logits)
+    assert bias_logits.shape == gate_l.shape
+    assert torch.isfinite(bias_logits).all()
+    assert torch.isfinite(gate_w).all()

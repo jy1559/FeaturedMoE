@@ -126,6 +126,8 @@ class StageExecutorN3(nn.Module):
         stage_feature_dropout_prob: Dict[str, float],
         stage_feature_dropout_scope: Dict[str, str],
         col2idx: Dict[str, int],
+        intra_group_bias_mode: Optional[Dict[str, str]] = None,
+        intra_group_bias_scale: Optional[Dict[str, float]] = None,
     ):
         super().__init__()
         self.layer_layout = [str(token).lower().strip() for token in list(layer_layout or [])]
@@ -159,6 +161,8 @@ class StageExecutorN3(nn.Module):
             stage: {name: list(cols) for name, cols in dict(stage_family_features.get(stage, {}) or {}).items()}
             for stage in _STAGE_NAMES
         }
+        intra_group_bias_mode = dict(intra_group_bias_mode or {})
+        intra_group_bias_scale = dict(intra_group_bias_scale or {})
 
         for stage_name in _STAGE_NAMES:
             if stage_name not in self.stage_blocks:
@@ -200,6 +204,8 @@ class StageExecutorN3(nn.Module):
                     feature_group_prior_temperature=float(feature_group_prior_temperature),
                     stage_router_wrapper=str(stage_router_wrapper.get(stage_name, "w1_flat")),
                     stage_router_primitives=dict(stage_router_primitives.get(stage_name, {}) or {}),
+                    intra_group_bias_mode=str(intra_group_bias_mode.get(stage_name, "none")),
+                    intra_group_bias_scale=float(intra_group_bias_scale.get(stage_name, 0.0)),
                     router_temperature=router_temperature,
                     dense_hidden_scale=float(dense_hidden_scale),
                     stage_residual_mode=str(stage_residual_mode.get(stage_name, "base")),
