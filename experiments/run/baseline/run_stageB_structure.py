@@ -175,6 +175,26 @@ B_PROFILES: Dict[str, Dict[str, Any]] = {
         "lr_mult": 1.15,
         "lr_span_mult": 1.35,
     },
+    "B7": {
+        "name": "ultra_wide_low_reg_outlier",
+        "hidden_mult": 1.65,
+        "layer_delta": -1,
+        "inner_ratio": 5,
+        "dropout_delta": -0.06,
+        "wd_mult": 0.55,
+        "lr_mult": 1.22,
+        "lr_span_mult": 1.55,
+    },
+    "B8": {
+        "name": "narrow_deep_high_reg_outlier",
+        "hidden_mult": 0.72,
+        "layer_delta": 2,
+        "inner_ratio": 2,
+        "dropout_delta": 0.09,
+        "wd_mult": 2.3,
+        "lr_mult": 0.74,
+        "lr_span_mult": 1.45,
+    },
 }
 
 PROFILE_ORDER = list(B_PROFILES.keys())
@@ -197,6 +217,8 @@ PROFILE_COST_WEIGHT = {
     "B4": 1.15,
     "B5": 1.1,
     "B6": 1.25,
+    "B7": 1.35,
+    "B8": 1.2,
 }
 
 DEFAULT_STAGEA_LR_FALLBACK = {

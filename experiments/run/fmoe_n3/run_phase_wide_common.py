@@ -509,18 +509,30 @@ def launch_wide_rows(
     build_command: Callable[[Dict[str, Any], str, argparse.Namespace], list[str]],
     build_log_path: Optional[Callable[[Path, Dict[str, Any], str], Path]] = None,
     verify_logging: bool = True,
+    summary_path_for_row: Optional[Callable[[Dict[str, Any]], Path]] = None,
 ) -> int:
     if not rows:
         print(f"[{phase_id}] no rows to run.")
         return 0
 
     log_dir.mkdir(parents=True, exist_ok=True)
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    _ensure_summary_csv(summary_path, fieldnames)
-    summary_state = _load_summary_state(summary_path)
+
+    def _row_summary_path(row: Dict[str, Any]) -> Path:
+        if summary_path_for_row is not None:
+            return Path(summary_path_for_row(row))
+        return summary_path
+
+    summary_states: Dict[str, Dict[str, Any]] = {}
+
+    def _get_summary_state_for(path: Path) -> Dict[str, Any]:
+        key = str(path)
+        if key not in summary_states:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _ensure_summary_csv(path, fieldnames)
+            summary_states[key] = _load_summary_state(path)
+        return summary_states[key]
 
     for idx, row in enumerate(rows):
-        row["assigned_gpu"] = gpus[idx % len(gpus)]
         row["assigned_order"] = idx + 1
 
     runnable: list[Dict[str, Any]] = []
@@ -530,6 +542,9 @@ def launch_wide_rows(
     for row in rows:
         lp = build_log_path(log_dir=log_dir, row=row, phase_id=phase_id)
         row["log_path"] = str(lp)
+        sp = _row_summary_path(row)
+        row["summary_path"] = str(sp)
+        _get_summary_state_for(sp)
         if bool(getattr(args, "resume_from_logs", True)) and _is_completed_log(lp):
             skipped += 1
             continue
@@ -543,28 +558,30 @@ def launch_wide_rows(
         return 0
 
     if bool(getattr(args, "dry_run", False)):
+        rr_idx = 0
         for row in runnable:
             lp = Path(str(row["log_path"]))
-            cmd = build_command(row, row["assigned_gpu"], args)
+            gpu_id = str(gpus[rr_idx % len(gpus)])
+            rr_idx += 1
+            cmd = build_command(row, gpu_id, args)
             print(
-                f"[dry-run] gpu={row['assigned_gpu']} run_phase={row['run_phase']} "
+                f"[dry-run] gpu={gpu_id} run_phase={row['run_phase']} "
                 f"setting={row.get('setting_id','')} -> {lp}"
             )
             print("          " + " ".join(cmd))
         return 0
 
-    gpu_bins: Dict[str, deque[Dict[str, Any]]] = {gpu: deque() for gpu in gpus}
-    for row in runnable:
-        gpu_bins[str(row["assigned_gpu"])].append(row)
+    pending_queue: deque[Dict[str, Any]] = deque(runnable)
 
     active: Dict[str, Dict[str, Any]] = {}
     while True:
         for gpu_id in gpus:
             if gpu_id in active:
                 continue
-            if not gpu_bins[gpu_id]:
+            if not pending_queue:
                 continue
-            row = gpu_bins[gpu_id].popleft()
+            row = pending_queue.popleft()
+            row["assigned_gpu"] = str(gpu_id)
             lp = Path(str(row["log_path"]))
             cmd = build_command(row, gpu_id, args)
             _write_log_preamble(
@@ -605,9 +622,9 @@ def launch_wide_rows(
             slot["offset"] = int(new_offset)
             for trial_metrics in updates:
                 _record_trial_new_best_if_any(
-                    summary_path=summary_path,
+                    summary_path=Path(str(row.get("summary_path", summary_path))),
                     fieldnames=fieldnames,
-                    summary_state=summary_state,
+                    summary_state=_get_summary_state_for(Path(str(row.get("summary_path", summary_path)))),
                     row=row,
                     trial_metrics=trial_metrics,
                     extra_cols=extra_cols,
@@ -619,11 +636,11 @@ def launch_wide_rows(
             print(f"[done] phase={phase_id} gpu={gpu_id} run_phase={row.get('run_phase','')} rc={rc} log={lp}")
             if int(rc) == 0:
                 _record_run_complete_summary(
-                    dataset=args.dataset,
+                    dataset=str(row.get("dataset", getattr(args, "dataset", ""))),
                     axis=axis,
-                    summary_path=summary_path,
+                    summary_path=Path(str(row.get("summary_path", summary_path))),
                     fieldnames=fieldnames,
-                    summary_state=summary_state,
+                    summary_state=_get_summary_state_for(Path(str(row.get("summary_path", summary_path)))),
                     row=row,
                     extra_cols=extra_cols,
                     verify_logging=bool(verify_logging),
@@ -632,10 +649,14 @@ def launch_wide_rows(
         for gpu_id in done_gpu:
             active.pop(gpu_id, None)
 
-        pending = any(gpu_bins[g] for g in gpus)
+        pending = bool(pending_queue)
         if not pending and not active:
             break
         time.sleep(3)
 
-    print(f"[{phase_id}] summary updated: {summary_path}")
+    updated = sorted(summary_states.keys())
+    if len(updated) == 1:
+        print(f"[{phase_id}] summary updated: {updated[0]}")
+    elif updated:
+        print(f"[{phase_id}] summary updated: {len(updated)} files")
     return 0

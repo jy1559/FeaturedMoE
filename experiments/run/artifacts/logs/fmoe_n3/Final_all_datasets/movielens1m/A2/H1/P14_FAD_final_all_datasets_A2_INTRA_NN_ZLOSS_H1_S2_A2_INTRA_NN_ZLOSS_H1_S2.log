@@ -1,0 +1,387 @@
+[FINAL_ALL_DATASETS_SETTING_HEADER]
+run_phase=P14_FAD_A2_MOVIELENS1M_H1_S2 exp_brief=A2_INTRA_FEATURE_NN_STRICT_ZLOSS phase_id=P14 axis_id=FAD setting_id=A2_INTRA_NN_ZLOSS_H1_S2 hparam_id=H1 seed=2
+desc=A2_INTRA_NN_ZLOSS_H1_S2
+dataset=movielens1m gpu=1 order=24
+max_evals=20 tune_epochs=100 tune_patience=10
+seed=91001
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 20 --tune-epochs 100 --tune-patience 10 --seed 91001 --run-group fmoe_n3 --run-axis Final_all_datasets --run-phase P14_FAD_A2_MOVIELENS1M_H1_S2 model=featured_moe_n3_tune dataset=movielens1m eval_mode=session_fixed feature_mode=full_v3 gpu_id=1 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A2" ++fmoe_architecture_key="A2_INTRA_NN_ZLOSS" ++fmoe_hparam_id="H1" ++fmoe_phase="P14" MAX_ITEM_LIST_LENGTH=20 train_batch_size=4096 eval_batch_size=4096 embedding_size=128 num_heads=4 attn_dropout_prob=0.1 d_ff=256 d_feat_emb=16 d_expert_hidden=128 d_router_hidden=64 expert_scale=3 ++search.learning_rate=[0.00015,0.008] ++search.weight_decay=[1e-06] ++search.hidden_dropout_prob=[0.15] ++search.lr_scheduler_type=["warmup_cosine"] ++search_space_type_overrides.learning_rate=loguniform ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice ++search_space_type_overrides.lr_scheduler_type=choice ++phase_run_type="final" ++phase_axis_id="FAD" ++phase_axis_desc="final_all_datasets" ++phase_setting_id="A2_INTRA_NN_ZLOSS_H1_S2" ++phase_setting_key="A2_INTRA_NN_ZLOSS" ++phase_hparam_id="H1" ++phase_seed_id=2 ++phase_run_id="FAD_A2_MOVIELENS1M_H1_S2" ++layer_layout=["macro","mid","micro"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0002 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0008 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.05 ++rule_bias_scale=0.1 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w4_bxd",mid:"w6_bxd_plus_a",micro:"w1_flat"} ++macro_history_window=5 ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_family_dropout_prob={macro:0.1,mid:0.1,micro:0.1} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=9941 ts=2026-03-31T10:28:32
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x movielens1m
+  max_evals=20  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=4096/4096/4096
+  track=fmoe_n3  axis=final_all_datasets  phase=P14_FAD_A2_MOVIELENS1M_H1_S2
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.00015, 0.008]                          -> loguniform
+Fixed params(singleton/non-list): 3
+Fixed groups: 3
+  [optimization]
+    hidden_dropout_prob             0.15                                    
+    weight_decay                    1e-06                                   
+  [other]
+    lr_scheduler_type               warmup_cosine                           
+
+[Wandb] disabled for this hyperopt run
+
+[1/20] learning_rate=0.006219
+  -> MRR@20=0.017400  best=0.017400  (early_stop@24, trial=9.2min, avg=9.2min/trial, total=9.2min, ETA=2.92h)
+[TRIAL_METRICS] cur_best_mrr20=0.017400 cur_best_hr10=0.042900 cur_test_mrr20=0.013300 cur_test_hr10=0.033700 run_best_mrr20=0.017400 run_best_hr10=0.042900 run_test_mrr20=0.013300 run_test_hr10=0.033700
+
+[2/20] learning_rate=0.002883
+  -> MRR@20=0.076200  best=0.076200  (early_stop@30, trial=11.2min, avg=10.2min/trial, total=20.5min, ETA=3.07h)
+[TRIAL_METRICS] cur_best_mrr20=0.076200 cur_best_hr10=0.185100 cur_test_mrr20=0.070100 cur_test_hr10=0.168400 run_best_mrr20=0.076200 run_best_hr10=0.185100 run_test_mrr20=0.070100 run_test_hr10=0.168400
+
+[3/20] learning_rate=0.0002053
+  -> MRR@20=0.070800  best=0.076200  (early_stop@61, trial=23.2min, avg=14.6min/trial, total=43.7min, ETA=4.12h)
+[TRIAL_METRICS] cur_best_mrr20=0.070800 cur_best_hr10=0.166700 cur_test_mrr20=0.069500 cur_test_hr10=0.180000 run_best_mrr20=0.076200 run_best_hr10=0.185100 run_test_mrr20=0.070100 run_test_hr10=0.168400
+
+[4/20] learning_rate=0.000221
+  -> MRR@20=0.070800  best=0.076200  (early_stop@61, trial=23.3min, avg=16.7min/trial, total=1.12h, ETA=4.46h)
+[TRIAL_METRICS] cur_best_mrr20=0.070800 cur_best_hr10=0.168500 cur_test_mrr20=0.069900 cur_test_hr10=0.179500 run_best_mrr20=0.076200 run_best_hr10=0.185100 run_test_mrr20=0.070100 run_test_hr10=0.168400
+
+[5/20] learning_rate=0.004854
+  -> MRR@20=0.060600  best=0.076200  (early_stop@62, trial=23.3min, avg=18.1min/trial, total=1.50h, ETA=4.51h)
+[TRIAL_METRICS] cur_best_mrr20=0.060600 cur_best_hr10=0.149100 cur_test_mrr20=0.058100 cur_test_hr10=0.154600 run_best_mrr20=0.076200 run_best_hr10=0.185100 run_test_mrr20=0.070100 run_test_hr10=0.168400
+
+[6/20] learning_rate=0.004877
+  -> MRR@20=0.065200  best=0.076200  (early_stop@54, trial=20.7min, avg=18.5min/trial, total=1.85h, ETA=4.32h)
+[TRIAL_METRICS] cur_best_mrr20=0.065200 cur_best_hr10=0.149100 cur_test_mrr20=0.061700 cur_test_hr10=0.159700 run_best_mrr20=0.076200 run_best_hr10=0.185100 run_test_mrr20=0.070100 run_test_hr10=0.168400
+
+[7/20] learning_rate=0.001265
+  -> MRR@20=0.075000  best=0.076200  (early_stop@27, trial=10.4min, avg=17.3min/trial, total=2.02h, ETA=3.76h)
+[TRIAL_METRICS] cur_best_mrr20=0.075000 cur_best_hr10=0.182800 cur_test_mrr20=0.070300 cur_test_hr10=0.184600 run_best_mrr20=0.076200 run_best_hr10=0.185100 run_test_mrr20=0.070100 run_test_hr10=0.168400
+
+[8/20] learning_rate=0.003814
+  -> MRR@20=0.069900  best=0.076200  (early_stop@43, trial=16.5min, avg=17.2min/trial, total=2.30h, ETA=3.45h)
+[TRIAL_METRICS] cur_best_mrr20=0.069900 cur_best_hr10=0.171300 cur_test_mrr20=0.072900 cur_test_hr10=0.177200 run_best_mrr20=0.076200 run_best_hr10=0.185100 run_test_mrr20=0.070100 run_test_hr10=0.168400
+
+[9/20] learning_rate=0.0002193
+  -> MRR@20=0.071000  best=0.076200  (early_stop@61, trial=23.7min, avg=18.0min/trial, total=2.69h, ETA=3.29h)
+[TRIAL_METRICS] cur_best_mrr20=0.071000 cur_best_hr10=0.167100 cur_test_mrr20=0.069700 cur_test_hr10=0.178600 run_best_mrr20=0.076200 run_best_hr10=0.185100 run_test_mrr20=0.070100 run_test_hr10=0.168400
+
+[10/20] learning_rate=0.0009609
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1221, in calculate_loss
+    seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1194, in forward
+    tokens, gate_weights, gate_logits, router_aux, dense_aux, stage_merge_weights, stage_merge_logits = self.stage_executor(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/stage_executor.py", line 481, in forward
+    out = self.stage_attn_blocks[op["index"]](out, attention_mask)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 184, in forward
+    context_layer = torch.matmul(attention_probs, value_layer)
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[11/20] learning_rate=0.0007462
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[12/20] learning_rate=0.00546
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[13/20] learning_rate=0.000179
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[14/20] learning_rate=0.0005682
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[15/20] learning_rate=0.002774
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[16/20] learning_rate=0.006844
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[17/20] learning_rate=0.001044
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[18/20] learning_rate=0.00139
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[19/20] learning_rate=0.000434
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[20/20] learning_rate=0.0006056
+  -> FAILED: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2565, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1220, in calculate_loss
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+[1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m                                                                                                    Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 4147, in <module>
+    main()
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 4056, in main
+    deferred_payload = _collect_deferred_combo_best_artifacts(
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2244, in _collect_deferred_combo_best_artifacts
+    best_valid_result, best_valid_special_metrics, best_valid_diag = _run_trainer_eval(
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2057, in _run_trainer_eval
+    eval_result = trainer._valid_epoch(data_loader, show_progress=show_progress)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 891, in _patched_valid_epoch
+    return _original_valid_epoch(self, valid_data, show_progress)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 283, in _valid_epoch
+    valid_result = self.evaluate(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 616, in evaluate
+    interaction, scores, positive_u, positive_i = eval_func(batched_data)
+  File "/workspace/jy1559/FMoE/experiments/recbole_patch.py", line 1100, in _patched_full_sort_batch_eval
+    result = _original_full_sort_batch_eval(self, batched_data)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 525, in _full_sort_batch_eval
+    scores = self.model.full_sort_predict(interaction.to(self.device))
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1336, in full_sort_predict
+    feat = self._gather_features(interaction) if self._requires_features else None
+  File "/workspace/jy1559/FMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 852, in _gather_features
+    values = interaction[seq_field].float()
+RuntimeError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+[RUN_STATUS] END status=normal pid=9941 start=2026-03-31T10:28:32 end=2026-03-31T13:10:15

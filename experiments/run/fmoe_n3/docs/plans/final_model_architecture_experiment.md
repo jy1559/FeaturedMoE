@@ -6,12 +6,13 @@
 - 메인 layout: `MACRO_MID_MICRO` (`["macro","mid","micro"]`)
 - 축/로그 이름: `Final_all_datasets`
 - 평가 모드: `eval_mode=session_fixed` (세션 단위 시계열 train/valid/test)
-- 최종 비교군: `A1~A5`
+- 최종 비교군: `A1~A6`
 - `A1`: 기본(Final Main, plain `macro->mid->micro`)
   - `A2`: intra-feature NN 강화 + sub aux=`z-loss`
   - `A3`: `A1 + no_category` (구조적 drop)
   - `A4`: rule/group bias off + direct intra-group bias(`gls_stats12`)
   - `A5`: `A1 + no_category_no_timestamp` (구조적 drop)
+  - `A6`: `A1 + no_bias` (bias_mode=none, rule/group bias off)
 
 ### 1.1 Layout 근거 (phase9~13 집계)
 | Setting | valid mrr20 (mean±std) | test mrr20 (mean±std) | diag top1 | diag cv |
@@ -39,7 +40,7 @@
   - `fmoe_diag_logging=true`
   - `verify_logging=true`
 
-## 3) A2~A5 변형 정의
+## 3) A2~A6 변형 정의
 - `A2` (엄격 NN + z-loss)
   - `route_consistency_pairs=1`
   - `route_consistency_min_sim=0.995`
@@ -55,6 +56,10 @@
   - 적용 stage: `macro,mid,micro`
 - `A5` (no category + no timestamp)
   - `stage_feature_drop_keywords=["cat","theme","timestamp","gap","pace","int_","_int","sess_age","ctx_valid_r","valid_r","delta_vs_mid"]`
+- `A6` (no bias)
+  - `bias_mode=none`
+  - `rule_bias_scale=0`
+  - `feature_group_bias_lambda=0`
 
 ## 4) 실험 예산 및 hparam 정책
 - 데이터셋: `KuaiRecLargeStrictPosV2_0.2,lastfm0.03,amazon_beauty,foursquare,movielens1m,retail_rocket`

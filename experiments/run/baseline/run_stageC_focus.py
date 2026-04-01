@@ -194,6 +194,32 @@ C_PROFILES: Dict[str, Dict[str, Any]] = {
         "difsr": {"fusion_type": "gate", "use_attribute_predictor": True, "lambda_attr": 0.20},
         "fame": {"num_experts": 6},
     },
+    "C7": {
+        "name": "expert_boost_outlier",
+        "max_len": 20,
+        "dropout_delta": -0.06,
+        "wd_mult": 0.55,
+        "lr_mult": 1.22,
+        "lr_span_mult": 1.30,
+        "sasrec": {"inner_ratio": 4, "heads_mode": "double_if_fit"},
+        "gru4rec": {"layer_delta": 1},
+        "duorec": {"contrast": "us_x", "tau": 0.18, "lmd": 0.08, "lmd_sem": 0.15},
+        "difsr": {"fusion_type": "gate", "use_attribute_predictor": True, "lambda_attr": 0.25},
+        "fame": {"num_experts": 5},
+    },
+    "C8": {
+        "name": "hard_regularized_sparse_outlier",
+        "max_len": 15,
+        "dropout_delta": 0.11,
+        "wd_mult": 2.5,
+        "lr_mult": 0.72,
+        "lr_span_mult": 1.20,
+        "sasrec": {"inner_ratio": 1, "heads_mode": "half"},
+        "gru4rec": {"layer_delta": -1},
+        "duorec": {"contrast": "un", "tau": 1.20, "lmd": 0.14, "lmd_sem": 0.00},
+        "difsr": {"fusion_type": "sum", "use_attribute_predictor": False, "lambda_attr": 0.00},
+        "fame": {"num_experts": 2},
+    },
 }
 
 PROFILE_ORDER = list(C_PROFILES.keys())
@@ -216,6 +242,8 @@ PROFILE_COST_WEIGHT = {
     "C4": 1.15,
     "C5": 1.05,
     "C6": 1.18,
+    "C7": 1.28,
+    "C8": 1.15,
 }
 
 DEFAULT_STAGEA_LR_FALLBACK = {

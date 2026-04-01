@@ -31,7 +31,7 @@ PHASE_NAME = "FINAL_ALL_DATASETS"
 RUN_STAGE = "final"
 AXIS_DESC = "final_all_datasets"
 
-ARCH_ORDER = ("A1", "A2", "A3", "A4", "A5")
+ARCH_ORDER = ("A1", "A2", "A3", "A4", "A5", "A6")
 ARCH_METADATA: Dict[str, Dict[str, str]] = {
     "A1": {
         "arch_key": "FINAL_MAIN",
@@ -72,6 +72,14 @@ ARCH_METADATA: Dict[str, Dict[str, str]] = {
         "setting_key": "A5_NO_CATEGORY_NO_TIMESTAMP",
         "setting_desc_prefix": "A5_NO_CATEGORY_NO_TIMESTAMP",
         "setting_detail": "A1 + structural drop of category/theme and timestamp/pace/interval-derived features",
+    },
+    "A6": {
+        "arch_key": "A6_NO_BIAS",
+        "arch_name": "A6_NO_BIAS",
+        "setting_group": "final_variant",
+        "setting_key": "A6_NO_BIAS",
+        "setting_desc_prefix": "A6_NO_BIAS",
+        "setting_detail": "A1 + no_bias (bias_mode=none, rule/group bias off)",
     },
 }
 
@@ -165,6 +173,16 @@ def _all_stage_map(value: Any) -> Dict[str, Any]:
     return {"macro": value, "mid": value, "micro": value}
 
 
+def _apply_a2_aux_profile(overrides: Dict[str, Any], args: argparse.Namespace) -> None:
+    """Apply strict NN + z-loss aux profile used by A2 family."""
+    overrides["route_consistency_pairs"] = 1
+    overrides["route_consistency_lambda"] = float(args.a2_route_consistency_lambda)
+    overrides["route_consistency_min_sim"] = float(args.a2_route_consistency_min_sim)
+    overrides["z_loss_lambda"] = float(args.a2_z_loss_lambda)
+    overrides["route_monopoly_lambda"] = 0.0
+    overrides["balance_loss_lambda"] = 0.0
+
+
 def _core_overrides(
     args: argparse.Namespace,
     *,
@@ -194,7 +212,7 @@ def _core_overrides(
 def _arch_overrides(arch_id: str, args: argparse.Namespace) -> Dict[str, Any]:
     arch = str(arch_id).upper().strip()
 
-    if arch in {"A1", "A2", "A3", "A4", "A5"}:
+    if arch in {"A1", "A2", "A3", "A4", "A5", "A6"}:
         overrides = _core_overrides(
             args,
             wrapper_map={"macro": "w4_bxd", "mid": "w6_bxd_plus_a", "micro": "w1_flat"},
@@ -209,14 +227,9 @@ def _arch_overrides(arch_id: str, args: argparse.Namespace) -> Dict[str, Any]:
         overrides["stage_feature_dropout_prob"] = _all_stage_map(float(args.feature_dropout_prob))
         overrides["stage_feature_dropout_scope"] = _all_stage_map("token")
         if arch == "A2":
-            overrides["route_consistency_pairs"] = 1
-            overrides["route_consistency_lambda"] = float(args.a2_route_consistency_lambda)
-            overrides["route_consistency_min_sim"] = float(args.a2_route_consistency_min_sim)
-            overrides["z_loss_lambda"] = float(args.a2_z_loss_lambda)
-            # A2 sub-aux is z-loss only.
-            overrides["route_monopoly_lambda"] = 0.0
-            overrides["balance_loss_lambda"] = 0.0
+            _apply_a2_aux_profile(overrides, args)
         elif arch == "A3":
+            _apply_a2_aux_profile(overrides, args)
             overrides["stage_feature_drop_keywords"] = ["cat", "theme"]
         elif arch == "A4":
             # Disable legacy rule/group bias paths and use direct intra-group bias.
@@ -225,6 +238,7 @@ def _arch_overrides(arch_id: str, args: argparse.Namespace) -> Dict[str, Any]:
             overrides["intra_group_bias_mode"] = _all_stage_map("gls_stats12")
             overrides["intra_group_bias_scale"] = _all_stage_map(float(args.a4_intra_group_bias_scale))
         elif arch == "A5":
+            _apply_a2_aux_profile(overrides, args)
             overrides["stage_feature_drop_keywords"] = [
                 "cat",
                 "theme",
@@ -238,6 +252,11 @@ def _arch_overrides(arch_id: str, args: argparse.Namespace) -> Dict[str, Any]:
                 "valid_r",
                 "delta_vs_mid",
             ]
+        elif arch == "A6":
+            _apply_a2_aux_profile(overrides, args)
+            overrides["bias_mode"] = "none"
+            overrides["rule_bias_scale"] = 0.0
+            overrides["feature_group_bias_lambda"] = 0.0
         return overrides
 
     raise ValueError(f"Unsupported architecture: {arch_id}")
@@ -456,6 +475,8 @@ def _build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) -
 
 
 def _build_log_path(log_dir: Path, row: Dict[str, Any], phase_id: str) -> Path:
+    dataset = str(row.get("dataset", "") or "")
+    base_dir = _phase_log_dir(dataset) if dataset else log_dir
     phase = sanitize_token(phase_id, upper=True)
     axis_id = sanitize_token(str(row.get("axis_id", "FAD")), upper=True)
     axis_desc = sanitize_token(str(row.get("axis_desc", AXIS_DESC)), upper=False)
@@ -464,7 +485,7 @@ def _build_log_path(log_dir: Path, row: Dict[str, Any], phase_id: str) -> Path:
     hparam = sanitize_token(str(row.get("hparam_id", "H1")), upper=True)
     arch = sanitize_token(str(row.get("architecture_id", "A1")), upper=True)
     filename = f"{phase}_{axis_id}_{axis_desc}_{setting_id}_{setting_desc}.log"
-    return log_dir / arch / hparam / filename
+    return base_dir / arch / hparam / filename
 
 
 def _write_manifest(
@@ -621,7 +642,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seeds", default="1,2,3,4")
     parser.add_argument("--seed-base", type=int, default=91000)
 
-    parser.add_argument("--architectures", default="A1,A2,A3,A4,A5", help="CSV from {A1,A2,A3,A4,A5}")
+    parser.add_argument("--architectures", default="A2,A3,A5,A6", help="CSV from {A1,A2,A3,A4,A5,A6}")
     parser.add_argument("--architecture", default="", help="Alias of --architectures")
 
     parser.add_argument("--common-hparams", default="H1,H3")
@@ -712,6 +733,15 @@ def _build_execution_plan(datasets: list[str], architectures: list[str]) -> tupl
             plan.append((dataset, "A3"))
         return plan, "A1_all_datasets_then_datasetwise_A2_A3"
 
+    if architectures == ["A2", "A3", "A5", "A6"]:
+        plan: list[tuple[str, str]] = []
+        for dataset in datasets:
+            plan.append((dataset, "A2"))
+        for dataset in datasets:
+            for arch in ("A3", "A5", "A6"):
+                plan.append((dataset, arch))
+        return plan, "A2_all_datasets_then_datasetwise_A3_A5_A6"
+
     plan = []
     for arch_id in architectures:
         for dataset in datasets:
@@ -783,6 +813,7 @@ def main() -> int:
     execution_plan, plan_name = _build_execution_plan(datasets, architectures)
     print(f"[{PHASE_ID}] execution_plan={plan_name} steps={len(execution_plan)}")
 
+    scheduled_rows: list[Dict[str, Any]] = []
     for step_idx, (dataset, arch_id) in enumerate(execution_plan, start=1):
         payload = dataset_payloads.get(dataset, {})
         rows_by_arch = dict(payload.get("rows_by_arch", {}) or {})
@@ -793,25 +824,34 @@ def main() -> int:
             f"[{PHASE_ID}] schedule_step={step_idx}/{len(execution_plan)} "
             f"dataset={dataset} architecture={arch_id} rows={len(rows)}"
         )
-        dataset_args = copy.copy(args)
-        dataset_args.dataset = dataset
-        rc = launch_wide_rows(
-            rows=rows,
-            gpus=gpus,
-            args=dataset_args,
-            axis=AXIS,
-            phase_id=PHASE_ID,
-            phase_name=PHASE_NAME,
-            log_dir=Path(str(payload["log_dir"])),
-            summary_path=Path(str(payload["summary_path"])),
-            fieldnames=fieldnames,
-            extra_cols=extra_cols,
-            build_command=_build_command,
-            build_log_path=_build_log_path,
-            verify_logging=bool(args.verify_logging),
-        )
-        if rc != 0:
-            return int(rc)
+
+        # Preserve execution-plan ordering while allowing a single global GPU queue.
+        for row in rows:
+            row["scheduled_step"] = int(step_idx)
+        scheduled_rows.extend(rows)
+
+    if not scheduled_rows:
+        print(f"[{PHASE_ID}] nothing to schedule after plan filtering.")
+        return 0
+
+    rc = launch_wide_rows(
+        rows=scheduled_rows,
+        gpus=gpus,
+        args=args,
+        axis=AXIS,
+        phase_id=PHASE_ID,
+        phase_name=PHASE_NAME,
+        log_dir=LOG_ROOT / AXIS,
+        summary_path=_summary_path(datasets[0]),
+        fieldnames=fieldnames,
+        extra_cols=extra_cols,
+        build_command=_build_command,
+        build_log_path=_build_log_path,
+        verify_logging=bool(args.verify_logging),
+        summary_path_for_row=lambda row: _summary_path(str(row.get("dataset", ""))),
+    )
+    if rc != 0:
+        return int(rc)
     return 0
 
 

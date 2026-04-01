@@ -5,9 +5,9 @@
 - run_group: baseline
 - run_axis: stagec_focus_anchor2_core5
 - run_phase: P18_SC_D00_M05_P01_FAME_B4_C5_S1
-- best_mrr@20: 0.204
-- test_mrr@20: 0.2086
-- test_hr@10: 0.2588
+- best_mrr@20: 0.2058
+- test_mrr@20: 0.2012
+- test_hr@10: 0.2489
 
 ## Artifacts
 
