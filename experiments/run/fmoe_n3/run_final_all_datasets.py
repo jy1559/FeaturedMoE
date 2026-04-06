@@ -157,6 +157,70 @@ HPARAM_BANK: Dict[str, Dict[str, float]] = {
         "fixed_weight_decay": 2.5e-6,
         "fixed_hidden_dropout_prob": 0.19,
     },
+    "H9": {
+        "embedding_size": 96,
+        "d_ff": 192,
+        "d_expert_hidden": 96,
+        "d_router_hidden": 48,
+        "fixed_weight_decay": 4e-6,
+        "fixed_hidden_dropout_prob": 0.22,
+    },
+    "H10": {
+        "embedding_size": 192,
+        "d_ff": 384,
+        "d_expert_hidden": 192,
+        "d_router_hidden": 96,
+        "fixed_weight_decay": 8e-7,
+        "fixed_hidden_dropout_prob": 0.14,
+    },
+    "H11": {
+        "embedding_size": 224,
+        "d_ff": 448,
+        "d_expert_hidden": 224,
+        "d_router_hidden": 112,
+        "fixed_weight_decay": 6e-7,
+        "fixed_hidden_dropout_prob": 0.12,
+    },
+    "H12": {
+        "embedding_size": 80,
+        "d_ff": 160,
+        "d_expert_hidden": 80,
+        "d_router_hidden": 40,
+        "fixed_weight_decay": 5e-6,
+        "fixed_hidden_dropout_prob": 0.24,
+    },
+    "H13": {
+        "embedding_size": 176,
+        "d_ff": 352,
+        "d_expert_hidden": 176,
+        "d_router_hidden": 88,
+        "fixed_weight_decay": 1e-6,
+        "fixed_hidden_dropout_prob": 0.16,
+    },
+    "H14": {
+        "embedding_size": 256,
+        "d_ff": 512,
+        "d_expert_hidden": 256,
+        "d_router_hidden": 128,
+        "fixed_weight_decay": 5e-7,
+        "fixed_hidden_dropout_prob": 0.10,
+    },
+    "H15": {
+        "embedding_size": 128,
+        "d_ff": 384,
+        "d_expert_hidden": 96,
+        "d_router_hidden": 64,
+        "fixed_weight_decay": 1.2e-6,
+        "fixed_hidden_dropout_prob": 0.17,
+    },
+    "H16": {
+        "embedding_size": 144,
+        "d_ff": 216,
+        "d_expert_hidden": 216,
+        "d_router_hidden": 72,
+        "fixed_weight_decay": 1.8e-6,
+        "fixed_hidden_dropout_prob": 0.20,
+    },
 }
 
 DEFAULT_OUTLIER_HPARAM = {
@@ -166,6 +230,15 @@ DEFAULT_OUTLIER_HPARAM = {
     "foursquare": "H2",
     "movielens1m": "H5",
     "retail_rocket": "H6",
+}
+
+DATASET_HPARAM_PRESET_12: Dict[str, list[str]] = {
+    "KuaiRecLargeStrictPosV2_0.2": ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9", "H10", "H12", "H14"],
+    "lastfm0.03": ["H1", "H2", "H3", "H5", "H6", "H7", "H8", "H9", "H10", "H11", "H12", "H15"],
+    "amazon_beauty": ["H1", "H2", "H3", "H4", "H6", "H8", "H9", "H10", "H12", "H13", "H14", "H16"],
+    "foursquare": ["H1", "H2", "H3", "H4", "H5", "H7", "H8", "H9", "H10", "H11", "H12", "H15"],
+    "movielens1m": ["H1", "H2", "H3", "H5", "H6", "H7", "H8", "H9", "H10", "H11", "H14", "H16"],
+    "retail_rocket": ["H1", "H2", "H3", "H4", "H6", "H8", "H9", "H10", "H12", "H13", "H15", "H16"],
 }
 
 
@@ -313,6 +386,12 @@ def _parse_outlier_map(text: str) -> Dict[str, str]:
 
 def _selected_hparams_for_dataset(dataset: str, args: argparse.Namespace) -> list[str]:
     common = [h.upper() for h in _parse_csv_strings(args.common_hparams)]
+    if common == ["AUTO12"]:
+        preset = list(DATASET_HPARAM_PRESET_12.get(dataset, []))
+        selected = [h for h in preset if h in HPARAM_BANK]
+        if selected:
+            return selected
+
     outlier_map = dict(DEFAULT_OUTLIER_HPARAM)
     outlier_map.update(_parse_outlier_map(args.dataset_outlier_hparams))
     outlier = str(outlier_map.get(dataset, args.default_outlier_hparam)).upper()

@@ -6,16 +6,15 @@ RUN_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=/dev/null
 source "${RUN_DIR}/common/run_metadata.sh"
 
-# Stage-1 screening default: remaining datasets (KuaiRec excluded)
-DATASETS="lastfm0.03,amazon_beauty,foursquare,movielens1m,retail_rocket"
+DATASETS="KuaiRecLargeStrictPosV2_0.2,lastfm0.03,amazon_beauty,foursquare,movielens1m,retail_rocket"
 GPU_LIST="0,1,2,3,4,5,6,7"
-SEEDS="1,2"
+SEEDS="1,2,3"
 SEED_BASE="91000"
-ARCHITECTURES="A2,A3,A5,A6"
+ARCHITECTURES="A6"
 
-# 4 hparams per dataset: 3 common + 1 dataset outlier
-COMMON_HPARAMS="H1,H2,H3"
-DEFAULT_OUTLIER_HPARAM="H4"
+# A6-only wide hparam sweep: dataset-specific AUTO12 presets (picked from H1~H16).
+COMMON_HPARAMS="AUTO12"
+DEFAULT_OUTLIER_HPARAM="H16"
 DATASET_OUTLIER_HPARAMS=""
 
 MAX_EVALS="20"
@@ -54,8 +53,8 @@ SMOKE_MAX_RUNS="2"
 
 usage() {
   cat <<USAGE
-Usage: $0 [--datasets ...] [--gpus 0,1,2,3] [--seeds 1,2]
-          [--architecture A2,A3,A5,A6]
+Usage: $0 [--datasets ...] [--gpus 0,1,2,3] [--seeds 1,2,3]
+          [--architecture A6]
           [--common-hparams H1,H3] [--dataset-outlier-hparams "ds:H4,ds2:H6"]
           [--max-evals 20] [--tune-epochs 100] [--tune-patience 10]
           [--family-dropout-prob 0.10]
