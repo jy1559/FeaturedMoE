@@ -1,0 +1,181 @@
+\documentclass[sigconf,authordraft]{acmart}
+
+\AtBeginDocument{%
+  \providecommand\BibTeX{{%
+    Bib\TeX}}}
+
+% Draft-friendly ACM settings.
+% Replace these metadata fields later when you know the target venue.
+\setcopyright{none}
+\settopmatter{printacmref=false}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\pagestyle{plain}
+
+\acmConference[FMoE Draft]{Draft Venue Placeholder}{2026}{TBD}
+\acmBooktitle{Draft Template for FMoE Paper}
+\acmDOI{}
+\acmISBN{}
+
+% ------------------------------------------------------------------
+% Notes for future editing
+% ------------------------------------------------------------------
+% Figure example:
+% \begin{figure}[t]
+%   \centering
+%   \includegraphics[width=\linewidth]{figures/overview.pdf}
+%   \caption{Overall framework of FMoE.}
+%   \label{fig:overview}
+% \end{figure}
+%
+% Bibliography example:
+% 1) Create refs.bib in the same project folder.
+% 2) Add entries there.
+% 3) Uncomment the bibliography commands at the end of this file.
+
+\begin{document}
+
+\title[FeaturedMoE for Sequential Recommendation]{FeaturedMoE: Feature-Guided Mixture-of-Experts for Sequential Recommendation}
+
+\author{First Author}
+\affiliation{%
+  \institution{KAIST}
+  \department{Kim Jaechul Graduate School of AI}
+  \city{Daejeon}
+  \country{Republic of Korea}}
+\email{first.author@kaist.ac.kr}
+
+\author{Second Author}
+\affiliation{%
+  \institution{KAIST}
+  \department{Kim Jaechul Graduate School of AI}
+  \city{Daejeon}
+  \country{Republic of Korea}}
+\email{second.author@kaist.ac.kr}
+
+\renewcommand{\shortauthors}{Author et al.}
+
+\begin{abstract}
+Mixture-of-experts (MoE) architectures are increasingly adopted in sequential recommendation for their promise of expert specialization, yet routing in many existing models remains largely a black-box function of hidden states. While such hidden-only routing can be effective, the meaning of expert assignment remains implicit, making it difficult to verify whether experts truly capture meaningful behavioral regimes. Meanwhile, feature-aware recommenders typically use side information to enrich sequence representations, leaving the computation path itself unguided. We propose FeaturedMoE (FMoE), a feature-guided modular architecture that bridges these two lines by turning compact behavioral features into explicit routing guidance. Rather than relying on rich dataset-specific metadata, FMoE derives behavioral cues from widely available raw signals in sequential data---namely sessionized interaction order, timestamps, and item categories---and organizes them into complementary feature families that guide macro, mid, and micro routing stages. Extensive experiments show that FMoE does not require a large handcrafted feature bank: compact multi-family feature templates remain effective, stage organization and composition materially affect performance, and corrupted or semantically misaligned cues consistently weaken the model. These findings suggest that common raw signals can be transformed into practical and inspectable routing priors for MoE-based sequential recommendation.
+\end{abstract}
+
+% Add proper CCS terms later if needed for the final submission.
+% \begin{CCSXML}
+% ...
+% \end{CCSXML}
+% \ccsdesc[500]{...}
+
+\keywords{sequential recommendation, mixture of experts, conditional computation, routing, behavioral features}
+
+\maketitle
+
+\section{Introduction}
+Sequential recommendation is commonly formulated as a next-item prediction problem over a user's interaction history. In practice, however, user behavior is rarely governed by a single homogeneous signal. Persistent personal preference, the temporary intent formed within the current session, and short-range transition dynamics often coexist in the same sequence. Strong sequential backbones can model these signals jointly, but they still tend to process them through largely shared computation. As a result, distinct behavioral states are compressed into a single representation space, making it difficult to decide when the model should rely more on long-lived preference, session context, or immediate action patterns.
+
+A common response is to inject additional information. Time-aware recommenders incorporate temporal intervals, long--short preference models separate broad and recent context, and feature-aware recommenders fuse side information into representations or attention layers. These approaches have been highly useful, but they often remain representation-centric: extra signals are added to make hidden states richer, while the computation itself is still mostly shared. Moreover, many side-information methods implicitly assume feature schemas that are not consistently available across datasets. This makes it natural to ask a different question: can a small set of common behavioral cues organize the computation of a sequential recommender, rather than merely decorate its input representation?
+
+We answer this question with FeaturedMoE (FMoE), a feature-guided mixture-of-experts architecture built on a sequential backbone. The key idea is to treat simple behavioral features as routing control signals. Instead of depending on rich metadata, FMoE uses portable cues derived from information that is commonly available in many recommendation datasets, such as sessionized order, timestamps, and item categories. These cues are grouped into behavioral feature families designed to reflect three complementary aspects of user behavior: long-term tendency, session-level context, and local transition tendency. FMoE then uses these families to guide expert routing across macro, mid, and micro stages, so that different behavioral states may trigger different computation paths.
+
+The remainder of this paper is organized as follows. Section~\ref{sec:method} presents the overall FMoE framework and its routing design. Section~\ref{sec:experiments} describes the experimental setup and evaluation plan. Section~\ref{sec:conclusion} concludes the paper.
+
+\section{Related Work}
+This section will briefly review four lines of work: sequential recommendation backbones, feature-aware recommendation, mixture-of-experts for recommendation, and interpretable or controllable routing. The final version can be organized either as a standalone related-work section or folded into the introduction, depending on the target venue's style and page budget.
+
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Problem Definition and Overall Framework}
+\label{sec:problem-framework}
+Sequential recommendation aims to predict the next item a user will interact with from the user's past behavior sequence. In our setting, the interaction history is organized into sessions, where a session denotes a contiguous period of activity corresponding to a coherent visit or intent. For readability, we omit the user index and describe the history of a single user. Let $\mathcal{S} = [s_1, \dots, s_M]$ denote the session sequence, where the $m$-th session is written as $s_m = [x_1, \dots, x_{|s_m|}]$. Each interaction $x_t$ contains an item ID and timestamp, and each item may additionally be associated with a category label. Given the observed interaction history, the goal is to predict the next item.
+
+FMoE is built on top of a SASRec backbone. We emphasize this point because the backbone itself remains intentionally simple: the input structure is the same as in standard sequential recommendation, and the main architectural change is the introduction of mixture-of-experts computation. The key idea is that expert routing is not determined only from hidden representations. Instead, FMoE constructs compact behavioral features from widely available raw sequential signals, such as sequence order, timestamps, and item categories, and uses them to guide expert selection. In this way, FMoE preserves the strong and simple sequential modeling capability of SASRec while adding an explicit behavioral control signal to the computation path.
+
+Let $\mathbf{h}_t$ denote the hidden state at position $t$, and let $\mathbf{f}_t$ denote the behavioral feature used for routing. The router produces expert weights $\boldsymbol{\pi}_t$, and the hidden representation is transformed by a weighted combination of experts:
+\[
+\tilde{\mathbf{h}}_t
+=
+\sum_{e=1}^{E}
+\pi_{t,e}\,\mathrm{Expert}_e(\mathbf{h}_t).
+\]
+FMoE applies this routing mechanism across three behavioral levels---macro, mid, and micro---so that long-term tendency, session-level context, and immediate local transition can guide expert computation at different temporal scales. The following subsections describe how these behavioral features are constructed and how the stage-wise routers are designed.
+
+\subsection{Behavioral Feature Construction from Raw Sequential Signals}
+\label{sec:feature-construction}
+Figure~\ref{fig:feature-construction} summarizes the feature-construction pipeline of FMoE. The goal of this subsection is not to enumerate every scalar statistic individually, but to explain how portable behavioral cues are extracted from raw sequential signals and reorganized into stage-specific feature views. Throughout this section, the feature bank should be understood as a routing-side signal: it is intentionally compact, because its role is to guide expert selection rather than to replace the sequential representation learned by the backbone.
+
+\begin{figure*}[t]
+  \centering
+  \fbox{%
+    \parbox{0.95\textwidth}{%
+      \vspace{0.8em}
+      \textbf{Figure placeholder for behavioral feature construction.}\\[0.4em]
+      Recommended composition: \textbf{(a)} raw sequential signals and simple aggregation operators, \textbf{(b)} four compact feature families, and \textbf{(c)} stage-specific feature views. In panel (a), show raw inputs such as session boundary, interaction order, timestamp / time gap, item category, and popularity-derived cues, followed by simple summary operators such as count, ratio, mean, standard deviation, entropy, and trend. In panel (b), organize the resulting scalar cues into four semantic groups: Tempo, Focus, Memory, and Exposure. In panel (c), show how the same four groups are instantiated over three observation ranges: past sessions for Macro, the current-session prefix for Mid, and the last five interactions for Micro. Indicate that the Macro view is fixed within a session, whereas the Mid and Micro views are updated at each token position.
+      \vspace{0.8em}}
+  }
+  \caption{Behavioral feature construction in FMoE. Widely available raw sequential signals are first converted into simple scalar summaries, then grouped into four interpretable feature families, and finally instantiated as stage-specific feature views at macro, mid, and micro temporal ranges.}
+  \label{fig:feature-construction}
+\end{figure*}
+
+\subsubsection{Raw signals and scalar summaries}
+Starting from the notation in Section~\ref{sec:problem-framework}, recall that the current session is written as $s_m = [x_1, \dots, x_{|s_m|}]$. For each interaction $x_t$, we use only lightweight signals that are commonly available across sequential recommendation datasets: its item identity $i_t$, timestamp $\tau_t$, and, when available, category label $c_t$. We additionally allow item-level popularity statistics derived from the training corpus. These signals are deliberately simple and portable. Rather than introducing a separate metadata encoder, FMoE converts them into low-dimensional behavioral summaries that can be used to steer routing.
+
+Formally, let $\mathcal{R}$ denote an observation range and let
+\[
+\mathcal{A}(\mathcal{R}) = [a_1(\mathcal{R}), \dots, a_K(\mathcal{R})]
+\]
+be the vector of scalar summaries extracted from that range, where each $a_k(\cdot)$ is a simple aggregation such as a count, ratio, mean, standard deviation, entropy, or trend statistic. This notation is intentionally generic: the exact feature list may vary slightly across datasets, but the construction principle remains the same. The important point is that FMoE does not depend on rich side-information schemas. Instead, it reconstructs compact behavioral cues from raw sequential evidence that is broadly available in practice.
+
+\subsubsection{Compact feature families}
+The scalar summaries are not treated as an unstructured list. Instead, FMoE groups them into four interpretable behavioral families: \emph{Tempo}, \emph{Focus}, \emph{Memory}, and \emph{Exposure}. Tempo captures pace, interval, and temporal rhythm. Focus describes how concentrated the current behavior is around certain categories and how frequently the user switches across them. Memory reflects repetition, recurrence, and overlap with previously observed context. Exposure summarizes the popularity level and mainstreamness of the consumed items, together with their drift over time.
+
+Let $\mathbf{f}$ denote a generic routing feature vector. We write it as
+\[
+\mathbf{f}
+=
+[\mathbf{f}^{\mathrm{tempo}} \;\|\; \mathbf{f}^{\mathrm{focus}} \;\|\; \mathbf{f}^{\mathrm{memory}} \;\|\; \mathbf{f}^{\mathrm{exposure}}],
+\]
+where each block corresponds to one behavioral family. This grouping is primarily semantic rather than architectural: it provides the router with a structured view of behavior instead of a flat collection of unrelated statistics. As a result, the feature bank remains compact and interpretable while still carrying enough information to bias expert selection toward different behavioral regimes.
+
+\subsubsection{Stage-specific feature views}
+The same four feature families are used at all stages, but they are computed over different observation ranges. Let
+\begin{align}
+\mathcal{R}^{\mathrm{macro}} &= [s_{m-5}, \dots, s_{m-1}], \\
+\mathcal{R}^{\mathrm{mid}}_t &= [x_1, \dots, x_{t-1}], \\
+\mathcal{R}^{\mathrm{micro}}_t &= [x_{\max(1,t-5)}, \dots, x_{t-1}].
+\end{align}
+
+Using the scalar-summary operator $\mathcal{A}(\cdot)$, FMoE constructs three stage-specific feature views,
+
+\begin{align}
+\mathbf{f}^{\mathrm{macro}} &= \mathcal{A}(\mathcal{R}^{\mathrm{macro}}), \\
+\mathbf{f}^{\mathrm{mid}}_t &= \mathcal{A}(\mathcal{R}^{\mathrm{mid}}_t), \\
+\mathbf{f}^{\mathrm{micro}}_t &= \mathcal{A}(\mathcal{R}^{\mathrm{micro}}_t).
+\end{align}
+The macro view is derived from past sessions and is intended to reflect overall preference, recurring consumption tendency, and relatively stable user regime. Since it depends only on sessions preceding $s_m$, it remains fixed throughout the current session. The mid view is computed from the current-session prefix and is updated at every position $t$, allowing it to track the evolving intent and session-level context of the ongoing visit. The micro view is computed from only the last five interactions before position $t$, making it sensitive to immediate local interest and next-step transition cues. In this way, FMoE uses a shared semantic taxonomy together with stage-dependent observation scopes, yielding a coarse-to-fine set of routing features without relying on heavy metadata or large auxiliary encoders.
+
+\subsection{Stage-Wise Routing and Expert Computation}
+This subsection will explain how the macro, mid, and micro stages are arranged, where the MoE layers are inserted in the SASRec stack, and how stage-wise routing interacts with hidden-state transformation. A figure of the overall architecture will likely fit well here.
+
+\subsection{Training Objective and Stabilization}
+This subsection will summarize the next-item prediction loss and any auxiliary or regularization terms used to stabilize routing while preserving behavior-driven specialization. The final version can separate the main objective and routing stabilization objective into two paragraphs or two equations, depending on how much detail is needed.
+
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Experimental Setup}
+This subsection will describe datasets, preprocessing, evaluation metrics, baselines, and implementation details. It is usually enough to keep the main paper concise and move dataset-specific preprocessing details to an appendix if the venue has a strict page limit.
+
+\subsection{Main Results}
+This subsection will report the overall comparison against baseline sequential recommenders and MoE-based variants. A table comparing HR@K and NDCG@K or MRR@K across datasets will likely be the main result table.
+
+\subsection{Ablation and Diagnostic Analysis}
+This subsection can be used for router design ablations, feature-family ablations, stage composition studies, corrupted-feature sanity checks, and any analysis of routing behavior or expert specialization.
+
+\section{Conclusion}
+\label{sec:conclusion}
+In this draft, the paper is organized around the claim that compact behavioral cues can serve as explicit routing guidance for mixture-of-experts sequential recommendation. The final conclusion can briefly restate this perspective, summarize the empirical findings, and discuss portability, interpretability, and future extensions of the framework.
+
+% Uncomment after creating refs.bib.
+% \bibliographystyle{ACM-Reference-Format}
+% \bibliography{refs}
+
+\end{document}

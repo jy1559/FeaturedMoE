@@ -1,0 +1,131 @@
+[FINAL_ALL_DATASETS_SETTING_HEADER]
+run_phase=P14_FAD_A6_FOURSQUARE_H9_S1 exp_brief=A6_NO_BIAS phase_id=P14 axis_id=FAD setting_id=A6_NO_BIAS_H9_S1 hparam_id=H9 seed=1
+desc=A6_NO_BIAS_H9_S1
+dataset=foursquare gpu=3 order=130
+max_evals=20 tune_epochs=100 tune_patience=10
+seed=91021
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 20 --tune-epochs 100 --tune-patience 10 --seed 91021 --run-group fmoe_n3 --run-axis Final_all_datasets --run-phase P14_FAD_A6_FOURSQUARE_H9_S1 model=featured_moe_n3_tune dataset=foursquare eval_mode=session_fixed feature_mode=full_v3 gpu_id=3 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A6" ++fmoe_architecture_key="A6_NO_BIAS" ++fmoe_hparam_id="H9" ++fmoe_phase="P14" MAX_ITEM_LIST_LENGTH=20 train_batch_size=4096 eval_batch_size=4096 embedding_size=96 num_heads=4 attn_dropout_prob=0.1 d_ff=192 d_feat_emb=16 d_expert_hidden=96 d_router_hidden=48 expert_scale=3 ++search.learning_rate=[0.00015,0.008] ++search.weight_decay=[4e-06] ++search.hidden_dropout_prob=[0.22] ++search.lr_scheduler_type=["warmup_cosine"] ++search_space_type_overrides.learning_rate=loguniform ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice ++search_space_type_overrides.lr_scheduler_type=choice ++phase_run_type="final" ++phase_axis_id="FAD" ++phase_axis_desc="final_all_datasets" ++phase_setting_id="A6_NO_BIAS_H9_S1" ++phase_setting_key="A6_NO_BIAS" ++phase_hparam_id="H9" ++phase_seed_id=1 ++phase_run_id="FAD_A6_FOURSQUARE_H9_S1" ++layer_layout=["macro","mid","micro"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0002 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0008 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w4_bxd",mid:"w6_bxd_plus_a",micro:"w1_flat"} ++macro_history_window=5 ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_family_dropout_prob={macro:0.1,mid:0.1,micro:0.1} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++bias_mode="none"
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=233622 ts=2026-04-06T12:18:24
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x foursquare
+  max_evals=20  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=4096/4096/4096
+  track=fmoe_n3  axis=final_all_datasets  phase=P14_FAD_A6_FOURSQUARE_H9_S1
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.00015, 0.008]                          -> loguniform
+Fixed params(singleton/non-list): 3
+Fixed groups: 3
+  [optimization]
+    hidden_dropout_prob             0.22                                    
+    weight_decay                    4e-06                                   
+  [other]
+    lr_scheduler_type               warmup_cosine                           
+
+[Wandb] disabled for this hyperopt run
+
+[1/20] learning_rate=0.0002389
+  -> MRR@20=0.105700  best=0.105700  (early_stop@78, trial=6.1min, avg=6.1min/trial, total=6.1min, ETA=1.93h)
+[TRIAL_METRICS] cur_best_mrr20=0.105700 cur_best_hr10=0.198400 cur_test_mrr20=0.103800 cur_test_hr10=0.197300 run_best_mrr20=0.105700 run_best_hr10=0.198400 run_test_mrr20=0.103800 run_test_hr10=0.197300
+
+[2/20] learning_rate=0.0002297
+  -> MRR@20=0.105300  best=0.105700  (early_stop@73, trial=5.8min, avg=5.9min/trial, total=11.9min, ETA=1.78h)
+[TRIAL_METRICS] cur_best_mrr20=0.105300 cur_best_hr10=0.196600 cur_test_mrr20=0.102100 cur_test_hr10=0.191800 run_best_mrr20=0.105700 run_best_hr10=0.198400 run_test_mrr20=0.103800 run_test_hr10=0.197300
+
+[3/20] learning_rate=0.0002638
+  -> MRR@20=0.105700  best=0.105700  (early_stop@67, trial=5.3min, avg=5.7min/trial, total=17.2min, ETA=1.63h)
+[TRIAL_METRICS] cur_best_mrr20=0.105700 cur_best_hr10=0.201600 cur_test_mrr20=0.104300 cur_test_hr10=0.199700 run_best_mrr20=0.105700 run_best_hr10=0.201600 run_test_mrr20=0.104300 run_test_hr10=0.199700
+
+[4/20] learning_rate=0.0002333
+  -> MRR@20=0.105600  best=0.105700  (early_stop@73, trial=6.0min, avg=5.8min/trial, total=23.2min, ETA=1.55h)
+[TRIAL_METRICS] cur_best_mrr20=0.105600 cur_best_hr10=0.197400 cur_test_mrr20=0.103000 cur_test_hr10=0.192300 run_best_mrr20=0.105700 run_best_hr10=0.198400 run_test_mrr20=0.103800 run_test_hr10=0.197300
+
+[5/20] learning_rate=0.0004399
+  -> MRR@20=0.111100  best=0.111100  (early_stop@56, trial=4.4min, avg=5.5min/trial, total=27.6min, ETA=1.38h)
+[TRIAL_METRICS] cur_best_mrr20=0.111100 cur_best_hr10=0.210500 cur_test_mrr20=0.111700 cur_test_hr10=0.208600 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[6/20] learning_rate=0.0001959
+  -> MRR@20=0.103700  best=0.111100  (full@100, trial=8.1min, avg=6.0min/trial, total=35.7min, ETA=1.39h)
+[TRIAL_METRICS] cur_best_mrr20=0.103700 cur_best_hr10=0.192900 cur_test_mrr20=0.099400 cur_test_hr10=0.188600 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[7/20] learning_rate=0.001484
+  -> MRR@20=0.107100  best=0.111100  (early_stop@21, trial=1.7min, avg=5.3min/trial, total=37.4min, ETA=1.16h)
+[TRIAL_METRICS] cur_best_mrr20=0.107100 cur_best_hr10=0.206300 cur_test_mrr20=0.107500 cur_test_hr10=0.201300 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[8/20] learning_rate=0.001658
+  -> MRR@20=0.107700  best=0.111100  (early_stop@21, trial=1.7min, avg=4.9min/trial, total=39.1min, ETA=58.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.107700 cur_best_hr10=0.208100 cur_test_mrr20=0.108900 cur_test_hr10=0.203900 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[9/20] learning_rate=0.002341
+  -> MRR@20=0.106600  best=0.111100  (early_stop@21, trial=1.7min, avg=4.5min/trial, total=40.7min, ETA=49.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.106600 cur_best_hr10=0.206600 cur_test_mrr20=0.104800 cur_test_hr10=0.196300 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[10/20] learning_rate=0.002448
+  -> MRR@20=0.105800  best=0.111100  (early_stop@21, trial=1.7min, avg=4.2min/trial, total=42.4min, ETA=42.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.105800 cur_best_hr10=0.203700 cur_test_mrr20=0.104000 cur_test_hr10=0.194700 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[11/20] learning_rate=0.0007773
+  -> MRR@20=0.103100  best=0.111100  (early_stop@32, trial=2.6min, avg=4.1min/trial, total=45.0min, ETA=36.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.103100 cur_best_hr10=0.198900 cur_test_mrr20=0.103600 cur_test_hr10=0.197800 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[12/20] learning_rate=0.002664
+  -> MRR@20=0.105000  best=0.111100  (early_stop@23, trial=1.9min, avg=3.9min/trial, total=47.0min, ETA=31.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.105000 cur_best_hr10=0.193400 cur_test_mrr20=0.097500 cur_test_hr10=0.187300 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[13/20] learning_rate=0.0005715
+  -> MRR@20=0.103300  best=0.111100  (early_stop@68, trial=5.7min, avg=4.1min/trial, total=52.7min, ETA=28.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.103300 cur_best_hr10=0.189000 cur_test_mrr20=0.099400 cur_test_hr10=0.186500 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[14/20] learning_rate=0.0008019
+  -> MRR@20=0.109300  best=0.111100  (early_stop@31, trial=2.6min, avg=4.0min/trial, total=55.3min, ETA=23.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.109300 cur_best_hr10=0.212100 cur_test_mrr20=0.110500 cur_test_hr10=0.208600 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[15/20] learning_rate=0.0005049
+  -> MRR@20=0.102800  best=0.111100  (early_stop@50, trial=4.0min, avg=4.0min/trial, total=59.4min, ETA=19.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.102800 cur_best_hr10=0.194500 cur_test_mrr20=0.102800 cur_test_hr10=0.195700 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[16/20] learning_rate=0.003091
+  -> MRR@20=0.104900  best=0.111100  (early_stop@18, trial=1.3min, avg=3.8min/trial, total=1.01h, ETA=15.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.104900 cur_best_hr10=0.206300 cur_test_mrr20=0.108300 cur_test_hr10=0.202800 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[17/20] learning_rate=0.001001
+  -> MRR@20=0.105900  best=0.111100  (early_stop@31, trial=2.5min, avg=3.7min/trial, total=1.05h, ETA=11.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.105900 cur_best_hr10=0.206000 cur_test_mrr20=0.105800 cur_test_hr10=0.197100 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[18/20] learning_rate=0.00371
+  -> MRR@20=0.103600  best=0.111100  (early_stop@18, trial=1.4min, avg=3.6min/trial, total=1.08h, ETA=7.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.103600 cur_best_hr10=0.199500 cur_test_mrr20=0.104300 cur_test_hr10=0.195200 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[19/20] learning_rate=0.001327
+  -> MRR@20=0.106800  best=0.111100  (early_stop@24, trial=1.9min, avg=3.5min/trial, total=1.11h, ETA=3.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.106800 cur_best_hr10=0.207600 cur_test_mrr20=0.106300 cur_test_hr10=0.200200 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+
+[20/20] learning_rate=0.002252
+  -> MRR@20=0.107100  best=0.111100  (early_stop@21, trial=1.7min, avg=3.4min/trial, total=1.14h, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.107100 cur_best_hr10=0.206600 cur_test_mrr20=0.105200 cur_test_hr10=0.198900 run_best_mrr20=0.111100 run_best_hr10=0.210500 run_test_mrr20=0.111700 run_test_hr10=0.208600
+[1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 8.97 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 1/1 [00:01<00:00,  1.51s/it, [1;33mGPU RAM: 8.97 G/23.56 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 8.97 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 1/1 [00:01<00:00,  1.45s/it, [1;33mGPU RAM: 8.97 G/23.56 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 8.97 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 1/1 [00:01<00:00,  1.47s/it, [1;33mGPU RAM: 8.97 G/23.56 G[0m][0m                                                                                                    
+=================================================================
+  DONE  |  FeaturedMoE_N3 x foursquare
+  Best MRR@20 = 0.111100  |  20/20 trials OK
+  Best HR@10  = 0.210500
+  Test MRR@20 = 0.111700  (best-valid checkpoint)
+  Test HR@10  = 0.208600  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.111100 best_valid_hr10=0.210500 test_mrr20=0.111700 test_hr10=0.208600
+  Total time: 68.5 min
+  Best params:
+    learning_rate: 0.000439895
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/foursquare_FeaturedMoE_N3_p14_fad_a6_foursquare_h9_s1_20260406_121825_233373_pid233622.json
+  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/normal/final_all_datasets/P14/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p14_fad_a6_foursquare_h9_s1_20260406_121825_233373_pid233622.json
+  Special result -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/special/final_all_datasets/P14/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p14_fad_a6_foursquare_h9_s1_20260406_121825_233373_pid233622_special_metrics.json
+  Special log -> /workspace/jy1559/FMoE/experiments/run/artifacts/logs/fmoe_n3/special/final_all_datasets/P14/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p14_fad_a6_foursquare_h9_s1_20260406_121825_233373_pid233622_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=233622 start=2026-04-06T12:18:24 end=2026-04-06T13:26:52

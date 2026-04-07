@@ -5,9 +5,9 @@
 - run_group: baseline
 - run_axis: stagef_tailboost_anchor2_core5
 - run_phase: P21_SC_D00_M02_P02_DUOREC_E4_F6_S2
-- best_mrr@20: 0.2269
-- test_mrr@20: 0.2245
-- test_hr@10: 0.2952
+- best_mrr@20: 0.2305
+- test_mrr@20: 0.2311
+- test_hr@10: 0.288
 
 ## Artifacts
 

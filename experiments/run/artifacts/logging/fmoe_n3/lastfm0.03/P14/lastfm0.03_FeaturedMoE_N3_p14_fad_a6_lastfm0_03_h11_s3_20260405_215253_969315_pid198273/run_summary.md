@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h11_s3_20260405_215253_969315_pid198273/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h11_s3_20260405_215253_969315_pid198273/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h11_s3_20260405_215253_969315_pid198273/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h11_s3_20260405_215253_969315_pid198273/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h11_s3_20260405_215253_969315_pid198273/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h11_s3_20260405_215253_969315_pid198273/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h11_s3_20260405_215253_969315_pid198273/diag/raw/epoch_trace.csv
 - feature_ablation: 

@@ -5,9 +5,9 @@
 - run_group: fmoe_n3
 - run_axis: final_all_datasets
 - run_phase: P14_FAD_A6_LASTFM0_03_H12_S2
-- best_mrr@20: 0.2336
-- test_mrr@20: 0.2372
-- test_hr@10: 0.2976
+- best_mrr@20: 0.2353
+- test_mrr@20: 0.2347
+- test_hr@10: 0.2909
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h12_s2_20260405_224331_428403_pid198368/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h12_s2_20260405_224331_428403_pid198368/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h12_s2_20260405_224331_428403_pid198368/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h12_s2_20260405_224331_428403_pid198368/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h12_s2_20260405_224331_428403_pid198368/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h12_s2_20260405_224331_428403_pid198368/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/jy1559/FMoE/experiments/run/artifacts/logging/fmoe_n3/lastfm0.03/P14/lastfm0.03_FeaturedMoE_N3_p14_fad_a6_lastfm0_03_h12_s2_20260405_224331_428403_pid198368/diag/raw/epoch_trace.csv
 - feature_ablation: 
