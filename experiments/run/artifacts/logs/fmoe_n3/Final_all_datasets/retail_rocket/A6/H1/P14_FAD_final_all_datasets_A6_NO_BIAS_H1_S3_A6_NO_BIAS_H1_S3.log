@@ -1,0 +1,97 @@
+[FINAL_ALL_DATASETS_SETTING_HEADER]
+run_phase=P14_FAD_A6_RETAIL_ROCKET_H1_S3 exp_brief=A6_NO_BIAS phase_id=P14 axis_id=FAD setting_id=A6_NO_BIAS_H1_S3 hparam_id=H1 seed=3
+desc=A6_NO_BIAS_H1_S3
+dataset=retail_rocket gpu=1 order=183
+max_evals=20 tune_epochs=100 tune_patience=10
+seed=91002
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 20 --tune-epochs 100 --tune-patience 10 --seed 91002 --run-group fmoe_n3 --run-axis Final_all_datasets --run-phase P14_FAD_A6_RETAIL_ROCKET_H1_S3 model=featured_moe_n3_tune dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v3 gpu_id=1 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A6" ++fmoe_architecture_key="A6_NO_BIAS" ++fmoe_hparam_id="H1" ++fmoe_phase="P14" MAX_ITEM_LIST_LENGTH=20 train_batch_size=4096 eval_batch_size=4096 embedding_size=128 num_heads=4 attn_dropout_prob=0.1 d_ff=256 d_feat_emb=16 d_expert_hidden=128 d_router_hidden=64 expert_scale=3 ++search.learning_rate=[0.00015,0.008] ++search.weight_decay=[1e-06] ++search.hidden_dropout_prob=[0.15] ++search.lr_scheduler_type=["warmup_cosine"] ++search_space_type_overrides.learning_rate=loguniform ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice ++search_space_type_overrides.lr_scheduler_type=choice ++phase_run_type="final" ++phase_axis_id="FAD" ++phase_axis_desc="final_all_datasets" ++phase_setting_id="A6_NO_BIAS_H1_S3" ++phase_setting_key="A6_NO_BIAS" ++phase_hparam_id="H1" ++phase_seed_id=3 ++phase_run_id="FAD_A6_RETAIL_ROCKET_H1_S3" ++layer_layout=["macro","mid","micro"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0002 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0008 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w4_bxd",mid:"w6_bxd_plus_a",micro:"w1_flat"} ++macro_history_window=5 ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_family_dropout_prob={macro:0.1,mid:0.1,micro:0.1} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++bias_mode="none"
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=410246 ts=2026-04-08T21:21:56
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x retail_rocket
+  max_evals=20  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=4096/4096/4096
+  track=fmoe_n3  axis=final_all_datasets  phase=P14_FAD_A6_RETAIL_ROCKET_H1_S3
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.00015, 0.008]                          -> loguniform
+Fixed params(singleton/non-list): 3
+Fixed groups: 3
+  [optimization]
+    hidden_dropout_prob             0.15                                    
+    weight_decay                    1e-06                                   
+  [other]
+    lr_scheduler_type               warmup_cosine                           
+
+[Wandb] disabled for this hyperopt run
+
+[1/20] learning_rate=0.00769
+  -> MRR@20=0.277600  best=0.277600  (early_stop@14, trial=7.0min, avg=7.1min/trial, total=7.1min, ETA=2.25h)
+[TRIAL_METRICS] cur_best_mrr20=0.277600 cur_best_hr10=0.418700 cur_test_mrr20=0.275300 cur_test_hr10=0.419200 run_best_mrr20=0.277600 run_best_hr10=0.418700 run_test_mrr20=0.275300 run_test_hr10=0.419200
+
+[2/20] learning_rate=0.0003708
+  -> MRR@20=0.279500  best=0.279500  (early_stop@41, trial=20.6min, avg=13.8min/trial, total=27.7min, ETA=4.15h)
+[TRIAL_METRICS] cur_best_mrr20=0.279500 cur_best_hr10=0.429000 cur_test_mrr20=0.281400 cur_test_hr10=0.429500 run_best_mrr20=0.279500 run_best_hr10=0.429000 run_test_mrr20=0.281400 run_test_hr10=0.429500
+
+[3/20] learning_rate=0.0002375
+  -> MRR@20=0.280100  best=0.280100  (early_stop@64, trial=31.1min, avg=19.6min/trial, total=58.8min, ETA=5.56h)
+[TRIAL_METRICS] cur_best_mrr20=0.280100 cur_best_hr10=0.432200 cur_test_mrr20=0.282900 cur_test_hr10=0.432200 run_best_mrr20=0.280100 run_best_hr10=0.432200 run_test_mrr20=0.282900 run_test_hr10=0.432200
+
+[4/20] learning_rate=0.00373
+  -> MRR@20=0.281500  best=0.281500  (early_stop@13, trial=6.2min, avg=16.3min/trial, total=1.08h, ETA=4.34h)
+[TRIAL_METRICS] cur_best_mrr20=0.281500 cur_best_hr10=0.430800 cur_test_mrr20=0.281800 cur_test_hr10=0.431200 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[5/20] learning_rate=0.001112
+  -> MRR@20=0.281100  best=0.281500  (early_stop@20, trial=9.4min, avg=14.9min/trial, total=1.24h, ETA=3.72h)
+[TRIAL_METRICS] cur_best_mrr20=0.281100 cur_best_hr10=0.431100 cur_test_mrr20=0.282800 cur_test_hr10=0.431000 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[6/20] learning_rate=0.0008311
+  -> MRR@20=0.280600  best=0.281500  (early_stop@23, trial=10.9min, avg=14.2min/trial, total=1.42h, ETA=3.32h)
+[TRIAL_METRICS] cur_best_mrr20=0.280600 cur_best_hr10=0.430700 cur_test_mrr20=0.282400 cur_test_hr10=0.432600 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[7/20] learning_rate=0.0002591
+  -> MRR@20=0.280100  best=0.281500  (early_stop@58, trial=28.9min, avg=16.3min/trial, total=1.90h, ETA=3.54h)
+[TRIAL_METRICS] cur_best_mrr20=0.280100 cur_best_hr10=0.431600 cur_test_mrr20=0.283000 cur_test_hr10=0.431900 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[8/20] learning_rate=0.00631
+  -> MRR@20=0.280000  best=0.281500  (early_stop@13, trial=6.5min, avg=15.1min/trial, total=2.01h, ETA=3.02h)
+[TRIAL_METRICS] cur_best_mrr20=0.280000 cur_best_hr10=0.426200 cur_test_mrr20=0.278300 cur_test_hr10=0.425000 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[9/20] learning_rate=0.0004385
+  -> MRR@20=0.281200  best=0.281500  (early_stop@35, trial=17.8min, avg=15.4min/trial, total=2.31h, ETA=2.82h)
+[TRIAL_METRICS] cur_best_mrr20=0.281200 cur_best_hr10=0.430300 cur_test_mrr20=0.283000 cur_test_hr10=0.432700 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[10/20] learning_rate=0.0002165
+  -> MRR@20=0.280300  best=0.281500  (early_stop@68, trial=34.0min, avg=17.3min/trial, total=2.88h, ETA=2.88h)
+[TRIAL_METRICS] cur_best_mrr20=0.280300 cur_best_hr10=0.432900 cur_test_mrr20=0.283100 cur_test_hr10=0.432500 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[11/20] learning_rate=0.0003729
+  -> MRR@20=0.279400  best=0.281500  (early_stop@38, trial=18.5min, avg=17.4min/trial, total=3.18h, ETA=2.60h)
+[TRIAL_METRICS] cur_best_mrr20=0.279400 cur_best_hr10=0.429000 cur_test_mrr20=0.280900 cur_test_hr10=0.430100 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[12/20] learning_rate=0.0005582
+  -> MRR@20=0.280100  best=0.281500  (early_stop@28, trial=14.1min, avg=17.1min/trial, total=3.42h, ETA=2.28h)
+[TRIAL_METRICS] cur_best_mrr20=0.280100 cur_best_hr10=0.430800 cur_test_mrr20=0.281500 cur_test_hr10=0.431400 run_best_mrr20=0.281500 run_best_hr10=0.430800 run_test_mrr20=0.281800 run_test_hr10=0.431200
+
+[13/20] learning_rate=0.001542
+  -> MRR@20=0.282400  best=0.282400  (early_stop@17, trial=8.5min, avg=16.4min/trial, total=3.56h, ETA=1.92h)
+[TRIAL_METRICS] cur_best_mrr20=0.282400 cur_best_hr10=0.431700 cur_test_mrr20=0.284400 cur_test_hr10=0.434100 run_best_mrr20=0.282400 run_best_hr10=0.431700 run_test_mrr20=0.284400 run_test_hr10=0.434100
+
+[14/20] learning_rate=0.002479
+  -> MRR@20=0.281700  best=0.282400  (early_stop@14, trial=6.9min, avg=15.8min/trial, total=3.68h, ETA=1.58h)
+[TRIAL_METRICS] cur_best_mrr20=0.281700 cur_best_hr10=0.429700 cur_test_mrr20=0.282400 cur_test_hr10=0.433700 run_best_mrr20=0.282400 run_best_hr10=0.431700 run_test_mrr20=0.284400 run_test_hr10=0.434100
+
+[15/20] learning_rate=0.0005878
+  -> MRR@20=0.280500  best=0.282400  (early_stop@26, trial=13.0min, avg=15.6min/trial, total=3.90h, ETA=1.30h)
+[TRIAL_METRICS] cur_best_mrr20=0.280500 cur_best_hr10=0.429200 cur_test_mrr20=0.281300 cur_test_hr10=0.432300 run_best_mrr20=0.282400 run_best_hr10=0.431700 run_test_mrr20=0.284400 run_test_hr10=0.434100
+
+[16/20] learning_rate=0.00184
+[RUN_STATUS] TERMINATED signal=SIGTERM(15) pid=410246 ts=2026-04-09T01:20:09
+[RUN_STATUS] END status=terminated signal=SIGTERM(15) pid=410246 start=2026-04-08T21:21:56 end=2026-04-09T01:20:10

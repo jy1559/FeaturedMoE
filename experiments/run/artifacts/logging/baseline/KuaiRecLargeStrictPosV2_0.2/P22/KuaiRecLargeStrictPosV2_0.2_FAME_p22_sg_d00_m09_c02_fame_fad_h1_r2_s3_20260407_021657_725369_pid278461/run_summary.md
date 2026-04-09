@@ -5,9 +5,9 @@
 - run_group: baseline
 - run_axis: stageg_cross6x9_anchor2_core5
 - run_phase: P22_SG_D00_M09_C02_FAME_FAD_H1_R2_S3
-- best_mrr@20: 0.1535
-- test_mrr@20: 0.1513
-- test_hr@10: 0.1601
+- best_mrr@20: 0.1547
+- test_mrr@20: 0.1519
+- test_hr@10: 0.1582
 
 ## Artifacts
 

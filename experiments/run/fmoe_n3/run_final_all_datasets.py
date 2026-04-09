@@ -31,7 +31,7 @@ PHASE_NAME = "FINAL_ALL_DATASETS"
 RUN_STAGE = "final"
 AXIS_DESC = "final_all_datasets"
 
-ARCH_ORDER = ("A1", "A2", "A3", "A4", "A5", "A6")
+ARCH_ORDER = ("A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9")
 ARCH_METADATA: Dict[str, Dict[str, str]] = {
     "A1": {
         "arch_key": "FINAL_MAIN",
@@ -80,6 +80,30 @@ ARCH_METADATA: Dict[str, Dict[str, str]] = {
         "setting_key": "A6_NO_BIAS",
         "setting_desc_prefix": "A6_NO_BIAS",
         "setting_detail": "A1 + no_bias (bias_mode=none, rule/group bias off)",
+    },
+    "A7": {
+        "arch_key": "A7_A6_WITH_BIAS",
+        "arch_name": "A7_A6_WITH_BIAS",
+        "setting_group": "final_variant",
+        "setting_key": "A7_A6_WITH_BIAS",
+        "setting_desc_prefix": "A7_A6_WITH_BIAS",
+        "setting_detail": "A6 control with bias restored under macro_mid_micro + strict NN + z-loss",
+    },
+    "A8": {
+        "arch_key": "A8_ATTN_MICRO_BEFORE_NO_BIAS",
+        "arch_name": "A8_ATTN_MICRO_BEFORE_NO_BIAS",
+        "setting_group": "final_variant",
+        "setting_key": "A8_ATTN_MICRO_BEFORE_NO_BIAS",
+        "setting_desc_prefix": "A8_ATTN_MICRO_BEFORE_NO_BIAS",
+        "setting_detail": "ATTN_MICRO_BEFORE layout + strict NN + z-loss with no_bias",
+    },
+    "A9": {
+        "arch_key": "A9_ATTN_MICRO_BEFORE_WITH_BIAS",
+        "arch_name": "A9_ATTN_MICRO_BEFORE_WITH_BIAS",
+        "setting_group": "final_variant",
+        "setting_key": "A9_ATTN_MICRO_BEFORE_WITH_BIAS",
+        "setting_desc_prefix": "A9_ATTN_MICRO_BEFORE_WITH_BIAS",
+        "setting_detail": "ATTN_MICRO_BEFORE layout + strict NN + z-loss with bias restored",
     },
 }
 
@@ -285,7 +309,7 @@ def _core_overrides(
 def _arch_overrides(arch_id: str, args: argparse.Namespace) -> Dict[str, Any]:
     arch = str(arch_id).upper().strip()
 
-    if arch in {"A1", "A2", "A3", "A4", "A5", "A6"}:
+    if arch in {"A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"}:
         overrides = _core_overrides(
             args,
             wrapper_map={"macro": "w4_bxd", "mid": "w6_bxd_plus_a", "micro": "w1_flat"},
@@ -330,6 +354,17 @@ def _arch_overrides(arch_id: str, args: argparse.Namespace) -> Dict[str, Any]:
             overrides["bias_mode"] = "none"
             overrides["rule_bias_scale"] = 0.0
             overrides["feature_group_bias_lambda"] = 0.0
+        elif arch == "A7":
+            _apply_a2_aux_profile(overrides, args)
+        elif arch == "A8":
+            _apply_a2_aux_profile(overrides, args)
+            overrides["layer_layout"] = ["attn", "macro_ffn", "mid_ffn", "attn", "micro_ffn"]
+            overrides["bias_mode"] = "none"
+            overrides["rule_bias_scale"] = 0.0
+            overrides["feature_group_bias_lambda"] = 0.0
+        elif arch == "A9":
+            _apply_a2_aux_profile(overrides, args)
+            overrides["layer_layout"] = ["attn", "macro_ffn", "mid_ffn", "attn", "micro_ffn"]
         return overrides
 
     raise ValueError(f"Unsupported architecture: {arch_id}")
@@ -721,7 +756,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seeds", default="1,2,3,4")
     parser.add_argument("--seed-base", type=int, default=91000)
 
-    parser.add_argument("--architectures", default="A2,A3,A5,A6", help="CSV from {A1,A2,A3,A4,A5,A6}")
+    parser.add_argument("--architectures", default="A2,A3,A5,A6", help="CSV from {A1,A2,A3,A4,A5,A6,A7,A8,A9}")
     parser.add_argument("--architecture", default="", help="Alias of --architectures")
 
     parser.add_argument("--common-hparams", default="H1,H3")

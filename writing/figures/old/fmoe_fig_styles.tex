@@ -1,0 +1,145 @@
+\usetikzlibrary{arrows.meta,backgrounds,calc,fit,positioning,shapes.geometric,shapes.misc}
+
+\definecolor{macroblue}{HTML}{4C78A8}
+\definecolor{midgreen}{HTML}{59A14F}
+\definecolor{microorange}{HTML}{F28E2B}
+\definecolor{softgray}{HTML}{F4F4F4}
+\definecolor{chipgray}{HTML}{E4E6E8}
+\definecolor{edgegray}{HTML}{B8BDC3}
+\definecolor{textgray}{HTML}{4D4D4D}
+
+\colorlet{hiddenflowcolor}{macroblue!92!black}
+\colorlet{featureflowcolor}{microorange!95!black}
+\colorlet{metaflowcolor}{black!55}
+
+\tikzset{
+  >={Latex[length=2.5mm,width=2.2mm]},
+  every node/.style={inner sep=0pt,outer sep=0pt},
+  figure label/.style={font=\scriptsize\sffamily\bfseries,text=textgray},
+  section label/.style={font=\scriptsize\sffamily,text=textgray},
+  band text/.style={font=\scriptsize\sffamily\bfseries,text=black!85,align=center},
+  tokenbox/.style={rounded corners=2pt, draw=edgegray, fill=white, line width=0.6pt},
+  sourcebox/.style={rounded corners=5pt, draw=edgegray, fill=white, line width=0.6pt},
+  panelbox/.style={rounded corners=7pt, draw=black!12, fill=white, line width=0.7pt},
+  neutralchip/.style={rounded corners=2pt, draw=edgegray!90, fill=chipgray, line width=0.45pt},
+  cuepill/.style={rounded corners=3pt, draw=edgegray!90, fill=softgray, line width=0.5pt},
+  legendtext/.style={font=\scriptsize\sffamily,text=textgray},
+  stagehead/.style={rounded corners=4pt, line width=0.6pt},
+  attnbox/.style={rounded corners=4pt, draw=edgegray!95, fill=softgray, line width=0.6pt},
+  simplebox/.style={rounded corners=4pt, draw=edgegray!95, fill=white, line width=0.6pt},
+  routerbox/.style={rounded corners=3pt, draw=edgegray!95, fill=softgray, line width=0.55pt},
+  expertbox/.style={rounded corners=2pt, draw=edgegray!95, fill=white, line width=0.5pt},
+  hiddenflow/.style={->, draw=hiddenflowcolor, line width=1.1pt},
+  featureflow/.style={->, draw=featureflowcolor, line width=1.0pt, dash pattern=on 3.2pt off 1.8pt},
+  metaflow/.style={->, draw=metaflowcolor, line width=0.55pt},
+}
+
+\newcommand{\fmoeTokenNode}[3]{%
+  \begin{scope}[shift={({#1},{#2})}]
+    \path[tokenbox] (-0.42,-0.34) rectangle (0.42,0.34);
+    #3
+  \end{scope}%
+}
+
+\newcommand{\fmoeBallIcon}{%
+  \draw[line width=0.45pt, draw=textgray] (0,0) circle [radius=0.16];
+  \draw[line width=0.35pt, draw=textgray] (-0.11,0) -- (0.11,0);
+  \draw[line width=0.35pt, draw=textgray] (0,-0.11) -- (0,0.11);
+  \draw[line width=0.3pt, draw=textgray] (-0.09,-0.09) -- (0.09,0.09);
+  \draw[line width=0.3pt, draw=textgray] (-0.09,0.09) -- (0.09,-0.09);
+}
+
+\newcommand{\fmoeBootsIcon}{%
+  \filldraw[draw=textgray, fill=black!10, line width=0.35pt]
+    (-0.16,-0.03) -- (-0.02,-0.03) -- (0.02,-0.11) -- (-0.15,-0.11) -- cycle;
+  \filldraw[draw=textgray, fill=black!10, line width=0.35pt]
+    (0.01,0.04) -- (0.16,0.04) -- (0.19,-0.05) -- (0.02,-0.05) -- cycle;
+}
+
+\newcommand{\fmoeJerseyIcon}{%
+  \filldraw[draw=textgray, fill=black!8, line width=0.35pt]
+    (-0.13,0.12) -- (-0.04,0.12) -- (0,0.05) -- (0.04,0.12) -- (0.13,0.12) --
+    (0.17,0.02) -- (0.09,-0.03) -- (0.08,-0.16) -- (-0.08,-0.16) -- (-0.09,-0.03) -- (-0.17,0.02) -- cycle;
+}
+
+\newcommand{\fmoeGuardIcon}{%
+  \filldraw[draw=textgray, fill=black!9, line width=0.35pt]
+    (0,0.16) -- (0.12,0.1) -- (0.09,-0.1) -- (0,-0.17) -- (-0.09,-0.1) -- (-0.12,0.1) -- cycle;
+}
+
+\newcommand{\fmoeSocksIcon}{%
+  \filldraw[draw=textgray, fill=black!8, line width=0.35pt]
+    (-0.13,0.14) rectangle (-0.04,-0.02);
+  \filldraw[draw=textgray, fill=black!8, line width=0.35pt]
+    (-0.04,-0.02) -- (0.03,-0.02) -- (0.03,-0.09) -- (-0.1,-0.09) -- cycle;
+  \filldraw[draw=textgray, fill=black!8, line width=0.35pt]
+    (0.04,0.14) rectangle (0.13,-0.02);
+  \filldraw[draw=textgray, fill=black!8, line width=0.35pt]
+    (0.04,-0.02) -- (0.11,-0.02) -- (0.11,-0.09) -- (-0.02,-0.09) -- cycle;
+}
+
+\newcommand{\fmoeOrderIcon}{%
+  \draw[textgray, line width=0.45pt] (-0.16,0.09) -- (0.12,0.09);
+  \draw[textgray, line width=0.45pt] (-0.16,0) -- (0.12,0);
+  \draw[textgray, line width=0.45pt] (-0.16,-0.09) -- (0.12,-0.09);
+  \fill[textgray] (-0.2,0.09) circle[radius=0.018];
+  \fill[textgray] (-0.2,0) circle[radius=0.018];
+  \fill[textgray] (-0.2,-0.09) circle[radius=0.018];
+}
+
+\newcommand{\fmoeClockIcon}{%
+  \draw[textgray, line width=0.45pt] (0,0) circle[radius=0.15];
+  \draw[textgray, line width=0.45pt] (0,0) -- (0,0.07);
+  \draw[textgray, line width=0.45pt] (0,0) -- (0.06,-0.04);
+}
+
+\newcommand{\fmoeGridIcon}{%
+  \foreach \x in {-0.12,0.02} {
+    \foreach \y in {-0.1,0.04} {
+      \path[draw=textgray, fill=black!6, line width=0.35pt] (\x,\y) rectangle +(0.1,0.1);
+    }
+  }
+}
+
+\newcommand{\fmoeBarsIcon}{%
+  \filldraw[draw=textgray, fill=black!12, line width=0.35pt] (-0.16,-0.13) rectangle (-0.08,0.0);
+  \filldraw[draw=textgray, fill=black!12, line width=0.35pt] (-0.03,-0.13) rectangle (0.05,0.08);
+  \filldraw[draw=textgray, fill=black!12, line width=0.35pt] (0.10,-0.13) rectangle (0.18,0.14);
+}
+
+\newcommand{\fmoeSourceBox}[4]{%
+  \begin{scope}[shift={({#1},{#2})}]
+    \path[sourcebox] (-0.95,-0.36) rectangle (0.95,0.36);
+    \begin{scope}[shift={(-0.52,0)}]
+      #4
+    \end{scope}
+    \node[anchor=west, font=\scriptsize\sffamily\bfseries, text=textgray] at (-0.18,0) {#3};
+  \end{scope}%
+}
+
+\newcommand{\fmoeChipGrid}[2]{%
+  \begin{scope}[shift={({#1},{#2})}]
+    \foreach \x/\y in {-0.26/0.12,0.26/0.12,-0.26/-0.14,0.26/-0.14} {
+      \path[neutralchip] (\x-0.18,\y-0.06) rectangle +(0.36,0.12);
+    }
+  \end{scope}%
+}
+
+\newcommand{\fmoeStageCard}[5]{%
+  \begin{scope}[shift={({#1},{#2})}]
+    \path[simplebox] (-1.05,-0.72) rectangle (1.05,0.72);
+    \path[draw=#3!80!black, fill=#3!16, rounded corners=4pt, line width=0.6pt] (-0.92,0.2) rectangle (0.92,0.58);
+    \node[font=\scriptsize\sffamily\bfseries, text=black!88] at (0,0.39) {#4};
+    \fmoeChipGrid{0}{-0.13}
+    #5
+  \end{scope}%
+}
+
+\newcommand{\fmoeLegendSample}[4]{%
+  \draw[#2] (#1, #3) -- ++(0.9,0);
+  \node[anchor=west, legendtext] at ($(#1,#3)+(1.05,0)$) {#4};
+}
+
+\newcommand{\fmoeCaption}[2]{%
+  \par\noindent\parbox{#1}{\footnotesize\sffamily #2}%
+}
