@@ -10,13 +10,14 @@ Focus:
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import subprocess
 import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Set
 
 import run_stageG_cross6x9 as sg
 
@@ -31,49 +32,105 @@ base.AXIS_DESC = "stageh_targetedrecovery_anchor2_core5"
 _orig_model_runtime_resource_overrides = base._model_runtime_resource_overrides
 
 
-TARGET_COMBOS: List[Tuple[str, str]] = [
-    ("amazon_beauty", "bsarec"),
+TIER_BY_COMBO: Dict[Tuple[str, str], str] = {
+    ("KuaiRecLargeStrictPosV2_0.2", "gru4rec"): "hard",
+    ("KuaiRecLargeStrictPosV2_0.2", "tisasrec"): "hard",
+    ("KuaiRecLargeStrictPosV2_0.2", "fearec"): "hard",
+    ("KuaiRecLargeStrictPosV2_0.2", "sasrec"): "medium",
+    ("lastfm0.03", "gru4rec"): "soft",
+    ("lastfm0.03", "sigma"): "soft",
+    ("amazon_beauty", "gru4rec"): "hard",
+    ("amazon_beauty", "tisasrec"): "hard",
+    ("amazon_beauty", "bsarec"): "hard",
+    ("amazon_beauty", "fame"): "hard",
+    ("foursquare", "gru4rec"): "medium",
+    ("foursquare", "sigma"): "medium",
+    ("foursquare", "tisasrec"): "soft",
+    ("foursquare", "duorec"): "soft",
+    ("foursquare", "bsarec"): "soft",
+    ("foursquare", "fearec"): "soft",
+    ("foursquare", "fame"): "soft",
+    ("movielens1m", "fearec"): "soft",
+    ("retail_rocket", "sasrec"): "soft",
+    ("retail_rocket", "gru4rec"): "soft",
+    ("retail_rocket", "tisasrec"): "soft",
+    ("retail_rocket", "duorec"): "soft",
+    ("retail_rocket", "fearec"): "soft",
+}
+
+TARGET_COMBOS: List[Tuple[str, str]] = list(TIER_BY_COMBO.keys())
+
+OVERALL_BASELINE_AXES = [
+    "StageA_LR_anchor2_core5",
+    "StageB_Structure_anchor2_core5",
+    "StageC_Focus_anchor2_core5",
+    "StageD_MicroWide_anchor2_core5",
+    "StageE_ReLRSeed_anchor2_core5",
+    "StageF_TailBoost_anchor2_core5",
+    "StageG_Cross6x9_anchor2_core5",
+    "StageH_TargetedRecovery_anchor2_core5",
+    "Final_all_datasets",
+]
+
+CURRENT_DYNAMIC_TIER_BY_COMBO: Dict[Tuple[str, str], str] = {}
+CURRENT_DYNAMIC_TARGETS: Set[Tuple[str, str]] = set()
+
+PRIOR_BEST_TABLE_PATH = (
+    base.REPO_ROOT / "experiments/run/baseline/docs/stageH_AtoG_plus_fmoeA6_best_table_20260409.csv"
+)
+
+FULL_SHORTLIST_COMBOS = {
+    ("KuaiRecLargeStrictPosV2_0.2", "sasrec"),
+    ("KuaiRecLargeStrictPosV2_0.2", "fearec"),
+    ("KuaiRecLargeStrictPosV2_0.2", "tisasrec"),
+    ("amazon_beauty", "tisasrec"),
+    ("foursquare", "fame"),
+    ("retail_rocket", "sasrec"),
+    ("retail_rocket", "duorec"),
+    ("retail_rocket", "fearec"),
+}
+
+RESCUE_REDESIGN_COMBOS = {
+    ("KuaiRecLargeStrictPosV2_0.2", "gru4rec"),
     ("amazon_beauty", "gru4rec"),
     ("amazon_beauty", "fame"),
-    ("amazon_beauty", "tisasrec"),
-    ("KuaiRecLargeStrictPosV2_0.2", "gru4rec"),
-    ("KuaiRecLargeStrictPosV2_0.2", "tisasrec"),
-    ("KuaiRecLargeStrictPosV2_0.2", "duorec"),
-    ("movielens1m", "sasrec"),
-    ("movielens1m", "gru4rec"),
-    ("movielens1m", "duorec"),
-    ("movielens1m", "fearec"),
-]
+    ("amazon_beauty", "bsarec"),
+    ("foursquare", "gru4rec"),
+    ("foursquare", "sigma"),
+    ("foursquare", "bsarec"),
+    ("lastfm0.03", "sigma"),
+    ("retail_rocket", "gru4rec"),
+}
 
 DEFAULT_DATASETS = list(dict.fromkeys(ds for ds, _ in TARGET_COMBOS))
 DEFAULT_MODELS = list(dict.fromkeys(model for _, model in TARGET_COMBOS))
 
+AGGRESSIVE_LOW_PERF_COMBOS = {
+    combo for combo, tier in TIER_BY_COMBO.items() if tier == "hard"
+}
+
+MEDIUM_LOW_PERF_COMBOS = {
+    combo for combo, tier in TIER_BY_COMBO.items() if tier == "medium"
+}
+
 TARGET_CANDIDATE_COUNT: Dict[Tuple[str, str], int] = {
-    ("amazon_beauty", "gru4rec"): 3,
-    ("amazon_beauty", "fame"): 3,
-    ("amazon_beauty", "bsarec"): 2,
-    ("amazon_beauty", "tisasrec"): 2,
-    ("KuaiRecLargeStrictPosV2_0.2", "gru4rec"): 2,
-    ("KuaiRecLargeStrictPosV2_0.2", "tisasrec"): 2,
-    ("KuaiRecLargeStrictPosV2_0.2", "duorec"): 2,
-    ("movielens1m", "sasrec"): 2,
-    ("movielens1m", "gru4rec"): 2,
-    ("movielens1m", "duorec"): 2,
-    ("movielens1m", "fearec"): 2,
+    combo: (4 if tier == "hard" else 3 if tier == "medium" else 2)
+    for combo, tier in TIER_BY_COMBO.items()
 }
 
 FAST_SCREEN_MIN_CANDIDATE_COUNT: Dict[Tuple[str, str], int] = {
-    ("amazon_beauty", "gru4rec"): 10,
-    ("amazon_beauty", "fame"): 10,
-    ("amazon_beauty", "bsarec"): 10,
-    ("amazon_beauty", "tisasrec"): 10,
-    ("KuaiRecLargeStrictPosV2_0.2", "gru4rec"): 10,
-    ("KuaiRecLargeStrictPosV2_0.2", "tisasrec"): 10,
-    ("KuaiRecLargeStrictPosV2_0.2", "duorec"): 10,
-    ("movielens1m", "sasrec"): 10,
-    ("movielens1m", "gru4rec"): 10,
-    ("movielens1m", "duorec"): 10,
-    ("movielens1m", "fearec"): 10,
+    combo: (18 if tier == "hard" else 12 if tier == "medium" else 8)
+    for combo, tier in TIER_BY_COMBO.items()
+}
+
+FOLLOWUP_RESCUE_CANDIDATE_COUNT: Dict[Tuple[str, str], int] = {
+    combo: (24 if TIER_BY_COMBO[combo] == "hard" else 16 if TIER_BY_COMBO[combo] == "medium" else 12)
+    for combo in TARGET_COMBOS
+}
+
+FOLLOWUP_FULL_CANDIDATE_COUNT: Dict[Tuple[str, str], int] = {
+    combo: (4 if TIER_BY_COMBO[combo] == "hard" else 3)
+    for combo in TARGET_COMBOS
 }
 
 MANUAL_TEMPLATE_BANK: Dict[Tuple[str, str], List[Dict[str, Any]]] = {
@@ -179,6 +236,89 @@ MANUAL_TEMPLATE_BANK: Dict[Tuple[str, str], List[Dict[str, Any]]] = {
             "lr_lo": 3.0e-4,
             "lr_hi": 9.0e-4,
         },
+        {
+            "id": "AB_TISAS_STAGEH_REC2",
+            "config": {
+                "hidden_size": 96,
+                "embedding_size": 96,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 192,
+                "max_len": 8,
+                "time_span": 96,
+                "dropout": 0.06,
+                "weight_decay": 6.0e-5,
+            },
+            "lr_lo": 1.2e-3,
+            "lr_hi": 4.0e-3,
+        },
+    ],
+    ("foursquare", "gru4rec"): [
+        {
+            "id": "FSQ_GRU_STAGEH_REC1",
+            "config": {
+                "hidden_size": 192,
+                "embedding_size": 192,
+                "layers": 2,
+                "num_layers": 2,
+                "max_len": 10,
+                "dropout": 0.04,
+                "weight_decay": 2.5e-5,
+            },
+            "lr_lo": 2.0e-3,
+            "lr_hi": 8.0e-3,
+        },
+        {
+            "id": "FSQ_GRU_STAGEH_REC2",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "max_len": 8,
+                "dropout": 0.08,
+                "weight_decay": 8.0e-5,
+            },
+            "lr_lo": 5.0e-4,
+            "lr_hi": 2.2e-3,
+        },
+    ],
+    ("foursquare", "tisasrec"): [
+        {
+            "id": "FSQ_TISAS_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 10,
+                "time_span": 128,
+                "dropout": 0.08,
+                "weight_decay": 7.0e-5,
+            },
+            "lr_lo": 8.0e-4,
+            "lr_hi": 2.6e-3,
+        },
+        {
+            "id": "FSQ_TISAS_STAGEH_REC2",
+            "config": {
+                "hidden_size": 96,
+                "embedding_size": 96,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 192,
+                "max_len": 8,
+                "time_span": 64,
+                "dropout": 0.05,
+                "weight_decay": 4.0e-5,
+            },
+            "lr_lo": 1.4e-3,
+            "lr_hi": 4.0e-3,
+        },
     ],
     ("KuaiRecLargeStrictPosV2_0.2", "gru4rec"): [
         {
@@ -215,6 +355,70 @@ MANUAL_TEMPLATE_BANK: Dict[Tuple[str, str], List[Dict[str, Any]]] = {
             "lr_hi": 1.0e-3,
         },
     ],
+    ("KuaiRecLargeStrictPosV2_0.2", "fearec"): [
+        {
+            "id": "KR_FEA_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 10,
+                "dropout": 0.08,
+                "weight_decay": 7.0e-5,
+                "contrast": "un",
+                "tau": 0.16,
+                "lmd": 0.016,
+                "lmd_sem": 0.0,
+                "global_ratio": 0.70,
+                "semantic_sample_max_tries": 2,
+            },
+            "lr_lo": 9.0e-4,
+            "lr_hi": 3.6e-3,
+        },
+        {
+            "id": "KR_FEA_STAGEH_REC2",
+            "config": {
+                "hidden_size": 96,
+                "embedding_size": 96,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 192,
+                "max_len": 8,
+                "dropout": 0.12,
+                "weight_decay": 1.5e-4,
+                "contrast": "un",
+                "tau": 0.22,
+                "lmd": 0.010,
+                "lmd_sem": 0.0,
+                "global_ratio": 0.55,
+                "semantic_sample_max_tries": 2,
+            },
+            "lr_lo": 3.0e-4,
+            "lr_hi": 1.4e-3,
+        },
+    ],
+    ("KuaiRecLargeStrictPosV2_0.2", "sasrec"): [
+        {
+            "id": "KR_SAS_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 10,
+                "dropout": 0.10,
+                "weight_decay": 8.0e-5,
+            },
+            "lr_lo": 8.0e-4,
+            "lr_hi": 2.4e-3,
+        },
+    ],
     ("KuaiRecLargeStrictPosV2_0.2", "duorec"): [
         {
             "id": "KR_DUO_STAGEH_REC1",
@@ -236,6 +440,40 @@ MANUAL_TEMPLATE_BANK: Dict[Tuple[str, str], List[Dict[str, Any]]] = {
             },
             "lr_lo": 3.0e-4,
             "lr_hi": 9.0e-4,
+        },
+    ],
+    ("lastfm0.03", "gru4rec"): [
+        {
+            "id": "LFM_GRU_STAGEH_REC1",
+            "config": {
+                "hidden_size": 160,
+                "embedding_size": 160,
+                "layers": 2,
+                "num_layers": 2,
+                "max_len": 10,
+                "dropout": 0.06,
+                "weight_decay": 4.0e-5,
+            },
+            "lr_lo": 5.0e-4,
+            "lr_hi": 2.2e-3,
+        },
+    ],
+    ("lastfm0.03", "sigma"): [
+        {
+            "id": "LFM_SIGMA_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 10,
+                "dropout": 0.10,
+                "weight_decay": 8.0e-5,
+            },
+            "lr_lo": 5.0e-4,
+            "lr_hi": 1.6e-3,
         },
     ],
     ("movielens1m", "sasrec"): [
@@ -319,7 +557,357 @@ MANUAL_TEMPLATE_BANK: Dict[Tuple[str, str], List[Dict[str, Any]]] = {
             "lr_hi": 8.0e-4,
         },
     ],
+    ("foursquare", "sigma"): [
+        {
+            "id": "FSQ_SIGMA_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 10,
+                "dropout": 0.10,
+                "weight_decay": 8.0e-5,
+            },
+            "lr_lo": 8.0e-4,
+            "lr_hi": 2.6e-3,
+        },
+    ],
+    ("foursquare", "duorec"): [
+        {
+            "id": "FSQ_DUO_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 10,
+                "dropout": 0.08,
+                "weight_decay": 7.0e-5,
+                "contrast": "un",
+                "tau": 0.18,
+                "lmd": 0.016,
+                "lmd_sem": 0.0,
+                "semantic_sample_max_tries": 2,
+            },
+            "lr_lo": 7.0e-4,
+            "lr_hi": 2.2e-3,
+        },
+    ],
+    ("foursquare", "bsarec"): [
+        {
+            "id": "FSQ_BSA_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 10,
+                "dropout": 0.10,
+                "weight_decay": 9.0e-5,
+            },
+            "lr_lo": 7.0e-4,
+            "lr_hi": 2.2e-3,
+        },
+    ],
+    ("foursquare", "fearec"): [
+        {
+            "id": "FSQ_FEA_STAGEH_REC1",
+            "config": {
+                "hidden_size": 112,
+                "embedding_size": 112,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 224,
+                "max_len": 10,
+                "dropout": 0.10,
+                "weight_decay": 8.0e-5,
+                "contrast": "un",
+                "tau": 0.18,
+                "lmd": 0.014,
+                "lmd_sem": 0.0,
+                "global_ratio": 0.70,
+                "semantic_sample_max_tries": 2,
+            },
+            "lr_lo": 7.0e-4,
+            "lr_hi": 2.4e-3,
+        },
+    ],
+    ("foursquare", "fame"): [
+        {
+            "id": "FSQ_FAME_STAGEH_REC1",
+            "config": {
+                "hidden_size": 80,
+                "embedding_size": 80,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 4,
+                "inner_size": 160,
+                "max_len": 8,
+                "dropout": 0.12,
+                "weight_decay": 1.0e-4,
+                "num_experts": 3,
+            },
+            "lr_lo": 1.4e-3,
+            "lr_hi": 5.0e-3,
+        },
+    ],
+    ("retail_rocket", "sasrec"): [
+        {
+            "id": "RR_SAS_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 8,
+                "dropout": 0.12,
+                "weight_decay": 1.0e-4,
+            },
+            "lr_lo": 7.0e-4,
+            "lr_hi": 2.4e-3,
+        },
+    ],
+    ("retail_rocket", "gru4rec"): [
+        {
+            "id": "RR_GRU_STAGEH_REC1",
+            "config": {
+                "hidden_size": 192,
+                "embedding_size": 192,
+                "layers": 2,
+                "num_layers": 2,
+                "max_len": 10,
+                "dropout": 0.04,
+                "weight_decay": 2.5e-5,
+            },
+            "lr_lo": 1.6e-3,
+            "lr_hi": 7.0e-3,
+        },
+        {
+            "id": "RR_GRU_STAGEH_REC2",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "max_len": 8,
+                "dropout": 0.08,
+                "weight_decay": 8.0e-5,
+            },
+            "lr_lo": 5.0e-4,
+            "lr_hi": 2.4e-3,
+        },
+    ],
+    ("retail_rocket", "tisasrec"): [
+        {
+            "id": "RR_TISAS_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 10,
+                "time_span": 96,
+                "dropout": 0.08,
+                "weight_decay": 6.0e-5,
+            },
+            "lr_lo": 8.0e-4,
+            "lr_hi": 2.4e-3,
+        },
+        {
+            "id": "RR_TISAS_STAGEH_REC2",
+            "config": {
+                "hidden_size": 96,
+                "embedding_size": 96,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 192,
+                "max_len": 8,
+                "time_span": 64,
+                "dropout": 0.05,
+                "weight_decay": 4.0e-5,
+            },
+            "lr_lo": 1.2e-3,
+            "lr_hi": 4.0e-3,
+        },
+    ],
+    ("retail_rocket", "fame"): [
+        {
+            "id": "RR_FAME_STAGEH_REC1",
+            "config": {
+                "hidden_size": 96,
+                "embedding_size": 96,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 4,
+                "inner_size": 192,
+                "max_len": 10,
+                "dropout": 0.10,
+                "weight_decay": 8.0e-5,
+                "num_experts": 4,
+            },
+            "lr_lo": 1.2e-3,
+            "lr_hi": 5.0e-3,
+        },
+        {
+            "id": "RR_FAME_STAGEH_REC2",
+            "config": {
+                "hidden_size": 72,
+                "embedding_size": 72,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 4,
+                "inner_size": 144,
+                "max_len": 8,
+                "dropout": 0.14,
+                "weight_decay": 1.4e-4,
+                "num_experts": 3,
+            },
+            "lr_lo": 2.2e-3,
+            "lr_hi": 1.0e-2,
+        },
+    ],
+    ("retail_rocket", "duorec"): [
+        {
+            "id": "RR_DUO_STAGEH_REC1",
+            "config": {
+                "hidden_size": 128,
+                "embedding_size": 128,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 256,
+                "max_len": 8,
+                "dropout": 0.10,
+                "weight_decay": 9.0e-5,
+                "contrast": "un",
+                "tau": 0.18,
+                "lmd": 0.016,
+                "lmd_sem": 0.0,
+                "semantic_sample_max_tries": 2,
+            },
+            "lr_lo": 7.0e-4,
+            "lr_hi": 2.6e-3,
+        },
+    ],
+    ("retail_rocket", "fearec"): [
+        {
+            "id": "RR_FEA_STAGEH_REC1",
+            "config": {
+                "hidden_size": 112,
+                "embedding_size": 112,
+                "layers": 2,
+                "num_layers": 2,
+                "heads": 2,
+                "inner_size": 224,
+                "max_len": 8,
+                "dropout": 0.10,
+                "weight_decay": 8.0e-5,
+                "contrast": "un",
+                "tau": 0.18,
+                "lmd": 0.014,
+                "lmd_sem": 0.0,
+                "global_ratio": 0.65,
+                "semantic_sample_max_tries": 2,
+            },
+            "lr_lo": 8.0e-4,
+            "lr_hi": 2.8e-3,
+        },
+    ],
 }
+
+
+def _effective_tier(dataset: str, model_option: str) -> str:
+    return CURRENT_DYNAMIC_TIER_BY_COMBO.get((str(dataset), str(model_option).lower()), TIER_BY_COMBO.get((str(dataset), str(model_option).lower()), "soft"))
+
+
+def _overall_baseline_best_by_combo() -> Dict[Tuple[str, str], Dict[str, Any]]:
+    out: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for axis in OVERALL_BASELINE_AXES:
+        axis_dir = base.LOG_ROOT / axis
+        if not axis_dir.exists():
+            continue
+        for dsdir in axis_dir.iterdir():
+            if not dsdir.is_dir():
+                continue
+            summary = dsdir / "summary.csv"
+            if not summary.exists():
+                continue
+            try:
+                with summary.open("r", encoding="utf-8", newline="") as fh:
+                    rows = list(csv.DictReader(fh))
+            except Exception:
+                continue
+            for row in rows:
+                ds = str(row.get("dataset", "")).strip()
+                model_label = str(row.get("model", "")).strip()
+                model_option = sg.LABEL_TO_OPTION.get(model_label)
+                if not ds or model_option is None:
+                    continue
+                valid = sg._metric(row.get("run_best_valid_mrr20"))
+                test = sg._metric(row.get("run_best_test_mrr20"))
+                if valid is None:
+                    continue
+                key = (ds, model_option)
+                prev = out.get(key)
+                if prev is None or float(valid) > float(prev["valid"]):
+                    out[key] = {
+                        "valid": float(valid),
+                        "test": None if test is None else float(test),
+                        "axis": axis,
+                        "run_phase": str(row.get("run_phase", "")),
+                    }
+    return out
+
+
+def _compute_underperform_targets(*, weak_ratio: float, strong_ratio: float) -> Dict[Tuple[str, str], str]:
+    best = _overall_baseline_best_by_combo()
+    by_ds: Dict[str, float] = {}
+    for (ds, _model), rec in best.items():
+        cur = by_ds.get(ds)
+        val = float(rec["valid"])
+        by_ds[ds] = val if cur is None else max(float(cur), val)
+
+    out: Dict[Tuple[str, str], str] = {}
+    for combo, rec in best.items():
+        ds = combo[0]
+        ds_max = float(by_ds.get(ds, 0.0) or 0.0)
+        if ds_max <= 0.0:
+            continue
+        ratio = float(rec["valid"]) / ds_max
+        if ratio <= float(strong_ratio):
+            out[combo] = "hard"
+        elif ratio <= float(weak_ratio):
+            out[combo] = "medium"
+    return out
+
+
+def _candidate_goal(dataset: str, model_option: str, *, args: argparse.Namespace) -> int:
+    combo = (str(dataset), str(model_option).lower())
+    tier = _effective_tier(dataset, model_option)
+    if args.followup_full:
+        return int(FOLLOWUP_FULL_CANDIDATE_COUNT.get(combo, 4 if tier == "hard" else 3))
+    if args.followup_rescue:
+        return int(FOLLOWUP_RESCUE_CANDIDATE_COUNT.get(combo, 24 if tier == "hard" else 16 if tier == "medium" else 12))
+    if args.underperform_screen:
+        if combo in TIER_BY_COMBO:
+            return 20 if tier == "hard" else 14
+        return 14 if tier == "hard" else 10
+    if args.fast_screen:
+        return int(FAST_SCREEN_MIN_CANDIDATE_COUNT.get(combo, 18 if tier == "hard" else 12 if tier == "medium" else 8))
+    return int(TARGET_CANDIDATE_COUNT.get(combo, 4 if tier == "hard" else 3 if tier == "medium" else 2))
 
 
 def _manual_candidates(dataset: str, model_option: str) -> List[Dict[str, Any]]:
@@ -368,27 +956,43 @@ def _speedify_candidate_config(
     fast_screen: bool,
 ) -> Dict[str, Any]:
     out = sg._normalize_cfg(model_option, dict(cfg))
+    tier = _effective_tier(str(dataset), str(model_option).lower())
     target_max_len = _stageh_target_max_len(dataset, model_option, out, fast_screen=fast_screen)
     out["max_len"] = min(int(out.get("max_len", target_max_len)), int(target_max_len))
 
     if model_option in {"sasrec", "tisasrec", "bsarec", "duorec", "fearec", "difsr", "fame"}:
-        layer_cap = 2 if fast_screen else 3
+        if fast_screen and tier == "hard":
+            layer_cap = 3
+        elif fast_screen and tier == "medium":
+            layer_cap = 2
+        else:
+            layer_cap = 2 if fast_screen else 3
         layers = min(int(out.get("layers", 2)), int(layer_cap))
         out["layers"] = layers
         out["num_layers"] = layers
 
     if model_option in {"duorec", "fearec"}:
-        heads = min(int(out.get("heads", 2)), 2 if fast_screen else 4)
+        if fast_screen and tier == "hard":
+            head_cap = 4
+        elif fast_screen and tier == "medium":
+            head_cap = 3
+        else:
+            head_cap = 2 if fast_screen else 4
+        heads = min(int(out.get("heads", 2)), int(head_cap))
         out["heads"] = heads
         if fast_screen:
-            out["hidden_size"] = min(int(out.get("hidden_size", 128)), 128)
+            hs_cap = 160 if tier == "hard" else 144 if tier == "medium" else 128
+            inner_cap = 320 if tier == "hard" else 288 if tier == "medium" else 256
+            out["hidden_size"] = min(int(out.get("hidden_size", 128)), hs_cap)
             out["embedding_size"] = min(int(out.get("embedding_size", out["hidden_size"])), int(out["hidden_size"]))
-            out["inner_size"] = min(int(out.get("inner_size", max(256, out["hidden_size"] * 2))), 256)
+            out["inner_size"] = min(int(out.get("inner_size", max(256, out["hidden_size"] * 2))), inner_cap)
 
     if model_option in {"sasrec", "bsarec", "difsr", "tisasrec"} and fast_screen:
-        out["hidden_size"] = min(int(out.get("hidden_size", 128)), 144)
+        hs_cap = 160 if tier == "hard" else 144
+        inner_cap = 320 if tier == "hard" else 288
+        out["hidden_size"] = min(int(out.get("hidden_size", 128)), hs_cap)
         out["embedding_size"] = min(int(out.get("embedding_size", out["hidden_size"])), int(out["hidden_size"]))
-        out["inner_size"] = min(int(out.get("inner_size", max(256, out["hidden_size"] * 2))), 288)
+        out["inner_size"] = min(int(out.get("inner_size", max(256, out["hidden_size"] * 2))), inner_cap)
 
     return sg._normalize_cfg(model_option, out)
 
@@ -417,11 +1021,15 @@ def _screen_variant_candidates(
     model_option: str,
     source_candidates: List[Dict[str, Any]],
     desired: int,
+    followup_rescue: bool = False,
+    pass3_expand: bool = False,
 ) -> List[Dict[str, Any]]:
     if desired <= 0:
         return []
 
     variants: List[Dict[str, Any]] = []
+    aggressive = (dataset, model_option) in AGGRESSIVE_LOW_PERF_COMBOS
+    medium = (dataset, model_option) in MEDIUM_LOW_PERF_COMBOS
     for cand in source_candidates:
         if len(variants) >= desired:
             break
@@ -443,6 +1051,34 @@ def _screen_variant_candidates(
             rec_cfg = dict(cfg)
             rec_cfg["weight_decay"] = max(1e-6, float(rec_cfg.get("weight_decay", 5e-5)) * 0.7)
             recipes.append(("WDLO", rec_cfg, max(8e-5, center * 0.88), min(1e-2, base_hi * 1.08)))
+            if aggressive:
+                rec_cfg = dict(cfg)
+                rec_cfg["dropout"] = max(0.02, float(rec_cfg.get("dropout", 0.08)) - 0.04)
+                rec_cfg["max_len"] = min(int(rec_cfg.get("max_len", 10)), 8)
+                recipes.append(("SHIFTUP", rec_cfg, min(1e-2, center * 1.3), min(1e-2, base_hi * 1.8)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["dropout"] = min(0.22, float(rec_cfg.get("dropout", 0.08)) + 0.05)
+                rec_cfg["weight_decay"] = min(6e-4, float(rec_cfg.get("weight_decay", 5e-5)) * 2.2)
+                recipes.append(("SHIFTDN", rec_cfg, max(8e-5, base_lo * 0.45), max(8e-5, center * 0.75)))
+            if aggressive or medium:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(96, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.7 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 1 if aggressive else max(1, int(rec_cfg.get("layers", 2)) - 1)
+                rec_cfg["num_layers"] = rec_cfg["layers"]
+                recipes.append(("STRUCTS", rec_cfg, max(8e-5, base_lo * 0.75), min(1e-2, center * 1.20)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(320, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.25 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = min(3, int(rec_cfg.get("layers", 2)) + (1 if aggressive else 0))
+                rec_cfg["num_layers"] = rec_cfg["layers"]
+                if model_option == "fame":
+                    rec_cfg["num_experts"] = min(8, int(rec_cfg.get("num_experts", 3)) + 1)
+                    rec_cfg["heads"] = min(8, max(4, int(rec_cfg.get("heads", 4))))
+                    rec_cfg["inner_size"] = min(384, max(int(rec_cfg["hidden_size"] * 2), int(rec_cfg.get("inner_size", 256))))
+                recipes.append(("STRUCTL", rec_cfg, max(8e-5, center * 0.92), min(1e-2, base_hi * 1.35)))
         elif model_option in {"duorec", "fearec"}:
             rec_cfg = dict(cfg)
             rec_cfg["dropout"] = max(0.05, float(rec_cfg.get("dropout", 0.10)) - 0.02)
@@ -457,6 +1093,26 @@ def _screen_variant_candidates(
             rec_cfg = dict(cfg)
             rec_cfg["weight_decay"] = min(3e-4, float(rec_cfg.get("weight_decay", 1e-4)) * 1.5)
             recipes.append(("WDHI", rec_cfg, max(8e-5, base_lo * 0.90), center * 1.03))
+            if aggressive or medium:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(96, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.75 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["inner_size"] = max(192, int(rec_cfg["hidden_size"] * 2))
+                rec_cfg["heads"] = 2
+                rec_cfg["layers"] = max(1, int(rec_cfg.get("layers", 2)) - 1)
+                rec_cfg["num_layers"] = rec_cfg["layers"]
+                recipes.append(("STRUCTS", rec_cfg, max(8e-5, base_lo * 0.80), min(1e-2, center * 1.10)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(192, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.20 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["inner_size"] = min(384, max(256, int(rec_cfg["hidden_size"] * 2.5)))
+                rec_cfg["heads"] = min(4, max(2, int(rec_cfg.get("heads", 2)) + 1))
+                rec_cfg["layers"] = min(3, int(rec_cfg.get("layers", 2)) + (1 if aggressive else 0))
+                rec_cfg["num_layers"] = rec_cfg["layers"]
+                if model_option == "fearec":
+                    rec_cfg["global_ratio"] = min(0.9, float(rec_cfg.get("global_ratio", 0.7)) + 0.1)
+                recipes.append(("STRUCTL", rec_cfg, max(8e-5, center * 0.90), min(1e-2, base_hi * 1.25)))
         elif model_option in {"sasrec", "bsarec", "tisasrec", "difsr"}:
             rec_cfg = dict(cfg)
             rec_cfg["dropout"] = max(0.06, float(rec_cfg.get("dropout", 0.10)) - 0.02)
@@ -470,9 +1126,153 @@ def _screen_variant_candidates(
             rec_cfg = dict(cfg)
             rec_cfg["weight_decay"] = min(4e-4, float(rec_cfg.get("weight_decay", 1e-4)) * 1.8)
             recipes.append(("WDHI", rec_cfg, max(8e-5, base_lo * 0.94), center * 1.04))
+            if aggressive:
+                rec_cfg = dict(cfg)
+                rec_cfg["max_len"] = min(int(rec_cfg.get("max_len", 10)), 8)
+                rec_cfg["dropout"] = max(0.03, float(rec_cfg.get("dropout", 0.10)) - 0.04)
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = min(int(rec_cfg.get("time_span", 128)), 96)
+                    rec_cfg["heads"] = min(int(rec_cfg.get("heads", 2)), 2)
+                recipes.append(("SHORT", rec_cfg, min(1e-2, center * 1.15), min(1e-2, base_hi * 1.55)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["dropout"] = min(0.24, float(rec_cfg.get("dropout", 0.10)) + 0.06)
+                rec_cfg["weight_decay"] = min(8e-4, float(rec_cfg.get("weight_decay", 1e-4)) * 2.5)
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = max(48, int(rec_cfg.get("time_span", 128)) // 2)
+                recipes.append(("WIDE", rec_cfg, max(8e-5, base_lo * 0.40), max(8e-5, center * 0.72)))
+            if aggressive or medium:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(96, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.75 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["inner_size"] = max(192, int(rec_cfg["hidden_size"] * 2))
+                rec_cfg["layers"] = max(1, int(rec_cfg.get("layers", 2)) - 1)
+                rec_cfg["num_layers"] = rec_cfg["layers"]
+                rec_cfg["heads"] = 2 if model_option != "difsr" else max(1, min(2, int(rec_cfg.get("heads", 2))))
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = min(int(rec_cfg.get("time_span", 128)), 96)
+                recipes.append(("STRUCTS", rec_cfg, max(8e-5, base_lo * 0.78), min(1e-2, center * 1.12)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(192, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.20 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["inner_size"] = min(384, max(256, int(rec_cfg["hidden_size"] * 2.5)))
+                rec_cfg["layers"] = min(3, int(rec_cfg.get("layers", 2)) + (1 if aggressive else 0))
+                rec_cfg["num_layers"] = rec_cfg["layers"]
+                rec_cfg["heads"] = min(4, max(2, int(rec_cfg.get("heads", 2))))
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = min(384, max(128, int(rec_cfg.get("time_span", 128)) * 2))
+                if model_option == "difsr":
+                    rec_cfg["lambda_attr"] = min(0.2, float(rec_cfg.get("lambda_attr", 0.1)) + 0.04)
+                recipes.append(("STRUCTL", rec_cfg, max(8e-5, center * 0.90), min(1e-2, base_hi * 1.22)))
+        elif model_option == "sigma":
+            rec_cfg = dict(cfg)
+            rec_cfg["hidden_size"] = max(96, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.75 / 8) * 8))
+            rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+            rec_cfg["state_size"] = max(8, int(float(rec_cfg.get("sigma_state", rec_cfg.get("state_size", 16))) * 0.75))
+            rec_cfg["conv_kernel"] = max(3, int(rec_cfg.get("sigma_kernel", rec_cfg.get("conv_kernel", 6))) - 2)
+            rec_cfg["remaining_ratio"] = max(0.35, float(rec_cfg.get("sigma_remaining_ratio", rec_cfg.get("remaining_ratio", 0.6))) - 0.10)
+            recipes.append(("STRUCTS", rec_cfg, max(8e-5, base_lo * 0.82), min(1e-2, center * 1.10)))
+
+            rec_cfg = dict(cfg)
+            rec_cfg["hidden_size"] = min(192, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.20 / 8) * 8)))
+            rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+            rec_cfg["state_size"] = min(48, max(16, int(float(rec_cfg.get("sigma_state", rec_cfg.get("state_size", 16))) * 1.5)))
+            rec_cfg["conv_kernel"] = min(12, int(rec_cfg.get("sigma_kernel", rec_cfg.get("conv_kernel", 6))) + 2)
+            rec_cfg["remaining_ratio"] = min(0.9, float(rec_cfg.get("sigma_remaining_ratio", rec_cfg.get("remaining_ratio", 0.6))) + 0.10)
+            recipes.append(("STRUCTL", rec_cfg, max(8e-5, center * 0.90), min(1e-2, base_hi * 1.22)))
         else:
             rec_cfg = dict(cfg)
             recipes.append(("LRMID", rec_cfg, max(8e-5, base_lo * 0.93), min(1e-2, base_hi * 1.08)))
+
+        if followup_rescue:
+            if model_option in {"gru4rec", "fame"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["dropout"] = max(0.02, float(rec_cfg.get("dropout", 0.08)) - 0.05)
+                rec_cfg["hidden_size"] = min(384, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.45 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = min(3, int(rec_cfg.get("layers", 2)) + 1)
+                rec_cfg["num_layers"] = rec_cfg["layers"]
+                recipes.append(("PASS2_XLRHI", rec_cfg, min(1e-2, center * 1.35), min(1e-2, base_hi * 2.05)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["dropout"] = min(0.28, float(rec_cfg.get("dropout", 0.08)) + 0.08)
+                rec_cfg["weight_decay"] = min(1e-3, float(rec_cfg.get("weight_decay", 5e-5)) * 3.2)
+                recipes.append(("PASS2_XLRLO", rec_cfg, max(8e-5, base_lo * 0.28), max(8e-5, center * 0.62)))
+            elif model_option in {"sasrec", "bsarec", "tisasrec", "difsr", "sigma"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(80, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.62 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["inner_size"] = max(160, int(rec_cfg["hidden_size"] * 2))
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = 48
+                    rec_cfg["heads"] = 2
+                recipes.append(("PASS2_TINY", rec_cfg, max(8e-5, base_lo * 0.55), min(1e-2, center * 1.05)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(224, max(144, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.35 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["inner_size"] = min(448, max(288, int(rec_cfg["hidden_size"] * 2.5)))
+                rec_cfg["layers"] = min(3, int(rec_cfg.get("layers", 2)) + 1)
+                rec_cfg["num_layers"] = rec_cfg["layers"]
+                rec_cfg["dropout"] = max(0.04, float(rec_cfg.get("dropout", 0.10)) - 0.03)
+                recipes.append(("PASS2_DEEPL", rec_cfg, max(8e-5, center * 0.82), min(1e-2, base_hi * 1.45)))
+            elif model_option in {"duorec", "fearec"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["tau"] = max(0.08, float(rec_cfg.get("tau", 0.20)) - 0.07)
+                rec_cfg["lmd"] = max(0.006, float(rec_cfg.get("lmd", 0.02)) * 0.55)
+                rec_cfg["dropout"] = max(0.04, float(rec_cfg.get("dropout", 0.10)) - 0.03)
+                recipes.append(("PASS2_CONTRASTLITE", rec_cfg, max(8e-5, base_lo * 0.70), min(1e-2, base_hi * 1.30)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["tau"] = min(0.32, float(rec_cfg.get("tau", 0.20)) + 0.08)
+                rec_cfg["lmd"] = min(0.05, float(rec_cfg.get("lmd", 0.02)) * 1.5)
+                rec_cfg["weight_decay"] = min(5e-4, float(rec_cfg.get("weight_decay", 1e-4)) * 2.2)
+                recipes.append(("PASS2_CONTRASTREG", rec_cfg, max(8e-5, base_lo * 0.60), min(1e-2, center * 1.15)))
+
+        if pass3_expand:
+            if model_option in {"gru4rec", "fame"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(80, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.55 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                rec_cfg["dropout"] = min(0.30, float(rec_cfg.get("dropout", 0.08)) + 0.10)
+                recipes.append(("PASS3_ULTRATINY", rec_cfg, max(8e-5, base_lo * 0.35), max(8e-5, center * 0.70)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(448, max(160, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.65 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 3
+                rec_cfg["num_layers"] = 3
+                rec_cfg["dropout"] = max(0.02, float(rec_cfg.get("dropout", 0.08)) - 0.05)
+                recipes.append(("PASS3_ULTRAWIDE", rec_cfg, min(1e-2, center * 1.55), min(1e-2, base_hi * 2.20)))
+            elif model_option in {"sasrec", "bsarec", "tisasrec", "difsr", "sigma"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(64, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.50 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                rec_cfg["inner_size"] = max(128, int(rec_cfg["hidden_size"] * 2))
+                rec_cfg["dropout"] = max(0.03, float(rec_cfg.get("dropout", 0.10)) - 0.04)
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = 32
+                    rec_cfg["heads"] = 2
+                recipes.append(("PASS3_MINI", rec_cfg, max(8e-5, base_lo * 0.45), min(1e-2, center * 0.95)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(256, max(160, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.55 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 3
+                rec_cfg["num_layers"] = 3
+                rec_cfg["inner_size"] = min(512, max(320, int(rec_cfg["hidden_size"] * 2.5)))
+                rec_cfg["dropout"] = min(0.28, float(rec_cfg.get("dropout", 0.10)) + 0.02)
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = min(512, max(192, int(rec_cfg.get("time_span", 128)) * 3))
+                    rec_cfg["heads"] = 4
+                recipes.append(("PASS3_MAXI", rec_cfg, max(8e-5, center * 0.78), min(1e-2, base_hi * 1.65)))
 
         for suffix, rec_cfg, lr_lo, lr_hi in recipes:
             if len(variants) >= desired:
@@ -542,14 +1342,47 @@ def _model_runtime_resource_overrides_stageh(row: Dict[str, Any]) -> List[str]:
 base._model_runtime_resource_overrides = _model_runtime_resource_overrides_stageh
 
 
-def _target_budget(model_option: str, *, fast_screen: bool) -> Tuple[int, int, int]:
+def _target_budget(
+    model_option: str,
+    *,
+    fast_screen: bool,
+    followup_rescue: bool = False,
+    followup_full: bool = False,
+    dataset: str | None = None,
+) -> Tuple[int, int, int]:
     m = str(model_option).lower()
-    if fast_screen:
+    if followup_full:
         if m in {"gru4rec", "fame"}:
-            return 4, 24, 3
+            return 7, 40, 5
+        if m in {"duorec", "fearec", "tisasrec"}:
+            return 6, 38, 5
+        return 6, 36, 5
+    if followup_rescue:
+        tier = _effective_tier(str(dataset), m)
+        if tier == "hard":
+            if m in {"gru4rec", "fame"}:
+                return 5, 26, 4
+            return 5, 24, 4
+        if tier == "medium":
+            if m in {"gru4rec", "fame"}:
+                return 5, 24, 4
+            return 4, 22, 3
+        return 4, 20, 3
+    if fast_screen:
+        tier = _effective_tier(str(dataset), m)
+        if tier == "hard":
+            if m in {"gru4rec", "fame"}:
+                return 5, 24, 4
+            if m in {"duorec", "fearec", "tisasrec"}:
+                return 4, 22, 3
+            return 4, 22, 3
+        if tier == "medium":
+            if m in {"gru4rec", "fame"}:
+                return 4, 22, 3
+            return 4, 18, 3
         if m in {"duorec", "fearec"}:
-            return 3, 20, 3
-        return 3, 20, 3
+            return 3, 18, 2
+        return 3, 16, 2
     if m in {"gru4rec", "fame"}:
         return 6, 40, 5
     if m in {"duorec", "fearec"}:
@@ -560,7 +1393,21 @@ def _target_budget(model_option: str, *, fast_screen: bool) -> Tuple[int, int, i
 def _selected_combos(args: argparse.Namespace) -> List[Tuple[str, str]]:
     datasets = set(base._parse_csv_strings(args.datasets))
     models = set(m.lower() for m in base._parse_csv_strings(args.models))
-    return [(ds, m) for ds, m in TARGET_COMBOS if ds in datasets and m in models]
+    combo_source = CURRENT_DYNAMIC_TARGETS if args.underperform_screen and CURRENT_DYNAMIC_TARGETS else set(TARGET_COMBOS)
+    selected = [(ds, m) for ds, m in combo_source if ds in datasets and m in models]
+    promoted = set()
+    if args.followup_full and args.promote_from_latest_rescue:
+        promoted = _auto_promoted_rescue_combos(
+            promote_topk=int(args.promote_topk),
+            min_ratio=float(args.promote_min_ratio),
+        )
+    if args.followup_full and args.followup_rescue:
+        selected = [c for c in selected if c in FULL_SHORTLIST_COMBOS or c in RESCUE_REDESIGN_COMBOS or c in promoted]
+    elif args.followup_full:
+        selected = [c for c in selected if c in FULL_SHORTLIST_COMBOS or c in promoted]
+    elif args.followup_rescue:
+        selected = [c for c in selected if c in RESCUE_REDESIGN_COMBOS]
+    return selected
 
 
 def _select_stageh_candidates(
@@ -572,10 +1419,18 @@ def _select_stageh_candidates(
     global_cache_by_model: Dict[str, List[Dict[str, Any]]],
     stage_best_cache: Dict[Tuple[str, str], Dict[str, Any]],
     fast_screen: bool,
+    followup_rescue: bool,
+    followup_full: bool,
+    underperform_screen: bool,
 ) -> List[Dict[str, Any]]:
-    goal = int(TARGET_CANDIDATE_COUNT[(dataset, model_option)])
-    if fast_screen:
-        goal = max(goal, int(FAST_SCREEN_MIN_CANDIDATE_COUNT.get((dataset, model_option), goal)))
+    tier = _effective_tier(dataset, model_option)
+    dummy_args = argparse.Namespace(
+        fast_screen=fast_screen,
+        followup_full=followup_full,
+        followup_rescue=followup_rescue,
+        underperform_screen=underperform_screen,
+    )
+    goal = _candidate_goal(dataset, model_option, args=dummy_args)
     base_cands = sg._select_candidates_for_combo(
         dataset=dataset,
         model_option=model_option,
@@ -587,9 +1442,17 @@ def _select_stageh_candidates(
     manual_cands = _manual_candidates(dataset, model_option)
 
     chosen: List[Dict[str, Any]] = []
-    if fast_screen:
-        chosen.extend(dict(c) for c in base_cands[: min(4, len(base_cands))])
-        chosen.extend(manual_cands[: min(4, len(manual_cands))])
+    if followup_full:
+        chosen.extend(dict(c) for c in manual_cands[:2])
+        chosen.extend(dict(c) for c in base_cands[:2])
+    elif fast_screen or followup_rescue:
+        base_take = 6 if tier == "hard" else 4 if tier == "medium" else 3
+        manual_take = 6 if tier == "hard" else 4 if tier == "medium" else 3
+        if followup_rescue:
+            base_take += 1
+            manual_take += 1
+        chosen.extend(dict(c) for c in base_cands[: min(base_take, len(base_cands))])
+        chosen.extend(manual_cands[: min(manual_take, len(manual_cands))])
     elif goal >= 3 and manual_cands:
         chosen.extend(manual_cands[:2])
         if base_cands:
@@ -612,13 +1475,19 @@ def _select_stageh_candidates(
         chosen.append(dict(cand))
 
     chosen = sg._dedup_candidates(chosen)
-    if fast_screen and len(chosen) < goal:
+    if (fast_screen or followup_rescue) and len(chosen) < goal:
+        variant_source = list(chosen)
+        if len(variant_source) < 4:
+            variant_source.extend(dict(c) for c in base_cands[:4])
+            variant_source.extend(dict(c) for c in manual_cands[:4])
         chosen.extend(
             _screen_variant_candidates(
                 dataset=dataset,
                 model_option=model_option,
-                source_candidates=list(chosen),
+                source_candidates=sg._dedup_candidates(variant_source),
                 desired=max(0, goal - len(chosen)),
+                followup_rescue=bool(followup_rescue),
+                pass3_expand=bool(underperform_screen and (dataset, model_option) in TIER_BY_COMBO),
             )
         )
         chosen = sg._dedup_candidates(chosen)
@@ -650,10 +1519,19 @@ def _build_rows(args: argparse.Namespace) -> List[Dict[str, Any]]:
             final_cache_by_dataset=final_cache_by_dataset,
             global_cache_by_model=global_cache_by_model,
             stage_best_cache=stage_best_cache,
-            fast_screen=bool(args.fast_screen),
+            fast_screen=bool(args.fast_screen or args.underperform_screen),
+            followup_rescue=bool(args.followup_rescue),
+            followup_full=bool(args.followup_full),
+            underperform_screen=bool(args.underperform_screen),
         )
         for cand_idx, cand in enumerate(candidates, start=1):
-            max_evals, tune_epochs, tune_patience = _target_budget(model_option, fast_screen=bool(args.fast_screen))
+            max_evals, tune_epochs, tune_patience = _target_budget(
+                model_option,
+                fast_screen=bool(args.fast_screen),
+                followup_rescue=bool(args.followup_rescue),
+                followup_full=bool(args.followup_full),
+                dataset=dataset,
+            )
             if args.smoke_test:
                 max_evals, tune_epochs, tune_patience = 1, 1, 1
             candidate_config = _speedify_candidate_config(
@@ -710,6 +1588,126 @@ def _build_rows(args: argparse.Namespace) -> List[Dict[str, Any]]:
     return rows
 
 
+def _load_prior_best_by_combo() -> Dict[Tuple[str, str], float]:
+    out: Dict[Tuple[str, str], float] = {}
+    path = PRIOR_BEST_TABLE_PATH
+    if not path.exists():
+        return out
+    try:
+        with path.open("r", encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                ds = str(row.get("dataset", "")).strip()
+                model = str(row.get("model", "")).strip().lower()
+                if not ds or not model:
+                    continue
+                val = sg._metric(row.get("best_valid_mrr20"))
+                if val is not None:
+                    out[(ds, model)] = float(val)
+    except Exception:
+        return {}
+    return out
+
+
+def _load_stageh_best_by_combo() -> Dict[Tuple[str, str], Dict[str, Any]]:
+    out: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    root = base.LOG_ROOT / base.AXIS
+    if not root.exists():
+        return out
+    for dsdir in root.iterdir():
+        if not dsdir.is_dir():
+            continue
+        summary = dsdir / "summary.csv"
+        if not summary.exists():
+            continue
+        try:
+            with summary.open("r", encoding="utf-8", newline="") as fh:
+                rows = list(csv.DictReader(fh))
+        except Exception:
+            continue
+        for row in rows:
+            ds = str(row.get("dataset", "")).strip()
+            model_label = str(row.get("model", "")).strip()
+            model_option = sg.LABEL_TO_OPTION.get(model_label)
+            if not ds or model_option is None:
+                continue
+            valid = sg._metric(row.get("run_best_valid_mrr20"))
+            test = sg._metric(row.get("run_best_test_mrr20"))
+            if valid is None:
+                continue
+            key = (ds, model_option)
+            prev = out.get(key)
+            if prev is None or float(valid) > float(prev["valid"]):
+                out[key] = {
+                    "valid": float(valid),
+                    "test": None if test is None else float(test),
+                    "candidate_id": str(row.get("candidate_id", "")),
+                    "run_phase": str(row.get("run_phase", "")),
+                }
+    return out
+
+
+def _auto_promoted_rescue_combos(*, promote_topk: int, min_ratio: float) -> set[Tuple[str, str]]:
+    prior = _load_prior_best_by_combo()
+    now = _load_stageh_best_by_combo()
+    scored: List[Tuple[float, Tuple[str, str]]] = []
+    for combo in RESCUE_REDESIGN_COMBOS:
+        rec = now.get(combo)
+        if not isinstance(rec, dict):
+            continue
+        valid = sg._metric(rec.get("valid"))
+        test = sg._metric(rec.get("test"))
+        if valid is None:
+            continue
+        prev = prior.get(combo)
+        ratio = None if prev in (None, 0.0) else float(valid) / float(prev)
+        if prev is not None and ratio is not None and ratio < float(min_ratio) and float(valid) < float(prev):
+            continue
+        score = float(valid) + 0.20 * float(test or 0.0)
+        if prev is not None:
+            score += 0.50 * (float(valid) - float(prev))
+        scored.append((score, combo))
+    scored.sort(reverse=True)
+    return {combo for _, combo in scored[: max(0, int(promote_topk))]}
+
+
+
+
+def _combo_plan_rows(args: argparse.Namespace) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    combos = _selected_combos(args)
+    for dataset, model_option in combos:
+        tier = _effective_tier(dataset, model_option)
+        cand_count = _candidate_goal(dataset, model_option, args=args)
+        seeds = len(base._parse_csv_ints(args.seeds))
+        rows.append({
+            "dataset": dataset,
+            "model_option": model_option,
+            "model_label": sg.OPTION_TO_LABEL[model_option],
+            "tier": tier,
+            "candidate_count": cand_count,
+            "seed_count": seeds,
+            "run_count": cand_count * seeds,
+        })
+    return rows
+
+
+def _print_stageh_plan(args: argparse.Namespace) -> None:
+    plan = _combo_plan_rows(args)
+    by_dataset: Dict[str, List[Dict[str, Any]]] = {}
+    for row in plan:
+        by_dataset.setdefault(str(row["dataset"]), []).append(row)
+    print(f"[{base.PHASE_ID}] combo_count={len(plan)} seed_count={len(base._parse_csv_ints(args.seeds))} total_runs={sum(int(r['run_count']) for r in plan)}")
+    if args.followup_full and args.promote_from_latest_rescue:
+        promoted = sorted(_auto_promoted_rescue_combos(promote_topk=int(args.promote_topk), min_ratio=float(args.promote_min_ratio)))
+        if promoted:
+            print("[plan] promoted_from_rescue: " + ", ".join(f"{ds}/{sg.OPTION_TO_LABEL[m]}" for ds, m in promoted))
+    for dataset, items in by_dataset.items():
+        items.sort(key=lambda r: (str(r["tier"]), str(r["model_label"])))
+        summary = ", ".join(
+            f"{r['model_label']}[{r['tier']}:c{r['candidate_count']}/r{r['run_count']}]" for r in items
+        )
+        print(f"[plan] {dataset}: {summary}")
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Baseline P23 StageH targeted recovery launcher")
     parser.add_argument("--datasets", default=",".join(DEFAULT_DATASETS))
@@ -727,6 +1725,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--smoke-test", action="store_true")
     parser.add_argument("--smoke-max-runs", type=int, default=8)
     parser.add_argument("--fast-screen", action="store_true")
+    parser.add_argument("--followup-rescue", action="store_true")
+    parser.add_argument("--followup-full", action="store_true")
+    parser.add_argument("--underperform-screen", action="store_true")
+    parser.add_argument("--weak-ratio", type=float, default=0.90)
+    parser.add_argument("--strong-ratio", type=float, default=0.75)
+    parser.add_argument("--promote-from-latest-rescue", action="store_true")
+    parser.add_argument("--promote-topk", type=int, default=4)
+    parser.add_argument("--promote-min-ratio", type=float, default=0.95)
     return parser.parse_args()
 
 
@@ -740,6 +1746,14 @@ def _apply_fast_screen_mode(args: argparse.Namespace) -> None:
     args.seeds = "1"
 
 
+def _apply_followup_modes(args: argparse.Namespace) -> None:
+    args.seeds = "1"
+
+
+def _apply_underperform_mode(args: argparse.Namespace) -> None:
+    args.seeds = "1"
+
+
 def _run(args: argparse.Namespace) -> int:
     gpus = list(dict.fromkeys(base._parse_csv_strings(args.gpus)))
     rows = _build_rows(args)
@@ -750,6 +1764,10 @@ def _run(args: argparse.Namespace) -> int:
     summary_paths = {dataset: base._summary_path(dataset) for dataset in sorted(dict.fromkeys(r["dataset"] for r in rows))}
     for path in summary_paths.values():
         base._ensure_summary_csv(path)
+    summary_state = {
+        dataset: list(base._load_summary_bests(path))
+        for dataset, path in summary_paths.items()
+    }
 
     for row in rows:
         row["log_path"] = str(base._build_log_path(row))
@@ -826,12 +1844,24 @@ def _run(args: argparse.Namespace) -> int:
                         special_ok, detail = base._verify_special_from_result(result_path)
                         print(f"[logging-check] run={row['run_phase']} {detail} result={result_path}")
                         base._mirror_logging_bundle(row, result_path)
+                global_best_valid, global_best_test, model_best_valid_by_model, model_best_test_by_model = summary_state[row["dataset"]]
+                if run_best is not None:
+                    global_best_valid = run_best if global_best_valid is None else max(float(global_best_valid), float(run_best))
+                    prev_model_best = model_best_valid_by_model.get(str(row["model_label"]))
+                    model_best_valid_by_model[str(row["model_label"])] = run_best if prev_model_best is None else max(float(prev_model_best), float(run_best))
+                if test_mrr is not None:
+                    global_best_test = test_mrr if global_best_test is None else max(float(global_best_test), float(test_mrr))
+                    prev_model_test = model_best_test_by_model.get(str(row["model_label"]))
+                    model_best_test_by_model[str(row["model_label"])] = test_mrr if prev_model_test is None else max(float(prev_model_test), float(test_mrr))
+                current_model_best_valid = model_best_valid_by_model.get(str(row["model_label"]))
+                current_model_best_test = model_best_test_by_model.get(str(row["model_label"]))
+                summary_state[row["dataset"]] = [global_best_valid, global_best_test, model_best_valid_by_model, model_best_test_by_model]
                 summary_row = {
                     "model": row["model_label"],
-                    "global_best_valid_mrr20": "",
-                    "global_best_test_mrr20": "",
-                    "model_best_valid_mrr20": "",
-                    "model_best_test_mrr20": "",
+                    "global_best_valid_mrr20": "" if global_best_valid is None else f"{float(global_best_valid):.6f}",
+                    "global_best_test_mrr20": "" if global_best_test is None else f"{float(global_best_test):.6f}",
+                    "model_best_valid_mrr20": "" if current_model_best_valid is None else f"{float(current_model_best_valid):.6f}",
+                    "model_best_test_mrr20": "" if current_model_best_test is None else f"{float(current_model_best_test):.6f}",
                     "run_best_valid_mrr20": "" if run_best is None else f"{float(run_best):.6f}",
                     "run_best_test_mrr20": "" if test_mrr is None else f"{float(test_mrr):.6f}",
                     "run_phase": row["run_phase"],
@@ -867,12 +1897,28 @@ def _run(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    global CURRENT_DYNAMIC_TIER_BY_COMBO, CURRENT_DYNAMIC_TARGETS
     args = parse_args()
     if args.smoke_test:
         _apply_smoke_mode(args)
+    elif args.underperform_screen:
+        _apply_underperform_mode(args)
+    elif args.followup_rescue or args.followup_full:
+        _apply_followup_modes(args)
     elif args.fast_screen:
         _apply_fast_screen_mode(args)
-    sg._check_runtime_models(list(dict.fromkeys(m.lower() for _, m in TARGET_COMBOS)))
+    if args.underperform_screen:
+        CURRENT_DYNAMIC_TIER_BY_COMBO = _compute_underperform_targets(
+            weak_ratio=float(args.weak_ratio),
+            strong_ratio=float(args.strong_ratio),
+        )
+        CURRENT_DYNAMIC_TARGETS = set(CURRENT_DYNAMIC_TIER_BY_COMBO.keys())
+    else:
+        CURRENT_DYNAMIC_TIER_BY_COMBO = {}
+        CURRENT_DYNAMIC_TARGETS = set()
+    runtime_models = sorted(dict.fromkeys(m.lower() for _, m in (_selected_combos(args) or TARGET_COMBOS)))
+    sg._check_runtime_models(runtime_models)
+    _print_stageh_plan(args)
     return _run(args)
 
 

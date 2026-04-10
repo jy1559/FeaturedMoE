@@ -493,3 +493,59 @@ Highlight rule: row-best is **bold**. Values marked with `*` are either in the r
 | foursquare | 0.2145* | 0.1343 | 0.1932 | 0.2087 | 0.1296 | 0.1800 | 0.1932 | 0.1742 | 0.1582 | **0.2208 [A3/H2]** | 0.2116 [A5/H3] | 0.2121* [A2/H1] |
 | movielens1m | 0.1898* | 0.1768 | **0.1925** | 0.1801 | 0.1805 | 0.1801 | 0.1662 | 0.1861* | 0.1768 | 0.1824 [A3/H1] | 0.1722 [A5/H1] | 0.1796 [A6/H5] |
 | retail_rocket | 0.4201 | 0.3795 | 0.4211 | 0.4308 | 0.4162 | 0.4343 | 0.4366* | 0.4422* | 0.4084 | - | - | **0.4620 [A6/H2]** |
+
+## Log-Based Refresh (2026-04-10)
+
+Source rule: recomputed from `logs/` by parsing each run `*.log` `[RUN_METRICS]` block, not from `summary.csv`.
+
+Legend: row-best `**bold**`; strong near-top (`top-3` and at least `95%` of row-best) is `*italic*`; row-worst is `<u>underlined</u>`; other low values (`<=80%` of row-best) get `†`.
+
+### Valid MRR@20 (selected by best valid MRR@20 from logs)
+| Dataset | SASRec | GRU4Rec | TiSASRec | DuoRec | SIGMA | BSARec | FEARec | DIF-SR | FAME | FMoE_Final |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| KuaiRecLargeStrictPosV2_0.2 | *0.1679* | <u>0.0298</u> | 0.1231† | 0.0505† | 0.1667 | 0.1651 | *0.1676* | 0.1475 | 0.1591 | **0.1719** |
+| lastfm0.03 | 0.2431 | <u>0.2040</u> | *0.2472* | 0.2361 | 0.2296 | 0.2365 | 0.2389 | *0.2513* | 0.2430 | **0.2586** |
+| amazon_beauty | **0.1264** | 0.0197† | 0.0787† | *0.1245* | 0.0980† | <u>0.0162</u> | 0.1156 | 0.1062 | 0.0226† | 0.1169 |
+| foursquare | **0.1312** | <u>0.0898</u> | *0.1273* | 0.1200 | 0.0988† | 0.1087 | 0.1118 | 0.1229 | 0.1074 | *0.1282* |
+| movielens1m | 0.0778† | 0.0761† | 0.0870 | 0.0747† | 0.0847 | 0.0876 | <u>0.0679</u> | 0.0850 | 0.0831 | **0.0977** |
+| retail_rocket | 0.2686† | <u>0.2378</u> | 0.2601† | 0.2743† | *0.3548* | *0.3652* | 0.2806† | **0.3726** | 0.3547 | 0.2997 |
+
+### Test MRR@20 At Best Valid MRR@20 (from logs)
+| Dataset | SASRec | GRU4Rec | TiSASRec | DuoRec | SIGMA | BSARec | FEARec | DIF-SR | FAME | FMoE_Final |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| KuaiRecLargeStrictPosV2_0.2 | *0.1678* | <u>0.0290</u> | 0.1219† | 0.0473† | *0.1661* | 0.1641 | 0.1645 | 0.1449 | 0.1601 | **0.1691** |
+| lastfm0.03 | 0.2118 | <u>0.1977</u> | 0.2075 | 0.2025 | **0.2351** | 0.2003 | 0.2058 | 0.2160 | 0.2066 | *0.2241* |
+| amazon_beauty | *0.0882* | <u>0.0018</u> | 0.0541† | *0.0863* | 0.0673† | 0.0029† | **0.0899** | 0.0702† | 0.0088† | 0.0834 |
+| foursquare | **0.1043** | <u>0.0601</u> | 0.0962 | 0.0941 | 0.0943 | 0.0854 | 0.0904 | 0.0907 | *0.1001* | 0.0960 |
+| movielens1m | 0.0668 | 0.0739 | 0.0743 | 0.0661 | 0.0740 | *0.0782* | 0.0623† | **0.0791** | *0.0766* | <u>0.0559</u> |
+| retail_rocket | 0.2706† | <u>0.2373</u> | 0.2627† | 0.2764† | *0.3534* | *0.3640* | 0.2802† | **0.3709** | 0.3530 | 0.2984 |
+
+### FMoE Final Winners
+- `KuaiRecLargeStrictPosV2_0.2` FMoE best: `A9/H14` valid=0.1719 test=0.1691
+- `lastfm0.03` FMoE best: `A1/H3` valid=0.2586 test=0.2241
+- `amazon_beauty` FMoE best: `A9/H14` valid=0.1169 test=0.0834
+- `foursquare` FMoE best: `A1/H2` valid=0.1282 test=0.0960
+- `movielens1m` FMoE best: `A1/H3` valid=0.0977 test=0.0559
+- `retail_rocket` FMoE best: `A2/H2` valid=0.2997 test=0.2984
+
+### FMoE A6+ Only
+
+Restriction: only `Final_all_datasets` architectures with `A >= 6` are considered here.
+
+| Dataset | Best Valid MRR@20 | Test MRR@20 At Best Valid | Winner |
+| --- | ---: | ---: | --- |
+| KuaiRecLargeStrictPosV2_0.2 | 0.1719 | 0.1691 | A9/H14 |
+| lastfm0.03 | 0.2420 | 0.2420 | A8/H3 |
+| amazon_beauty | 0.1169 | 0.0834 | A9/H14 |
+| foursquare | 0.1169 | 0.1160 | A6/H15 |
+| movielens1m | 0.0835 | 0.0750 | A6/H9 |
+| retail_rocket | 0.2984 | 0.2997 | A8/H2 |
+
+Quick read:
+- `KuaiRecLargeStrictPosV2_0.2`: `A9/H14` valid=0.1719, test=0.1691
+- `lastfm0.03`: `A8/H3` valid=0.2420, test=0.2420
+- `amazon_beauty`: `A9/H14` valid=0.1169, test=0.0834
+- `foursquare`: `A6/H15` valid=0.1169, test=0.1160
+- `movielens1m`: `A6/H9` valid=0.0835, test=0.0750
+- `retail_rocket`: `A8/H2` valid=0.2984, test=0.2997
+

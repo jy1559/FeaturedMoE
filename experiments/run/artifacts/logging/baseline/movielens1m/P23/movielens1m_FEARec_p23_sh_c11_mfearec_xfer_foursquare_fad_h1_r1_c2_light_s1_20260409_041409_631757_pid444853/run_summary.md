@@ -5,9 +5,9 @@
 - run_group: baseline
 - run_axis: stageh_targetedrecovery_anchor2_core5
 - run_phase: P23_SH_C11_MFEAREC_XFER_FOURSQUARE_FAD_H1_R1_C2_LIGHT_S1
-- best_mrr@20: 0.0487
-- test_mrr@20: 0.0494
-- test_hr@10: 0.1352
+- best_mrr@20: 0.0572
+- test_mrr@20: 0.057
+- test_hr@10: 0.1629
 
 ## Artifacts
 

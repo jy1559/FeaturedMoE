@@ -1,20 +1,23 @@
-\documentclass[sigconf,authordraft]{acmart}
+\documentclass[sigconf,anonymous,review]{acmart}
 
 \AtBeginDocument{%
   \providecommand\BibTeX{{%
     Bib\TeX}}}
 
-% Draft-friendly ACM settings.
+% ACM review-submission settings.
+% For an author-visible draft, switch the line above to:
+% \documentclass[sigconf,authordraft]{acmart}
 % Replace these metadata fields later when you know the target venue.
 \setcopyright{none}
 \settopmatter{printacmref=false}
 \renewcommand\footnotetextcopyrightpermission[1]{}
-\pagestyle{plain}
 
 \acmConference[FMoE Draft]{Draft Venue Placeholder}{2026}{TBD}
 \acmBooktitle{Draft Template for FMoE Paper}
 \acmDOI{}
 \acmISBN{}
+% Uncomment this when you receive an official submission ID.
+% \acmSubmissionID{123-A56-BU3}
 
 % ------------------------------------------------------------------
 % Notes for future editing
@@ -58,11 +61,17 @@
 Mixture-of-experts (MoE) architectures are increasingly used in sequential recommendation because they can allocate different computation paths to different behavioral patterns. In many existing models, however, routing is still driven mainly by hidden states, so expert assignment remains difficult to interpret and verify. At the same time, feature-aware recommenders usually use side information to enrich representations rather than to guide the computation path itself. We propose FeaturedMoE (FMoE), a feature-guided modular architecture that bridges these two directions. FMoE derives compact behavioral cues from raw signals that are widely available in sequential recommendation data---sessionized interaction order, timestamps, and item categories---and uses them to guide macro, mid, and micro routing stages. Instead of relying on a large handcrafted feature bank or rich dataset-specific metadata, FMoE organizes these cues into a small set of behavioral families that act as explicit routing signals. Our experiments show that compact multi-family features are sufficient to support effective routing, that stage composition materially affects performance, and that corrupted or semantically misaligned cues consistently degrade the model. These results suggest that common raw sequential signals can serve as practical and inspectable routing priors for MoE-based sequential recommendation.
 \end{abstract}
 
-% Add proper CCS terms later if needed for the final submission.
-% \begin{CCSXML}
-% ...
-% \end{CCSXML}
-% \ccsdesc[500]{...}
+\begin{CCSXML}
+<ccs2012>
+ <concept>
+  <concept_id>10002951.10003317.10003347.10003350</concept_id>
+  <concept_desc>Information systems~Recommender systems</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Information systems~Recommender systems}
 
 \keywords{sequential recommendation, mixture of experts, conditional computation, routing, behavioral features}
 
@@ -78,7 +87,14 @@ A second line of work enriches sequential models with additional signals or arch
 
 Mixture-of-experts (MoE) offers a natural way to introduce conditional computation~\cite{jacobs1991adaptive,jordan1994hme,shazeer2017moe}. In large-scale modeling, modern sparse MoE research has shown that routing design, expert utilization, and stabilization are central to whether specialization actually emerges~\cite{lepikhin2021gshard,fedus2022switch,du2022glam,zoph2022stmoe,zhou2022expertchoice,wang2024lossfree}. Recommendation has also adopted expert mixtures, most notably in multi-task settings such as MMoE and PLE~\cite{ma2018mmoe,tang2020ple}. For sequential recommendation, FAME is the clearest direct reference point: it introduces experts inside attention heads to disentangle facet-level preferences, while recent multimodal sequential recommenders such as M3SRec and HM4SR use expert mixtures mainly for modality fusion~\cite{liu2025fame,bian2023m3srec,zhang2025hm4sr}. However, routing in these models is not designed around a compact, explicitly interpretable set of behavioral cues derived from raw sequential logs.
 
-We ask a different question: can a small set of portable behavioral cues organize expert routing in sequential recommendation? We propose FeaturedMoE (FMoE), a feature-guided mixture-of-experts framework built on top of a SASRec backbone. Instead of assuming rich dataset-specific metadata, FMoE derives compact routing cues from signals that are widely available in sequential logs---interaction order, timestamps, and coarse item categories---and instantiates them at three temporal scales: macro, mid, and micro. Rather than using these cues mainly to enrich item representations, FMoE uses them to decide which experts should process the hidden states at different temporal scopes.
+We ask a different question: can a small set of portable behavioral cues organize expert routing in sequential recommendation? We propose FeaturedMoE (FMoE), a feature-guided mixture-of-experts framework built on top of a SASRec backbone. Instead of assuming rich dataset-specific metadata, FMoE derives compact routing cues from signals that are widely available in sequential logs---interaction order, timestamps, and coarse item categories---and instantiates them at three temporal scales: macro, mid, and micro. Rather than using these cues mainly to enrich item representations, FMoE uses them to decide which experts should process the hidden states at different temporal scopes. Figure~\ref{fig:intro-behavioral-features} illustrates this motivation.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/figure1_intro_motivation.pdf}
+  \caption{Motivating example. A single sessionized interaction history can be summarized into compact behavioral features that reflect long-term preference, session intent, and immediate interest.}
+  \label{fig:intro-behavioral-features}
+\end{figure}
 
 Our contributions are threefold. First, we propose a compact behavioral feature bank that turns common raw sequential signals into explicit routing priors. Second, we design a stage-wise MoE structure in which macro, mid, and micro routing progressively move from coarse behavioral guidance to fine-grained local specialization. Third, we position FMoE against strong recurrent, attention-based, feature-aware, contrastive, frequency-aware, Mamba-based, and MoE-based baselines, and we explicitly evaluate stage composition, cue corruption, and routing diagnostics to test whether the learned specialization is meaningful rather than incidental.
 
@@ -129,7 +145,7 @@ FMoE applies this routing mechanism at three behavioral levels---macro, mid, and
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=0.94\textwidth]{figures/figure3_framwork.pdf}
-  \caption{Feature-guided FMoE routing framework. (a) FMoE keeps the SASRec backbone and replaces shared feed-forward computation with stage-wise mixture-of-experts routing; in the A6 setting used in this paper, stage features alone determine routing weights, while expert FFNs transform the hidden states. (b) The routing module is decomposed into reusable primitives: \texttt{a\_joint} produces flat expert logits, \texttt{b\_group} produces group logits, and \texttt{d\_cond} produces group-conditional intra-group logits. (c) The three stages use different wrappers: macro uses $\log(b \times d)$, mid uses $\alpha_{\mathrm{struct}}\log(b \times d)+\alpha_a a$, and micro uses $a$ only.}
+  \caption{Feature-guided FMoE routing framework. (a) FMoE keeps the SASRec backbone and replaces shared feed-forward computation with stage-wise mixture-of-experts routing; stage features determine routing weights, while expert FFNs transform hidden states. (b) The routing computation is built from three reusable components: group-level routing, conditional within-group expert routing, and direct expert routing. (c) The three stages combine these components differently: the macro stage uses hierarchical routing, the mid stage blends hierarchical and direct routing, and the micro stage uses direct expert routing.}
   \label{fig:framework}
 \end{figure*}
 
@@ -183,26 +199,26 @@ Overall, FMoE combines a shared semantic taxonomy with stage-dependent observati
 
 \subsection{Feature-Guided Multi-Stage Routing}
 
-Section~\ref{sec:feature-construction} defined compact stage-specific feature views from raw sequential signals. We now explain how these features are translated into routing decisions. Figure~\ref{fig:framework}(a) shows the overall computation flow, Figure~\ref{fig:framework}(b) separates the router into reusable primitives, and Figure~\ref{fig:framework}(c) shows how the three stages compose those primitives differently. Throughout this subsection, we describe the A6 setting used in our main experiments, where the learned routers are driven by stage features.
+Section~\ref{sec:feature-construction} defined compact stage-specific feature views from raw sequential signals. We now explain how these features are translated into routing decisions. Figure~\ref{fig:framework}(a) shows the overall computation flow, Figure~\ref{fig:framework}(b) separates the routing computation into reusable components, and Figure~\ref{fig:framework}(c) shows how the three stages combine those components differently. Throughout this subsection, we describe the final model used in our main experiments, where the learned routers are driven by stage features.
 
 \subsubsection{Routing Principle and Stage Placement}
 
-FMoE keeps the SASRec encoder~\cite{kang2018sasrec} as the main hidden-state backbone and replaces shared feed-forward computation with stage-wise mixture-of-experts routing in the spirit of conditional expert models~\cite{shazeer2017moe,fedus2022switch}. At each position $t$ and stage $s$, the backbone provides hidden state $\mathbf{h}_t$, while the corresponding stage feature $\mathbf{f}^{(s)}_t$ parameterizes the learned router in the A6 configuration. The stage router first produces expert logits, converts them to routing weights, and then applies a weighted combination of expert FFNs to the hidden state:
+FMoE keeps the SASRec encoder~\cite{kang2018sasrec} as the main hidden-state backbone and replaces shared feed-forward computation with stage-wise mixture-of-experts routing in the spirit of conditional expert models~\cite{shazeer2017moe,fedus2022switch}. At each position $t$ and stage $s$, the backbone provides hidden state $\mathbf{h}_t$, while the corresponding stage feature $\mathbf{f}^{(s)}_t$ parameterizes the learned router. The stage router first produces expert logits, converts them to routing weights, and then applies a weighted combination of expert FFNs to the hidden state:
 \begin{align}
 \mathbf{q}^{(s)}_t &= \mathrm{Router}_s(\mathbf{f}^{(s)}_t), \\
 \boldsymbol{\pi}^{(s)}_t &= \mathrm{softmax}\!\left(\mathbf{q}^{(s)}_t / \tau_s\right), \\
 \tilde{\mathbf{h}}^{(s)}_t &= \sum_{e=1}^{E} \pi^{(s)}_{t,e}\,\mathrm{Expert}^{(s)}_e(\mathbf{h}_t).
 \end{align}
 
-This separation is central to FMoE. The feature branch determines which experts should be emphasized, whereas the expert branch transforms the backbone hidden state. As shown in Figure~\ref{fig:framework}(a), the same principle is applied at the macro, mid, and micro stages. What changes across stages is the temporal meaning of the feature and the wrapper used to convert that feature into expert logits.
+This separation is central to FMoE. The feature branch determines which experts should be emphasized, whereas the expert branch transforms the backbone hidden state. As shown in Figure~\ref{fig:framework}(a), the same principle is applied at the macro, mid, and micro stages. What changes across stages is the temporal meaning of the feature and the routing structure used to convert that feature into expert logits.
 
-\subsubsection{Macro Router: Structured Group-First Routing}
+\subsubsection{Macro Router: Hierarchical Group-First Routing}
 
-The macro stage is driven by features computed from preceding sessions. As discussed in Section~\ref{sec:feature-construction}, this view is stable within the current session and mainly reflects long-term preference and recurring consumption tendency. Such evidence is informative at a coarse behavioral level, but it is less suitable for making fine expert distinctions in a single step. For this reason, the macro router follows a structured group-first design.
+The macro stage is driven by features computed from preceding sessions. As discussed in Section~\ref{sec:feature-construction}, this view is stable within the current session and mainly reflects long-term preference and recurring consumption tendency. Such evidence is informative at a coarse behavioral level, but it is less suitable for making fine expert distinctions in a single step. For this reason, the macro router follows a hierarchical group-first design.
 
-In the implementation, the macro stage uses the \texttt{w4\_bxd} router, which combines the \texttt{b\_group} and \texttt{d\_cond} primitives in Figure~\ref{fig:framework}(b). Let $p_b(g \mid \mathbf{f})$ denote the probability of selecting group $g$, and let $p_d(e \mid g, \mathbf{f})$ denote the probability of selecting expert $e$ within that group. The macro router forms the joint routing probability
+The macro stage first estimates a group distribution and then a conditional expert distribution within each group. Let $p_g(g \mid \mathbf{f})$ denote the probability of selecting group $g$, and let $p_e(e \mid g, \mathbf{f})$ denote the probability of selecting expert $e$ within that group. The macro router forms the joint routing probability
 \[
-J_t^{\mathrm{macro}}(g,e) = p_b(g \mid \mathbf{f}^{\mathrm{macro}})\,p_d(e \mid g, \mathbf{f}^{\mathrm{macro}}),
+J_t^{\mathrm{macro}}(g,e) = p_g(g \mid \mathbf{f}^{\mathrm{macro}})\,p_e(e \mid g, \mathbf{f}^{\mathrm{macro}}),
 \]
 and then converts it into expert logits in logit space:
 \[
@@ -212,40 +228,40 @@ The final macro routing weights are obtained by
 \[
 \boldsymbol{\pi}^{\mathrm{macro}}_t = \mathrm{softmax}\!\left(\mathbf{q}_t^{\mathrm{macro}} / \tau_{\mathrm{macro}}\right).
 \]
-This matches the code path in \texttt{w4\_bxd}: the group and intra-group branches are normalized first, their probabilities are multiplied, and the resulting joint probability is mapped back to expert logits by a logarithm. Intuitively, the macro stage first identifies a broad specialization regime and only then resolves finer expert preference within that regime.
+This formulation first identifies a broad specialization regime and only then resolves finer expert preference within that regime.
 
 \subsubsection{Mid Router: Hybrid Group-Aware Routing}
 
-The mid stage uses the current-session prefix and is updated at every position. It is therefore more adaptive than the macro stage, but it still retains meaningful group structure. In the implementation, the mid stage uses the \texttt{w6\_bxd\_plus\_a} router, which combines the structured branch from \texttt{b\_group} and \texttt{d\_cond} with a direct flat branch from \texttt{a\_joint}.
+The mid stage uses the current-session prefix and is updated at every position. It is therefore more adaptive than the macro stage, but it still retains meaningful group structure. The mid router combines the same hierarchical branch used at the macro stage with a direct expert-routing branch.
 
 Using the same structured joint probability as in the macro stage,
 \begin{align}
 J_t^{\mathrm{mid}}(g,e)
-&= p_b(g \mid \mathbf{f}^{\mathrm{mid}}_t)\,p_d(e \mid g, \mathbf{f}^{\mathrm{mid}}_t), \\
+&= p_g(g \mid \mathbf{f}^{\mathrm{mid}}_t)\,p_e(e \mid g, \mathbf{f}^{\mathrm{mid}}_t), \\
 \mathbf{q}^{\mathrm{struct}}_t
 &= \log J_t^{\mathrm{mid}},
 \end{align}
-and letting $\mathbf{q}^{\mathrm{flat}}_t$ denote the direct expert logits from the flat branch, the mid router combines them as
+and letting $\mathbf{q}^{\mathrm{direct}}_t$ denote the direct expert logits, the mid router combines them as
 \begin{align}
 \mathbf{q}^{\mathrm{mid}}_t
 &=
 \alpha_{\mathrm{struct}}\,\mathbf{q}^{\mathrm{struct}}_t
 +
-\alpha_{a}\,\mathbf{q}^{\mathrm{flat}}_t, \\
+\alpha_{\mathrm{dir}}\,\mathbf{q}^{\mathrm{direct}}_t, \\
 \boldsymbol{\pi}^{\mathrm{mid}}_t
 &=
 \mathrm{softmax}\!\left(\mathbf{q}^{\mathrm{mid}}_t / \tau_{\mathrm{mid}}\right).
 \end{align}
-In code, the structured branch is formed by multiplying the normalized group probability and the normalized within-group expert probability, mapping the result back to logit space, and then adding the flat expert logits with coefficients $\alpha_{\mathrm{struct}}$ and $\alpha_a$. This hybrid form suits the mid stage: session-level behavior is still organized enough to benefit from group-aware routing, but it can also drift away from the dominant pattern, so a direct correction path is useful.
+This hybrid form suits the mid stage: session-level behavior is still organized enough to benefit from group-aware routing, but it can also drift away from the dominant pattern, so a direct correction path is useful.
 
 \subsubsection{Micro Router: Direct Expert Routing}
 
-The micro stage focuses on only the most recent interactions before the target position. This feature view is highly local and is intended to capture immediate interest and next-step-sensitive transitions. Because such evidence is already sharp and close to the prediction target, introducing an additional group bottleneck is less helpful. The micro stage therefore uses the \texttt{w1\_flat} router, which relies only on the flat primitive.
+The micro stage focuses on only the most recent interactions before the target position. This feature view is highly local and is intended to capture immediate interest and next-step-sensitive transitions. Because such evidence is already sharp and close to the prediction target, introducing an additional group bottleneck is less helpful. The micro stage therefore uses direct expert routing.
 
 \[
 \mathbf{q}^{\mathrm{micro}}_t
 =
-\mathbf{q}^{\mathrm{flat}}_t,
+\mathbf{q}^{\mathrm{direct}}_t,
 \qquad
 \boldsymbol{\pi}^{\mathrm{micro}}_t
 =
@@ -260,7 +276,7 @@ Taken together, the three routers form a coarse-to-fine hierarchy. The macro sta
 \subsection{Training Objective and Router Stabilization}
 \label{sec:training-objective}
 
-FMoE is trained with the standard next-item prediction loss together with two router-side stabilizers. In the A6 setting used in our main experiments, the active auxiliary terms are route consistency and z-loss, while optional balance- or bias-related regularizers are disabled in the launcher configuration. The first auxiliary term encourages behaviorally similar states to induce similar routing decisions. The second regularizes router logits so that gating does not become numerically unstable or excessively sharp, following the stabilizing practice used in sparse expert models~\cite{zoph2022stmoe}.
+FMoE is trained with the standard next-item prediction loss together with two router-side stabilizers. In the final model used in our main experiments, the active auxiliary terms are route consistency and z-loss, while optional balance- or bias-related regularizers are disabled. The first auxiliary term encourages behaviorally similar states to induce similar routing decisions. The second regularizes router logits so that gating does not become numerically unstable or excessively sharp, following the stabilizing practice used in sparse expert models~\cite{zoph2022stmoe}.
 
 \subsubsection{Main Recommendation Objective}
 
@@ -339,7 +355,7 @@ where $\lambda_{\mathrm{cons}}$ and $\lambda_z$ control the strength of route co
 \label{sec:experiments}
 
 \subsection{Experimental Setup}
-Our main model is the A6 configuration described in Section~\ref{sec:method}: a macro--mid--micro layout with \texttt{w4\_bxd}, \texttt{w6\_bxd\_plus\_a}, and \texttt{w1\_flat}, feature-only learned routers, and no bias-related routing terms. Training uses the standard next-item objective together with route consistency and z-loss, following Section~\ref{sec:training-objective}.
+Our main model follows the architecture described in Section~\ref{sec:method}: a macro--mid--micro layout with hierarchical macro routing, hybrid mid routing, direct micro routing, feature-only learned routers, and no bias-related routing terms. Training uses the standard next-item objective together with route consistency and z-loss, following Section~\ref{sec:training-objective}.
 
 We compare FMoE against representative recurrent, graph-based, Transformer-based, frequency-aware, Mamba-based, and MoE-based sequential recommenders. The primary comparison set includes GRU4Rec, SASRec, TiSASRec, and DuoRec~\cite{hidasi2016gru4rec,kang2018sasrec,li2020tisasrec,qiu2022duorec}. It also includes BSARec, SIGMA, DIF-SR, and FAME~\cite{shin2024bsarec,liu2025sigma,xie2022difsr,liu2025fame}. When space permits, we additionally include Caser, SR-GNN, BERT4Rec, FMLP-Rec, and FEARec~\cite{tang2018caser,wu2019srgnn,sun2019bert4rec,zhou2022fmlprec,du2023fearec}.
 
