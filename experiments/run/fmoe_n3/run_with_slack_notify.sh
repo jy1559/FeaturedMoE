@@ -20,6 +20,59 @@ Notes:
 USAGE
 }
 
+infer_slack_defaults() {
+  local -n _cmd_ref=$1
+  local current_title="$2"
+  local current_note="$3"
+  local inferred_title="${current_title}"
+  local inferred_note="${current_note}"
+  local inferred_total_runs="${SLACK_NOTIFY_TOTAL_RUNS:-}"
+
+  local script_path=""
+  if [[ ${#_cmd_ref[@]} -ge 2 && ( "${_cmd_ref[0]}" == "bash" || "${_cmd_ref[0]}" == "sh" ) ]]; then
+    script_path="${_cmd_ref[1]}"
+  elif [[ ${#_cmd_ref[@]} -ge 1 ]]; then
+    script_path="${_cmd_ref[0]}"
+  fi
+
+  local script_name=""
+  if [[ -n "${script_path}" ]]; then
+    script_name="$(basename "${script_path}")"
+  fi
+
+  if [[ "${current_title}" == "FMoE Run" && -n "${script_name}" ]]; then
+    case "${script_name}" in
+      phase_14_retail_wrapper_recovery_8h.sh)
+        inferred_title="Retail Wrapper Recovery 8H"
+        ;;
+      stageA.sh)
+        inferred_title="Transfer Learning StageA"
+        ;;
+      *.sh)
+        inferred_title="${script_name%.sh}"
+        ;;
+    esac
+  fi
+
+  if [[ -z "${current_note}" && "${script_name}" == "phase_14_retail_wrapper_recovery_8h.sh" ]]; then
+    inferred_note="retail_rocket A8/A10/A11/A12 x 8 hparams"
+  fi
+  if [[ -z "${current_note}" && "${script_name}" == "stageA.sh" ]]; then
+    inferred_note="4 dataset pairs with source/target transfer sweeps"
+  fi
+
+  if [[ -z "${inferred_total_runs}" && "${script_name}" == "phase_14_retail_wrapper_recovery_8h.sh" ]]; then
+    inferred_total_runs="28"
+  fi
+  if [[ -z "${inferred_total_runs}" && "${script_name}" == "stageA.sh" ]]; then
+    inferred_total_runs="72"
+  fi
+
+  title="${inferred_title}"
+  note="${inferred_note}"
+  export SLACK_NOTIFY_TOTAL_RUNS="${inferred_total_runs}"
+}
+
 json_escape() {
   local s="$1"
   s="${s//\\/\\\\}"
@@ -143,6 +196,7 @@ fi
 
 cmd=("$@")
 command_str="$(printf "%q " "${cmd[@]}")"
+infer_slack_defaults cmd "${title}" "${note}"
 
 start_epoch="$(date +%s)"
 start_kst="$(TZ=Asia/Seoul date +"%Y-%m-%d %H:%M:%S KST")"

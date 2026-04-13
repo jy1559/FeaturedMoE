@@ -100,13 +100,14 @@ import traceback
 import signal
 import atexit
 import re
+from itertools import product
 import numpy as np
 import yaml
 from pathlib import Path
 from datetime import datetime
 from collections import OrderedDict
 
-from hyperopt import fmin, tpe, hp, STATUS_OK, STATUS_FAIL, Trials, space_eval
+from hyperopt import fmin, tpe, rand, hp, STATUS_OK, STATUS_FAIL, Trials, space_eval
 
 from recbole.config import Config
 from recbole.data import create_dataset, data_preparation
@@ -164,6 +165,11 @@ _FEATURED_MOE_V2_MODELS = {
     "featuredmoe_n3",
 }
 
+_SIDEINFO_SEQ_MODELS = {
+    "difsr",
+    "fdsa",
+}
+
 
 def _config_get(config_obj, key, default=None):
     if config_obj is None:
@@ -174,6 +180,73 @@ def _config_get(config_obj, key, default=None):
         return config_obj[key]
     except Exception:
         return getattr(config_obj, key, default)
+
+
+def _build_item_counts_from_loader(data_loader):
+    dataset = getattr(data_loader, "dataset", None)
+    if dataset is None:
+        return None
+    inter_feat = getattr(dataset, "inter_feat", None)
+    iid_field = getattr(dataset, "iid_field", None)
+    n_items = int(getattr(dataset, "item_num", 0))
+    if inter_feat is None or iid_field is None or n_items <= 0:
+        return None
+    item_ids = inter_feat[iid_field]
+    if not torch.is_tensor(item_ids):
+        item_ids = torch.as_tensor(item_ids)
+    item_ids = item_ids.long().clamp(min=0)
+    return torch.bincount(item_ids, minlength=n_items)[:n_items].cpu()
+
+
+def _extract_cold_slice_metrics(special_metrics: dict | None) -> dict:
+    out = {
+        "count": 0,
+        "hit@5": 0.0,
+        "hit@10": 0.0,
+        "hit@20": 0.0,
+        "ndcg@5": 0.0,
+        "ndcg@10": 0.0,
+        "ndcg@20": 0.0,
+        "mrr@5": 0.0,
+        "mrr@10": 0.0,
+        "mrr@20": 0.0,
+    }
+    if not isinstance(special_metrics, dict):
+        return out
+    try:
+        slices = special_metrics.get("slices", {}) or {}
+        pop = slices.get("target_popularity_abs", {}) or {}
+        cold = pop.get("cold_0", {}) or {}
+        out["count"] = int(cold.get("count", 0) or 0)
+        out["hit@5"] = float(cold.get("hit@5", 0.0) or 0.0)
+        out["hit@10"] = float(cold.get("hit@10", 0.0) or 0.0)
+        out["mrr@20"] = float(cold.get("mrr@20", 0.0) or 0.0)
+        out["mrr@5"] = float(cold.get("mrr@5", 0.0) or 0.0)
+        out["mrr@10"] = float(cold.get("mrr@10", 0.0) or 0.0)
+        out["hit@20"] = float(cold.get("hit@20", 0.0) or 0.0)
+        out["ndcg@5"] = float(cold.get("ndcg@5", 0.0) or 0.0)
+        out["ndcg@10"] = float(cold.get("ndcg@10", 0.0) or 0.0)
+        out["ndcg@20"] = float(cold.get("ndcg@20", 0.0) or 0.0)
+    except Exception:
+        return out
+    return out
+
+
+def _extract_main_eval_seen_unseen_stats(trainer, split_name: str) -> dict:
+    out = {"total_targets": 0, "seen_targets": 0, "unseen_targets": 0, "dropped_eval_rows": 0, "enabled": False}
+    stats = getattr(trainer, "_main_eval_unseen_filter_stats", None)
+    if not isinstance(stats, dict):
+        return out
+    rec = stats.get(str(split_name), None)
+    if not isinstance(rec, dict):
+        return out
+    for k in ("total_targets", "seen_targets", "unseen_targets", "dropped_eval_rows"):
+        try:
+            out[k] = int(rec.get(k, 0) or 0)
+        except Exception:
+            out[k] = 0
+    out["enabled"] = bool(rec.get("enabled", False))
+    return out
 
 
 def _normalize_model_name(raw) -> str:
@@ -208,23 +281,23 @@ def _sync_model_dimensions(cfg_dict: dict) -> None:
 
 
 def _ensure_feature_load_columns(cfg_dict: dict) -> None:
-    """Guarantee engineered feature columns are loaded for feature-aware MoE models.
+    """Guarantee engineered feature columns are loaded for feature-aware models.
 
     Some launch paths can accidentally keep a minimal `load_col.inter` and silently drop
     engineered feature fields, which then forces zero-filled feature fallbacks.
     """
     model_name = _normalize_model_name(cfg_dict.get("model", ""))
-    if model_name not in _FEATURE_AWARE_MOE_MODELS:
+    is_moe = model_name in _FEATURE_AWARE_MOE_MODELS
+    is_sideinfo = model_name in _SIDEINFO_SEQ_MODELS
+    if not (is_moe or is_sideinfo):
         return
 
     feature_mode = str(cfg_dict.get("feature_mode", "")).strip().lower()
     data_path = str(cfg_dict.get("data_path", "")).strip().lower()
-    uses_feature_added = ("feature_added" in data_path) or (feature_mode in {"full", "full_v2", "full_v3", "feature_added"})
+    uses_feature_added = ("feature_added" in data_path) or (
+        feature_mode in {"full", "full_v2", "full_v3", "full_v4", "feature_added"}
+    )
     if not uses_feature_added:
-        return
-
-    feature_cols = list(_N3_ALL_FEATURE_COLUMNS or [])
-    if not feature_cols:
         return
 
     load_col = cfg_dict.get("load_col")
@@ -237,12 +310,42 @@ def _ensure_feature_load_columns(cfg_dict: dict) -> None:
 
     mandatory = ["session_id", "item_id", "timestamp"]
     merged = []
+    feature_cols = list(_N3_ALL_FEATURE_COLUMNS or []) if is_moe else []
     for col in list(inter_cols) + mandatory + feature_cols:
         name = str(col).strip()
         if name and name not in merged:
             merged.append(name)
 
     load_col["inter"] = merged
+    if is_moe:
+        feature_cols = list(_N3_ALL_FEATURE_COLUMNS or [])
+        for col in feature_cols:
+            name = str(col).strip()
+            if name and name not in load_col["inter"]:
+                load_col["inter"].append(name)
+
+    if is_sideinfo:
+        selected = cfg_dict.get("selected_features")
+        if isinstance(selected, str):
+            selected = [selected]
+        if not isinstance(selected, list):
+            selected = []
+        selected = [str(x).strip() for x in selected if str(x).strip()]
+        if not selected:
+            selected = ["category"]
+            cfg_dict["selected_features"] = selected
+
+        item_cols = load_col.get("item", [])
+        if not isinstance(item_cols, list):
+            item_cols = []
+        merged_item = []
+        for col in list(item_cols) + ["item_id"] + selected:
+            name = str(col).strip()
+            if name and name not in merged_item:
+                merged_item.append(name)
+        load_col["item"] = merged_item
+
+    cfg_dict["load_col"] = load_col
 
 
 def _model_uses_feature_inputs(cfg_dict: dict) -> bool:
@@ -251,8 +354,7 @@ def _model_uses_feature_inputs(cfg_dict: dict) -> bool:
         return False
     feature_mode = str(cfg_dict.get("feature_mode", "")).strip().lower()
     data_path = str(cfg_dict.get("data_path", "")).strip().lower()
-    return ("feature_added" in data_path) or (feature_mode in {"full", "full_v2", "full_v3", "feature_added"})
-    cfg_dict["load_col"] = load_col
+    return ("feature_added" in data_path) or (feature_mode in {"full", "full_v2", "full_v3", "full_v4", "feature_added"})
 
     # Legacy behavior for v1/baseline models.
     if "hidden_size" in cfg_dict:
@@ -500,7 +602,7 @@ def _resolve_cache_source_tag(cfg_dict):
         return "basic"
 
     feature_mode = str(cfg_dict.get("feature_mode", "")).lower()
-    if feature_mode in ("full", "feature_added"):
+    if feature_mode in ("full", "full_v2", "full_v3", "full_v4", "feature_added"):
         return "feature_added"
     if feature_mode == "basic":
         return "basic"
@@ -600,6 +702,13 @@ def get_args():
         help="Random seed for TPE sampler (default: 42)",
     )
     parser.add_argument(
+        "--search-algo",
+        dest="search_algo",
+        choices=("tpe", "random"),
+        default="tpe",
+        help="Search algorithm for hyperopt fmin (default: tpe)",
+    )
+    parser.add_argument(
         "--space-yaml", dest="space_yaml", type=str, default=None,
         help="Optional YAML file with {fixed, search} to override tuning space.",
     )
@@ -643,6 +752,10 @@ def get_args():
             args.run_axis = tok.split("=", 1)[1]
         elif tok.startswith("run_phase="):
             args.run_phase = tok.split("=", 1)[1]
+        elif tok.startswith("search_algo="):
+            raw_algo = tok.split("=", 1)[1].strip().lower()
+            if raw_algo in {"tpe", "random"}:
+                args.search_algo = raw_algo
         elif tok.startswith("parent_result="):
             args.parent_result = tok.split("=", 1)[1]
         else:
@@ -743,6 +856,52 @@ def build_hyperopt_space(search: dict, type_overrides: dict | None = None) -> di
             space[key] = hp.choice(key, values)
 
     return space
+
+
+def _is_choice_only_space(tuned_search: dict, type_overrides: dict | None = None) -> bool:
+    if not tuned_search:
+        return False
+    for key, values in tuned_search.items():
+        if not isinstance(values, list) or len(values) <= 1:
+            return False
+        if _space_type(key, type_overrides=type_overrides) != "choice":
+            return False
+    return True
+
+
+def _enumerate_choice_combos(tuned_search: dict, keys: list[str]) -> list[dict]:
+    value_lists = [list(tuned_search[k]) for k in keys]
+    combos: list[dict] = []
+    for values in product(*value_lists):
+        combos.append({k: v for k, v in zip(keys, values)})
+    return combos
+
+
+def _choice_signature(params: dict, keys: list[str]) -> tuple[tuple[str, str], ...]:
+    sig: list[tuple[str, str]] = []
+    for key in keys:
+        value = params.get(key)
+        if isinstance(value, float):
+            # Normalize float noise so repeated categorical choices hash identically.
+            value = round(float(value), 16)
+        try:
+            token = json.dumps(value, ensure_ascii=True, sort_keys=True)
+        except Exception:
+            token = repr(value)
+        sig.append((key, token))
+    return tuple(sig)
+
+
+def _pick_first_unused_choice_combo(
+    combos: list[dict],
+    used_signatures: set[tuple[tuple[str, str], ...]],
+    keys: list[str],
+) -> dict | None:
+    for combo in combos:
+        sig = _choice_signature(combo, keys)
+        if sig not in used_signatures:
+            return dict(combo)
+    return None
 
 
 def _hparam_group(key: str) -> str:
@@ -1012,6 +1171,7 @@ def _dropout_target_keys(model_name: str) -> list[str]:
     targets = ["hidden_dropout_prob"]
     if model_key in {
         "sasrec",
+        "fdsa",
         "bsarec",
         "fenrec",
         "patt",
@@ -1711,6 +1871,10 @@ def _build_special_metrics_payload(
                 "valid_special_metrics": valid_special or {},
                 "test_special_metrics": test_special or {},
                 "early_valid_special_metrics": trial.get("early_valid_special_metrics") or {},
+                "valid_main_eval_filter": trial.get("valid_main_eval_filter") or {},
+                "test_main_eval_filter": trial.get("test_main_eval_filter") or {},
+                "valid_cold_target_metrics": trial.get("valid_cold_target_metrics") or {},
+                "test_cold_target_metrics": trial.get("test_cold_target_metrics") or {},
             }
         )
     if not rows:
@@ -1737,6 +1901,10 @@ def _build_special_metrics_payload(
         "best_valid_special_metrics": best_row.get("valid_special_metrics", {}) or {},
         "early_valid_special_metrics": best_row.get("early_valid_special_metrics", {}) or {},
         "test_special_metrics": best_row.get("test_special_metrics", {}) or {},
+        "best_valid_main_eval_filter": best_row.get("valid_main_eval_filter", {}) or {},
+        "test_main_eval_filter": best_row.get("test_main_eval_filter", {}) or {},
+        "best_valid_cold_target_metrics": best_row.get("valid_cold_target_metrics", {}) or {},
+        "test_cold_target_metrics": best_row.get("test_cold_target_metrics", {}) or {},
         "trials": rows,
     }
 
@@ -2045,9 +2213,27 @@ def _copy_stage_file(src: Path, dst: Path | str) -> str:
     return str(target.resolve())
 
 
+def _export_stage_file(src: Path, dst: Path | str) -> str:
+    target = Path(dst)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, target)
+    return str(target.resolve())
+
+
 def _run_trainer_eval(trainer, data_loader, *, split_name: str, show_progress: bool, collect_special: bool, collect_diag: bool):
     eval_special = None
     eval_diag = None
+    if hasattr(trainer, "_main_eval_unseen_filter_stats"):
+        try:
+            trainer._main_eval_unseen_filter_stats[str(split_name)] = {
+                "total_targets": 0,
+                "seen_targets": 0,
+                "unseen_targets": 0,
+                "dropped_eval_rows": 0,
+                "enabled": False,
+            }
+        except Exception:
+            pass
     if collect_special:
         from recbole_patch import begin_special_eval
         begin_special_eval(trainer, data_loader, split_name=split_name)
@@ -2063,7 +2249,167 @@ def _run_trainer_eval(trainer, data_loader, *, split_name: str, show_progress: b
         eval_diag = end_diagnostic_eval(trainer)
     if isinstance(eval_result, tuple):
         eval_result = next((x for x in eval_result if isinstance(x, dict)), eval_result[0])
-    return eval_result, eval_special, eval_diag
+    eval_filter = _extract_main_eval_seen_unseen_stats(trainer, str(split_name))
+    return eval_result, eval_special, eval_diag, eval_filter
+
+
+def _transfer_enabled(raw: object) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _transfer_cfg(cfg_dict: dict) -> dict:
+    raw = cfg_dict.get("transfer", {})
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _transfer_group_router_name(source_architecture: str) -> str:
+    arch = str(source_architecture or "").strip().upper()
+    if arch == "A10":
+        return "router_b"
+    if arch == "A12":
+        return "router_e"
+    raise ValueError(
+        f"Unsupported transfer source_architecture={source_architecture!r}. "
+        "StageA currently supports A10/A12 only."
+    )
+
+
+def _transfer_prefixes(*, mode: str, source_architecture: str) -> list[str]:
+    macro_prefix = "stage_executor.stage_blocks.macro."
+    if mode == "macro_feature_encoder":
+        return [macro_prefix + "feature_encoder."]
+    if mode == "macro_group_router":
+        return [macro_prefix + _transfer_group_router_name(source_architecture) + "."]
+    if mode == "macro_encoder_all":
+        group_router = _transfer_group_router_name(source_architecture)
+        return [
+            macro_prefix + "feature_encoder.",
+            macro_prefix + group_router + ".",
+            macro_prefix + "router_d.",
+        ]
+    return []
+
+
+def _apply_transfer_initialization(model, cfg_dict: dict) -> dict:
+    transfer = _transfer_cfg(cfg_dict)
+    enabled = _transfer_enabled(transfer.get("enable", False))
+    mode = str(transfer.get("mode", "none") or "none").strip().lower()
+    if not enabled or mode in {"", "none"}:
+        return {"enabled": False, "mode": "none"}
+
+    source_checkpoint = str(transfer.get("source_checkpoint", "") or "").strip()
+    if not source_checkpoint:
+        raise RuntimeError(f"Transfer is enabled but transfer.source_checkpoint is empty (mode={mode})")
+    checkpoint_path = Path(source_checkpoint)
+    if not checkpoint_path.exists():
+        raise RuntimeError(f"Transfer checkpoint not found: {checkpoint_path}")
+
+    source_architecture = str(transfer.get("source_architecture", "") or "").strip().upper()
+    strict_shape = _transfer_enabled(transfer.get("strict_shape", False))
+    source_state = torch.load(checkpoint_path, map_location="cpu")
+    target_state = model.state_dict()
+
+    if mode == "full_model":
+        if strict_shape:
+            missing, unexpected = model.load_state_dict(source_state, strict=True)
+            # strict=True should already raise on mismatch; keep a stable report shape.
+            return {
+                "enabled": True,
+                "mode": mode,
+                "loaded_tensors": len(source_state),
+                "skipped_shape": 0,
+                "skipped_missing": 0,
+                "missing_keys": len(missing),
+                "unexpected_keys": len(unexpected),
+                "source_checkpoint": str(checkpoint_path.resolve()),
+            }
+        matched = {
+            key: value
+            for key, value in source_state.items()
+            if key in target_state and tuple(target_state[key].shape) == tuple(value.shape)
+        }
+        skipped_shape = sum(
+            1
+            for key, value in source_state.items()
+            if key in target_state and tuple(target_state[key].shape) != tuple(value.shape)
+        )
+        skipped_missing = sum(1 for key in source_state if key not in target_state)
+        merged_state = model.state_dict()
+        merged_state.update(matched)
+        load_result = model.load_state_dict(merged_state, strict=False)
+        report = {
+            "enabled": True,
+            "mode": mode,
+            "loaded_tensors": len(matched),
+            "skipped_shape": skipped_shape,
+            "skipped_missing": skipped_missing,
+            "missing_keys": len(getattr(load_result, "missing_keys", []) or []),
+            "unexpected_keys": len(getattr(load_result, "unexpected_keys", []) or []),
+            "source_checkpoint": str(checkpoint_path.resolve()),
+        }
+        print(
+            "[transfer-init] "
+            f"mode={mode} source_architecture={source_architecture or '-'} "
+            f"loaded={report['loaded_tensors']} skipped_shape={report['skipped_shape']} "
+            f"skipped_missing={report['skipped_missing']} source={report['source_checkpoint']}"
+        )
+        return report
+
+    prefixes = _transfer_prefixes(mode=mode, source_architecture=source_architecture)
+    if not prefixes:
+        raise RuntimeError(
+            f"Unsupported transfer.mode={mode!r}. "
+            "Expected one of: none, macro_feature_encoder, macro_group_router, macro_encoder_all, full_model."
+        )
+
+    matched: dict[str, torch.Tensor] = {}
+    skipped_shape = 0
+    skipped_missing = 0
+    considered = 0
+    for key, value in source_state.items():
+        if not any(key.startswith(prefix) for prefix in prefixes):
+            continue
+        considered += 1
+        target_tensor = target_state.get(key)
+        if target_tensor is None:
+            skipped_missing += 1
+            continue
+        if tuple(target_tensor.shape) != tuple(value.shape):
+            skipped_shape += 1
+            continue
+        matched[key] = value
+
+    merged_state = model.state_dict()
+    merged_state.update(matched)
+    load_result = model.load_state_dict(merged_state, strict=False)
+    report = {
+        "enabled": True,
+        "mode": mode,
+        "loaded_tensors": len(matched),
+        "considered_tensors": considered,
+        "skipped_shape": skipped_shape,
+        "skipped_missing": skipped_missing,
+        "missing_keys": len(getattr(load_result, "missing_keys", []) or []),
+        "unexpected_keys": len(getattr(load_result, "unexpected_keys", []) or []),
+        "source_checkpoint": str(checkpoint_path.resolve()),
+        "prefixes": prefixes,
+    }
+    print(
+        "[transfer-init] "
+        f"mode={mode} source_architecture={source_architecture or '-'} "
+        f"loaded={report['loaded_tensors']}/{report['considered_tensors']} "
+        f"skipped_shape={report['skipped_shape']} skipped_missing={report['skipped_missing']} "
+        f"source={report['source_checkpoint']}"
+    )
+    if not matched:
+        print(f"[transfer-init][warn] no compatible tensors loaded for mode={mode} prefixes={prefixes}")
+    return report
 
 
 def _collect_feature_ablation_metrics(
@@ -2194,6 +2540,10 @@ def _build_eval_runtime(cfg_dict: dict):
     trainer_cls = get_trainer(config["MODEL_TYPE"], config["model"])
     trainer = trainer_cls(config, model)
     setattr(trainer, "_disable_patch_logging", True)
+    trainer._fmoe_special_item_counts_train = _build_item_counts_from_loader(train_data)
+    trainer._main_eval_unseen_filter_stats = {}
+    trainer._fmoe_special_item_counts_train = _build_item_counts_from_loader(train_data)
+    trainer._main_eval_unseen_filter_stats = {}
     return cfg, config, dataset, train_data, valid_data, test_data, model, trainer
 
 
@@ -2241,7 +2591,7 @@ def _collect_deferred_combo_best_artifacts(
         gc.collect()
 
         trainer.model.set_feature_ablation_mode("none")
-        best_valid_result, best_valid_special_metrics, best_valid_diag = _run_trainer_eval(
+        best_valid_result, best_valid_special_metrics, best_valid_diag, best_valid_filter = _run_trainer_eval(
             trainer,
             valid_data,
             split_name="best_valid",
@@ -2249,7 +2599,7 @@ def _collect_deferred_combo_best_artifacts(
             collect_special=special_logging_enabled,
             collect_diag=diag_logging_enabled,
         )
-        test_result, test_special_metrics, test_diag = _run_trainer_eval(
+        test_result, test_special_metrics, test_diag, test_filter = _run_trainer_eval(
             trainer,
             test_data,
             split_name="test",
@@ -2283,7 +2633,7 @@ def _collect_deferred_combo_best_artifacts(
             del probe_state
             gc.collect()
             trainer.model.set_feature_ablation_mode("none")
-            early_valid_result, early_valid_special_metrics, early_valid_diag = _run_trainer_eval(
+            early_valid_result, early_valid_special_metrics, early_valid_diag, early_valid_filter = _run_trainer_eval(
                 trainer,
                 valid_data,
                 split_name="early_valid",
@@ -2312,12 +2662,17 @@ def _collect_deferred_combo_best_artifacts(
             "test_result": {k: float(v) for k, v in (test_result or {}).items()},
             "valid_special_metrics": best_valid_special_metrics or {},
             "test_special_metrics": test_special_metrics or {},
+            "valid_main_eval_filter": best_valid_filter or {},
+            "test_main_eval_filter": test_filter or {},
             "valid_diag": best_valid_diag or {},
             "test_diag": test_diag or {},
             "feature_ablation_metrics": feature_ablation_metrics or {},
             "early_valid_result": {k: float(v) for k, v in (early_valid_result or {}).items()} if early_valid_result else {},
             "early_valid_special_metrics": early_valid_special_metrics or {},
+            "early_valid_main_eval_filter": early_valid_filter if 'early_valid_filter' in locals() else {},
             "early_valid_diag": early_valid_diag or {},
+            "valid_cold_target_metrics": _extract_cold_slice_metrics(best_valid_special_metrics),
+            "test_cold_target_metrics": _extract_cold_slice_metrics(test_special_metrics),
             "artifact_trial_num": int(trial_num),
         }
     finally:
@@ -2404,6 +2759,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
 
     model_cls = get_model(config["model"])
     model = model_cls(config, train_data.dataset).to(config["device"])
+    transfer_report = _apply_transfer_initialization(model, cfg)
 
     trainer_cls = get_trainer(config["MODEL_TYPE"], config["model"])
     trainer = trainer_cls(config, model)
@@ -2613,7 +2969,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 continue
 
             collect_epoch_logging = eval_logging_timing == "per_eval" and not defer_detailed_artifacts
-            vr, epoch_valid_special, epoch_valid_diag = _run_eval(
+            vr, epoch_valid_special, epoch_valid_diag, _epoch_valid_filter = _run_eval(
                 valid_data,
                 split_name="valid",
                 collect_special=collect_epoch_logging,
@@ -2703,7 +3059,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             print(f"[WARN] Missing best-stage checkpoint before test: {best_stage_path}")
 
         collect_final_artifacts = not defer_detailed_artifacts
-        best_valid_eval_result, best_valid_special_metrics, best_valid_diag = _run_eval(
+        best_valid_eval_result, best_valid_special_metrics, best_valid_diag, best_valid_filter = _run_eval(
             valid_data,
             split_name="best_valid",
             collect_special=collect_final_artifacts,
@@ -2732,7 +3088,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             if isinstance(best_valid_diag, dict):
                 best_valid_diag["feature_ablation"] = feature_ablation_metrics
 
-        tr, test_special_metrics, test_diag = _run_eval(
+        tr, test_special_metrics, test_diag, test_filter = _run_eval(
             test_data,
             split_name="test",
             collect_special=collect_final_artifacts,
@@ -2766,6 +3122,10 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "test_result": test_result,
             "valid_special_metrics": best_valid_special_metrics,
             "test_special_metrics": test_special_metrics,
+            "valid_main_eval_filter": best_valid_filter or {},
+            "test_main_eval_filter": test_filter or {},
+            "valid_cold_target_metrics": _extract_cold_slice_metrics(best_valid_special_metrics),
+            "test_cold_target_metrics": _extract_cold_slice_metrics(test_special_metrics),
             "valid_diag": best_valid_diag,
             "test_diag": test_diag,
             "valid_zero_diag": valid_zero_diag,
@@ -2782,6 +3142,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "artifact_best_checkpoint": artifact_best_checkpoint,
             "artifact_probe_checkpoint": artifact_probe_checkpoint,
             "artifact_logging_policy": artifact_logging_policy,
+            "transfer_report": transfer_report,
         }
     finally:
         _cleanup_temp_path(best_stage_path)
@@ -2819,6 +3180,8 @@ def _save_results(
     parent_result="",
     interrupted=False,
     interrupted_at=None,
+    best_checkpoint_file="",
+    probe_checkpoint_file="",
 ):
     path = Path(path)
     dataset_canonical = _canonical_dataset_name(dataset)
@@ -2888,6 +3251,10 @@ def _save_results(
         data["space_yaml"] = str(space_yaml)
     if final_best is not None:
         data["best_params"] = {k: _ser(v) for k, v in final_best.items()}
+    if str(best_checkpoint_file or "").strip():
+        data["best_checkpoint_file"] = str(best_checkpoint_file)
+    if str(probe_checkpoint_file or "").strip():
+        data["probe_checkpoint_file"] = str(probe_checkpoint_file)
     ok = [t for t in normalized_trials if t.get("status") == "ok"]
     special_payload = _build_special_metrics_payload(
         normalized_trials=normalized_trials,
@@ -2913,6 +3280,10 @@ def _save_results(
         data["early_valid_result"] = bt.get("early_valid_result") or {}
         data["early_valid_special_metrics"] = bt.get("early_valid_special_metrics") or {}
         data["test_special_metrics"] = bt.get("test_special_metrics") or {}
+        data["best_valid_main_eval_filter"] = bt.get("valid_main_eval_filter") or {}
+        data["test_main_eval_filter"] = bt.get("test_main_eval_filter") or {}
+        data["best_valid_cold_target_metrics"] = bt.get("valid_cold_target_metrics") or {}
+        data["test_cold_target_metrics"] = bt.get("test_cold_target_metrics") or {}
         if bt.get("feature_ablation_metrics"):
             data["feature_ablation_metrics"] = bt.get("feature_ablation_metrics") or {}
     data["normal_result_mirror_file"] = str(mirror_paths["normal_result"].resolve())
@@ -3126,6 +3497,8 @@ def _save_results(
         "normal_result_mirror_file": str(mirror_paths["normal_result"].resolve()),
         "special_result_file": str(mirror_paths["special_result"].resolve()) if special_payload else "",
         "special_log_file": str(mirror_paths["special_log"].resolve()) if special_payload else "",
+        "best_checkpoint_file": str(best_checkpoint_file or ""),
+        "probe_checkpoint_file": str(probe_checkpoint_file or ""),
         "diag_dir": str((path.parent / "diag").resolve()),
         "diag_meta_file": str(diag_paths["meta"].resolve()),
         "diag_tier_a_final_file": str(diag_paths["tier_a_final"].resolve()),
@@ -3610,6 +3983,26 @@ def main():
         )
         args.max_evals = 1
 
+    unique_choice_enabled = False
+    choice_keys: list[str] = []
+    choice_combos: list[dict] = []
+    used_choice_signatures: set[tuple[tuple[str, str], ...]] = set()
+    if _is_choice_only_space(tuned_search, type_overrides=space_type_overrides):
+        choice_keys = sorted(tuned_search.keys())
+        choice_combos = _enumerate_choice_combos(tuned_search, choice_keys)
+        n_choice_combos = len(choice_combos)
+        if n_choice_combos > 0 and args.max_evals > n_choice_combos:
+            print(
+                f"[Info] Finite choice-only space has {n_choice_combos} unique combos; "
+                f"capping max_evals {args.max_evals} -> {n_choice_combos}"
+            )
+            args.max_evals = n_choice_combos
+        if n_choice_combos > 0:
+            unique_choice_enabled = True
+            print(
+                f"[UniqueChoice] enabled: dedupe/remap duplicates across {n_choice_combos} finite combos"
+            )
+
     # Print header
     n_discrete = 1
     for k, vals in tuned_search.items():
@@ -3618,9 +4011,10 @@ def main():
     total_pool_est = n_discrete  # continuous params are infinite, show discrete combos
 
     print(f"\n{'=' * 65}")
-    print(f"  Hyperopt TPE  |  {model} x {dataset}")
+    print(f"  Hyperopt  |  {model} x {dataset}")
     print(f"  max_evals={args.max_evals}  epochs={cfg.get('epochs')}  "
           f"patience={cfg.get('stopping_step')}  wandb={'ON' if log_wandb else 'off'}")
+    print(f"  search_algo={str(args.search_algo).lower()}")
     train_bs = cfg.get("train_batch_size", "?")
     eval_bs = cfg.get("eval_batch_size", "?")
     print(f"  batch_size(train/valid/test)={train_bs}/{eval_bs}/{eval_bs}")
@@ -3655,6 +4049,7 @@ def main():
         "fixed": {k: str(v) for k, v in fixed_search.items()},
         "space_yaml": str(args.space_yaml) if args.space_yaml else "",
         "space_type_overrides": {k: str(v) for k, v in space_type_overrides.items()},
+        "search_algo": str(args.search_algo).lower(),
     }
 
     # Wandb (per-trial run mode)
@@ -3732,6 +4127,21 @@ def main():
         nonlocal best_so_far, interrupted, interrupted_at, combo_best_artifact_state
         trial_num = len(all_trials_data) + 1
         sampled_params = {k: v for k, v in params.items() if k != "__single_run__"}
+
+        if unique_choice_enabled and choice_keys:
+            proposed_sig = _choice_signature(sampled_params, choice_keys)
+            if proposed_sig in used_choice_signatures:
+                replacement = _pick_first_unused_choice_combo(choice_combos, used_choice_signatures, choice_keys)
+                if replacement is not None:
+                    sampled_params = replacement
+                    remap_sig = _choice_signature(sampled_params, choice_keys)
+                    print(f"[UniqueChoice] remap duplicate suggestion -> {sampled_params}")
+                    used_choice_signatures.add(remap_sig)
+                else:
+                    # Exhausted (should not happen when max_evals is capped); keep proposal.
+                    used_choice_signatures.add(proposed_sig)
+            else:
+                used_choice_signatures.add(proposed_sig)
 
         # Merge sampled hyperparams into base config
         cfg_trial = copy.deepcopy(cfg)
@@ -3852,6 +4262,10 @@ def main():
                 "test_result": result.get("test_result", {}),
                 "valid_special_metrics": result.get("valid_special_metrics") or {},
                 "test_special_metrics": result.get("test_special_metrics") or {},
+                "valid_main_eval_filter": result.get("valid_main_eval_filter") or {},
+                "test_main_eval_filter": result.get("test_main_eval_filter") or {},
+                "valid_cold_target_metrics": result.get("valid_cold_target_metrics") or {},
+                "test_cold_target_metrics": result.get("test_cold_target_metrics") or {},
                 "valid_diag": result.get("valid_diag") or {},
                 "test_diag": result.get("test_diag") or {},
                 "valid_zero_diag": result.get("valid_zero_diag") or {},
@@ -4014,10 +4428,12 @@ def main():
 
     # Run TPE
     try:
+        algo_name = str(args.search_algo).strip().lower()
+        algo_fn = rand.suggest if algo_name == "random" else tpe.suggest
         best = fmin(
             fn=objective,
             space=space,
-            algo=tpe.suggest,
+            algo=algo_fn,
             max_evals=args.max_evals,
             trials=trials,
             rstate=np.random.default_rng(args.seed),
@@ -4074,6 +4490,11 @@ def main():
                 row["early_valid_result"] = deferred_payload.get("early_valid_result") or {}
                 row["early_valid_special_metrics"] = deferred_payload.get("early_valid_special_metrics") or {}
                 row["test_special_metrics"] = deferred_payload.get("test_special_metrics") or {}
+                row["valid_main_eval_filter"] = deferred_payload.get("valid_main_eval_filter") or {}
+                row["early_valid_main_eval_filter"] = deferred_payload.get("early_valid_main_eval_filter") or {}
+                row["test_main_eval_filter"] = deferred_payload.get("test_main_eval_filter") or {}
+                row["valid_cold_target_metrics"] = deferred_payload.get("valid_cold_target_metrics") or {}
+                row["test_cold_target_metrics"] = deferred_payload.get("test_cold_target_metrics") or {}
                 row["valid_diag"] = deferred_payload.get("valid_diag") or {}
                 row["early_valid_diag"] = deferred_payload.get("early_valid_diag") or {}
                 row["test_diag"] = deferred_payload.get("test_diag") or {}
@@ -4090,6 +4511,19 @@ def main():
             best_hr10 = float(best_valid_result.get("hit@10", 0.0) or 0.0)
             test_mrr20 = float(best_test_result.get("mrr@20", 0.0) or 0.0)
             test_hr10 = float(best_test_result.get("hit@10", 0.0) or 0.0)
+
+    exported_best_checkpoint = ""
+    exported_probe_checkpoint = ""
+    combo_best_export_path = str(cfg.get("__artifact_combo_best_export_path", "") or "").strip()
+    combo_probe_export_path = str(cfg.get("__artifact_combo_probe_export_path", "") or "").strip()
+    if combo_best_export_path and combo_best_artifact_state.get("best_checkpoint"):
+        best_ckpt_src = Path(str(combo_best_artifact_state.get("best_checkpoint") or ""))
+        if best_ckpt_src.exists():
+            exported_best_checkpoint = _export_stage_file(best_ckpt_src, combo_best_export_path)
+    if combo_probe_export_path and combo_best_artifact_state.get("probe_checkpoint"):
+        probe_ckpt_src = Path(str(combo_best_artifact_state.get("probe_checkpoint") or ""))
+        if probe_ckpt_src.exists():
+            exported_probe_checkpoint = _export_stage_file(probe_ckpt_src, combo_probe_export_path)
 
     # Summary
     total_time = time.time() - global_t0
@@ -4127,6 +4561,8 @@ def main():
         parent_result=parent_result,
         interrupted=interrupted,
         interrupted_at=interrupted_at,
+        best_checkpoint_file=exported_best_checkpoint,
+        probe_checkpoint_file=exported_probe_checkpoint,
     )
     print(f"  Results -> {result_file}")
     if artifact_paths.get("normal_result_mirror_file"):

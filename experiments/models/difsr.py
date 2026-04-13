@@ -13,7 +13,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from recbole.model.abstract_recommender import SequentialRecommender
 import math
-import copy
 
 
 class DIFMultiHeadAttention(nn.Module):
@@ -220,6 +219,14 @@ class DIFSR(SequentialRecommender):
         self.selected_features = config['selected_features'] if 'selected_features' in config else []
         if isinstance(self.selected_features, str):
             self.selected_features = [self.selected_features]
+        self.selected_features = [str(x).strip() for x in self.selected_features if str(x).strip()]
+
+        # If not explicitly set, infer a practical default from item metadata.
+        if not self.selected_features:
+            item_feat = getattr(dataset, "item_feat", None)
+            item_cols = set(getattr(item_feat, "columns", []) or [])
+            if "category" in item_cols:
+                self.selected_features = ["category"]
         
         # Attribute hidden sizes (same as hidden_size by default)
         attr_hidden_size = config['attribute_hidden_size'] if 'attribute_hidden_size' in config else self.hidden_size
@@ -244,6 +251,7 @@ class DIFSR(SequentialRecommender):
         # Store item feature lookup table (item_id -> attribute_id)
         self.item_to_attr = {}
         
+        valid_features = []
         for i, feat in enumerate(self.selected_features):
             if feat in dataset.field2token_id:
                 n_values = len(dataset.field2token_id[feat])
@@ -251,6 +259,7 @@ class DIFSR(SequentialRecommender):
                 self.attribute_embeddings[feat] = nn.Embedding(
                     n_values, self.attribute_hidden_sizes[i], padding_idx=0
                 )
+                valid_features.append(feat)
                 
                 # Build item_id -> attribute lookup table from item_feat
                 if dataset.item_feat is not None and feat in dataset.item_feat.columns:
@@ -262,6 +271,8 @@ class DIFSR(SequentialRecommender):
                         if item_id < self.n_items:
                             lookup[item_id] = feat_id
                     self.register_buffer(f'{feat}_lookup', lookup)
+        self.selected_features = valid_features
+        self.attribute_hidden_sizes = [attr_hidden_size] * len(self.selected_features)
         
         # DIF Transformer layers
         self.transformer_layers = nn.ModuleList([
@@ -411,10 +422,12 @@ class DIFSR(SequentialRecommender):
         if self.use_attribute_predictor and hasattr(self, 'attribute_predictors'):
             for feat in self.selected_features:
                 if feat in self.attribute_predictors:
-                    target_feat = interaction.get(feat)
-                    if target_feat is not None:
+                    lookup_name = f'{feat}_lookup'
+                    if hasattr(self, lookup_name):
+                        lookup = getattr(self, lookup_name)
+                        target_feat = lookup[pos_items]
                         attr_logits = self.attribute_predictors[feat](seq_output)
-                        attr_loss = F.cross_entropy(attr_logits, target_feat)
+                        attr_loss = F.cross_entropy(attr_logits, target_feat, ignore_index=0)
                         loss = loss + self.lambda_attr * attr_loss
         
         return loss

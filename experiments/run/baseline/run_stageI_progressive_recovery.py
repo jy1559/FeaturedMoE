@@ -19,7 +19,7 @@ import os
 import subprocess
 import sys
 import time
-from collections import Counter, deque
+from collections import Counter, defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -38,6 +38,7 @@ base.PHASE_NAME = "STAGEI_PROGRESSIVE_RECOVERY_ANCHOR2_CORE5"
 base.AXIS_DESC = "stagei_progressiverecovery_anchor2_core5"
 
 
+STEP_ORDER = ["step1", "step2", "step3"]
 PASS_ORDER = ["pass1", "pass2", "pass3"]
 PASS_TOKEN = {"pass1": "I1", "pass2": "I2", "pass3": "I3"}
 PASS_LABEL = {"pass1": "StageI Pass1", "pass2": "StageI Pass2", "pass3": "StageI Pass3"}
@@ -50,6 +51,8 @@ PASS1_RATIO_CUT = 0.35
 PASS2_RATIO_CUT = 0.80
 PASS3_BOTTOM_K = 5
 PASS1_HPARAM_BANK = [f"H{i}" for i in range(1, 13)]
+STEP2_PASS_SEQUENCE = ["pass1", "pass2"]
+STEP3_PASS_SEQUENCE = ["pass1", "pass2"]
 
 SPARSE_DATASETS = {"amazon_beauty", "foursquare", "retail_rocket"}
 OOM_SENSITIVE_COMBOS = {
@@ -60,6 +63,7 @@ OOM_SENSITIVE_COMBOS = {
 }
 HOST_MEMORY_SERIAL_COMBOS = {
     ("retail_rocket", "tisasrec"),
+    ("retail_rocket", "gru4rec"),
 }
 
 DEFAULT_DATASETS = list(base.DEFAULT_DATASETS)
@@ -70,6 +74,7 @@ OPTION_TO_LABEL = {
 DEFAULT_MODELS = list(OPTION_TO_LABEL.keys())
 
 _orig_model_runtime_resource_overrides = base._model_runtime_resource_overrides
+_orig_model_algorithm_overrides_stagei = base._model_algorithm_overrides
 
 
 def _normalize_model_name(text: str) -> str:
@@ -78,6 +83,24 @@ def _normalize_model_name(text: str) -> str:
 
 LABEL_TO_OPTION = {_normalize_model_name(label): option for option, label in OPTION_TO_LABEL.items()}
 LABEL_TO_OPTION["difsr"] = "difsr"
+
+
+def _step_name(args: argparse.Namespace) -> str:
+    step_name = str(getattr(args, "step_name", "step1") or "step1").strip().lower()
+    return step_name if step_name in STEP_ORDER else "step1"
+
+
+def _step_pass_token(step_name: str, pass_name: str) -> str:
+    base_token = PASS_TOKEN[str(pass_name)]
+    if str(step_name) == "step1":
+        return base_token
+    if str(step_name) == "step2":
+        return f"{base_token}S2"
+    return f"{base_token}S3"
+
+
+def _row_step_name(row: Dict[str, Any]) -> str:
+    return str(row.get("step_name", "step1") or "step1").strip().lower()
 
 
 def _summary_fieldnames() -> list[str]:
@@ -104,7 +127,10 @@ def _summary_fieldnames() -> list[str]:
         "source_stage",
         "transfer_from_dataset",
         "anchor_run_id",
+        "step_name",
         "pass_name",
+        "hypothesis_family",
+        "root_cause_tag",
         "batch_profile",
         "result_path",
         "timestamp_utc",
@@ -144,10 +170,55 @@ def _normalize_stagei_cfg(model_option: str, cfg: Dict[str, Any]) -> Dict[str, A
     if inner < hidden * 2:
         inner = _qdim(hidden * 2, minimum=hidden, multiple=8)
     cfg2["inner_size"] = inner
+    if model_option == "bsarec":
+        cfg2["bsarec_alpha"] = min(0.95, max(0.05, float(cfg2.get("bsarec_alpha", 0.5))))
+        cfg2["bsarec_c"] = max(1, min(31, int(cfg2.get("bsarec_c", 3))))
+    if model_option == "fame":
+        layers = int(cfg2.get("num_layers", cfg2.get("layers", 2)))
+        cfg2["fame_moe_last_k_layers"] = max(
+            1,
+            min(layers, int(cfg2.get("fame_moe_last_k_layers", 1))),
+        )
     return sg._normalize_cfg(model_option, cfg2)
 
 
-def _cap_max_len(dataset: str, model_option: str, pass_name: str, max_len: int) -> int:
+def _canonical_search_dict(search: Dict[str, Any]) -> str:
+    try:
+        return json.dumps(search, sort_keys=True, ensure_ascii=True)
+    except Exception:
+        return str(search)
+
+
+def _dedup_candidates_stagei(cands: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    out: list[Dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for c in cands:
+        cfg = dict(c.get("config", {}) or {})
+        key = (
+            int(cfg.get("hidden_size", 0)),
+            int(cfg.get("num_layers", cfg.get("layers", 0))),
+            int(cfg.get("max_len", 0)),
+            round(float(c.get("lr_lo", 0.0)), 7),
+            round(float(c.get("lr_hi", 0.0)), 7),
+            _canonical_search_dict(dict(c.get("search_overrides", {}) or {})),
+            _canonical_search_dict(dict(c.get("search_space_type_overrides", {}) or {})),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(c)
+    return out
+
+
+def _cap_max_len(
+    dataset: str,
+    model_option: str,
+    pass_name: str,
+    max_len: int,
+    *,
+    step_name: str = "step1",
+    hypothesis_family: str = "",
+) -> int:
     dataset_sparse = dataset in SPARSE_DATASETS
     if pass_name == "pass1":
         cap = 12 if dataset_sparse else 24
@@ -162,12 +233,58 @@ def _cap_max_len(dataset: str, model_option: str, pass_name: str, max_len: int) 
         cap = min(cap, 18 if pass_name == "pass1" else 20 if pass_name == "pass2" else 24)
     if model_option == "duorec":
         cap = min(cap, 16 if pass_name == "pass1" else 18 if pass_name == "pass2" else 20)
+
+    if step_name == "step2":
+        if model_option == "bsarec":
+            cap = max(cap, 18 if dataset_sparse else 28)
+        elif model_option == "fame":
+            cap = max(cap, 16 if dataset_sparse else 24)
+        elif model_option == "gru4rec":
+            cap = max(cap, 14 if dataset_sparse else 22)
+        elif model_option == "tisasrec":
+            cap = max(cap, 20 if dataset_sparse else 30)
+        if str(hypothesis_family) in {"long_sparse", "time_balanced", "longer_context"}:
+            cap = max(cap, 20 if dataset_sparse else 30)
+    elif step_name == "step3":
+        if model_option == "bsarec":
+            cap = max(cap, 40 if dataset_sparse else 50)
+        elif model_option == "fame":
+            cap = max(cap, 32 if dataset_sparse else 40)
+        elif model_option == "gru4rec":
+            cap = max(cap, 32 if dataset_sparse else 40)
+        elif model_option == "tisasrec":
+            cap = max(cap, 28 if dataset_sparse else 36)
+        if str(hypothesis_family) in {
+            "beauty_long_context",
+            "long_context",
+            "long_context_probe",
+            "beauty_official_sparse",
+            "time_balanced",
+            "long_sparse",
+            "longer_context",
+        }:
+            cap = max(cap, 50 if dataset_sparse else 60)
     return max(5, min(int(max_len), int(cap)))
 
 
-def _prepare_cfg_for_pass(dataset: str, model_option: str, cfg: Dict[str, Any], pass_name: str) -> Dict[str, Any]:
+def _prepare_cfg_for_pass(
+    dataset: str,
+    model_option: str,
+    cfg: Dict[str, Any],
+    pass_name: str,
+    *,
+    step_name: str = "step1",
+    hypothesis_family: str = "",
+) -> Dict[str, Any]:
     cfg2 = _normalize_stagei_cfg(model_option, cfg)
-    cfg2["max_len"] = _cap_max_len(dataset, model_option, pass_name, int(cfg2.get("max_len", 20)))
+    cfg2["max_len"] = _cap_max_len(
+        dataset,
+        model_option,
+        pass_name,
+        int(cfg2.get("max_len", 20)),
+        step_name=step_name,
+        hypothesis_family=hypothesis_family,
+    )
     if model_option == "tisasrec":
         cfg2["time_span"] = max(64, int(min(int(cfg2.get("time_span", 256)), int(cfg2["max_len"]) * 32)))
     return _normalize_stagei_cfg(model_option, cfg2)
@@ -200,7 +317,15 @@ def _default_batch_numbers(model_option: str, cfg: Dict[str, Any]) -> tuple[int,
     return _parse_batch_overrides(_orig_model_runtime_resource_overrides(row))
 
 
-def _batch_profile(dataset: str, model_option: str, cfg: Dict[str, Any], pass_name: str) -> Dict[str, Any]:
+def _batch_profile(
+    dataset: str,
+    model_option: str,
+    cfg: Dict[str, Any],
+    pass_name: str,
+    *,
+    step_name: str = "step1",
+    hypothesis_family: str = "",
+) -> Dict[str, Any]:
     base_train, base_eval = _default_batch_numbers(model_option, cfg)
     train_scale = {"pass1": 1.18, "pass2": 1.06, "pass3": 1.00}[pass_name]
     eval_scale = {"pass1": 1.08, "pass2": 0.98, "pass3": 0.78}[pass_name]
@@ -260,6 +385,23 @@ def _batch_profile(dataset: str, model_option: str, cfg: Dict[str, Any], pass_na
         train_scale *= 0.74
         eval_scale *= 0.68
 
+    if step_name == "step2":
+        if model_option == "gru4rec" and str(hypothesis_family) in {"stable_low_lr", "mid_lr_stable"}:
+            train_scale *= 1.18
+            eval_scale *= 1.06
+        if model_option == "tisasrec" and str(hypothesis_family) in {"time_balanced", "time_depth", "struct_balanced"}:
+            train_scale *= 0.74
+            eval_scale *= 0.70
+        if model_option == "fame" and str(hypothesis_family) in {"moe_deeper", "facet_wide"}:
+            train_scale *= 0.78
+            eval_scale *= 0.74
+        if model_option == "duorec":
+            train_scale *= 0.88
+            eval_scale *= 0.86
+        if model_option == "fearec":
+            train_scale *= 0.90
+            eval_scale *= 0.88
+
     train_bs = max(256, int(base_train * train_scale))
     eval_bs = max(512, int(base_eval * eval_scale))
 
@@ -278,7 +420,7 @@ def _batch_profile(dataset: str, model_option: str, cfg: Dict[str, Any], pass_na
 
     train_bs = _round_down(train_bs, 128)
     eval_bs = _round_down(eval_bs, 256)
-    label = f"{pass_name}:bs{train_bs}/{eval_bs}"
+    label = f"{step_name}:{pass_name}:bs{train_bs}/{eval_bs}"
     return {
         "label": label,
         "train_bs": train_bs,
@@ -293,11 +435,36 @@ def _model_runtime_resource_overrides_stagei(row: Dict[str, Any]) -> List[str]:
         return _orig_model_runtime_resource_overrides(row)
     model_option = str(row.get("model_option", "")).lower()
     cfg = base._effective_model_hparams(row)
-    profile = _batch_profile(str(row.get("dataset", "")), model_option, cfg, str(row.get("pass_name", "pass1")))
+    profile = _batch_profile(
+        str(row.get("dataset", "")),
+        model_option,
+        cfg,
+        str(row.get("pass_name", "pass1")),
+        step_name=_row_step_name(row),
+        hypothesis_family=str(row.get("hypothesis_family", "")),
+    )
     return [f"++train_batch_size={int(profile['train_bs'])}", f"++eval_batch_size={int(profile['eval_bs'])}"]
 
 
 base._model_runtime_resource_overrides = _model_runtime_resource_overrides_stagei
+
+
+def _model_algorithm_overrides_stagei(row: Dict[str, Any]) -> list[str]:
+    model_option = str(row.get("model_option", "")).lower()
+    cfg = row.get("candidate_config")
+    if not isinstance(cfg, dict) or not cfg:
+        return _orig_model_algorithm_overrides_stagei(row)
+
+    overrides = list(_orig_model_algorithm_overrides_stagei(row))
+    if model_option == "bsarec":
+        overrides.append(f"++bsarec_alpha={float(cfg.get('bsarec_alpha', 0.5))}")
+        overrides.append(f"++bsarec_c={int(cfg.get('bsarec_c', 3))}")
+    if model_option == "fame":
+        overrides.append(f"++fame_moe_last_k_layers={int(cfg.get('fame_moe_last_k_layers', 1))}")
+    return overrides
+
+
+base._model_algorithm_overrides = _model_algorithm_overrides_stagei
 
 
 def _scale_center(lo: float, hi: float, *, center_mult: float = 1.0, span_mult: float = 1.0) -> tuple[float, float]:
@@ -403,6 +570,10 @@ def _load_overall_best_table(
                         "candidate_source": str(row.get("candidate_source", "")).strip(),
                         "source_stage": str(row.get("source_stage", "")).strip(),
                         "transfer_from_dataset": str(row.get("transfer_from_dataset", "")).strip(),
+                        "step_name": str(row.get("step_name", "step1") or "step1").strip(),
+                        "pass_name": str(row.get("pass_name", "")).strip(),
+                        "hypothesis_family": str(row.get("hypothesis_family", "")).strip(),
+                        "root_cause_tag": str(row.get("root_cause_tag", "")).strip(),
                     }
                     key = (dataset, model_option)
                     prev = best_by_combo.get(key)
@@ -458,9 +629,138 @@ def _select_pass3_targets(best_rows: list[Dict[str, Any]]) -> list[Dict[str, Any
     return out
 
 
-def _anchor_candidate(dataset: str, model_option: str, best_rec: Optional[Dict[str, Any]]) -> tuple[Dict[str, Any], str, str]:
+def _payload_pick_value(payload: Dict[str, Any], *keys: str) -> Any:
+    fixed = payload.get("fixed_search") if isinstance(payload.get("fixed_search"), dict) else {}
+    context_fixed = payload.get("context_fixed") if isinstance(payload.get("context_fixed"), dict) else {}
+    best_params = payload.get("best_params") if isinstance(payload.get("best_params"), dict) else {}
+    for key in keys:
+        if key in fixed:
+            return fixed.get(key)
+        if key in context_fixed:
+            return context_fixed.get(key)
+        if key in best_params:
+            return best_params.get(key)
+    return None
+
+
+def _payload_pick_numeric(payload: Dict[str, Any], *keys: str) -> Optional[float]:
+    for key in keys:
+        value = _payload_pick_value(payload, key)
+        metric = base._metric_to_float(value)
+        if metric is not None:
+            return float(metric)
+    return None
+
+
+def _stagei_config_from_result_payload(model_option: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    cfg = _normalize_stagei_cfg(model_option, sg._config_from_result_payload(model_option, payload))
+    if model_option == "bsarec":
+        alpha = _payload_pick_numeric(payload, "bsarec_alpha")
+        if alpha is not None:
+            cfg["bsarec_alpha"] = float(alpha)
+        cutoff = _payload_pick_numeric(payload, "bsarec_c", "c")
+        if cutoff is not None:
+            cfg["bsarec_c"] = int(cutoff)
+    if model_option == "fame":
+        last_k = _payload_pick_numeric(payload, "fame_moe_last_k_layers")
+        if last_k is not None:
+            cfg["fame_moe_last_k_layers"] = int(last_k)
+    if model_option == "duorec":
+        contrast = _payload_pick_value(payload, "contrast")
+        if contrast is not None:
+            cfg["contrast"] = str(contrast)
+        for key in ("tau", "lmd", "lmd_sem", "semantic_sample_max_tries"):
+            value = _payload_pick_numeric(payload, key)
+            if value is not None:
+                cfg[key] = int(value) if key == "semantic_sample_max_tries" else float(value)
+    if model_option == "fearec":
+        contrast = _payload_pick_value(payload, "contrast")
+        if contrast is not None:
+            cfg["contrast"] = str(contrast)
+        for key in ("tau", "lmd", "lmd_sem", "global_ratio", "semantic_sample_max_tries"):
+            value = _payload_pick_numeric(payload, key)
+            if value is not None:
+                cfg[key] = int(value) if key == "semantic_sample_max_tries" else float(value)
+    if model_option == "difsr":
+        fusion_type = _payload_pick_value(payload, "fusion_type")
+        if fusion_type is not None:
+            cfg["fusion_type"] = str(fusion_type)
+        predictor = _payload_pick_value(payload, "use_attribute_predictor")
+        if predictor is not None:
+            if isinstance(predictor, bool):
+                cfg["use_attribute_predictor"] = predictor
+            else:
+                cfg["use_attribute_predictor"] = str(predictor).strip().lower() in {"1", "true", "yes", "on"}
+        lambda_attr = _payload_pick_numeric(payload, "lambda_attr")
+        if lambda_attr is not None:
+            cfg["lambda_attr"] = float(lambda_attr)
+    return _normalize_stagei_cfg(model_option, cfg)
+
+
+def _candidate_from_row_stagei(
+    *,
+    model_option: str,
+    row: Dict[str, Any],
+    source: str,
+    source_stage: str,
+    transfer_from_dataset: str,
+    candidate_id: str,
+    lr_policy_mult: Optional[float] = None,
+    force_lr_narrow_around_best: bool = False,
+) -> Optional[Dict[str, Any]]:
+    payload = sg._safe_json(str(row.get("result_path", "")))
+    if not isinstance(payload, dict):
+        return None
+
+    cfg = _stagei_config_from_result_payload(model_option, payload)
+    best_lr = _payload_pick_numeric(payload, "learning_rate")
+    lo = base._metric_to_float(row.get("lr_lo"))
+    hi = base._metric_to_float(row.get("lr_hi"))
+
+    if best_lr is None and lo is not None and hi is not None and hi > lo:
+        best_lr = math.sqrt(float(lo) * float(hi))
+    if best_lr is None:
+        lo2, hi2 = base._compute_lr_space(str(row.get("dataset", "")), model_option, "H2")
+        best_lr = math.sqrt(float(lo2) * float(hi2))
+
+    if force_lr_narrow_around_best:
+        lo, hi = sg._clamp_lr(float(best_lr) / 1.6, float(best_lr) * 1.6)
+    else:
+        if lo is None or hi is None or hi <= lo:
+            lo, hi = sg._clamp_lr(float(best_lr) / 2.2, float(best_lr) * 2.2)
+        else:
+            lo, hi = sg._clamp_lr(float(lo), float(hi))
+        if lr_policy_mult is not None:
+            lo, hi = sg._scale_lr_band(float(lo), float(hi), float(lr_policy_mult))
+
+    valid = base._metric_to_float(row.get("run_best_valid_mrr20"))
+    test = base._metric_to_float(row.get("run_best_test_mrr20"))
+    n_completed = base._metric_to_float(row.get("n_completed"))
+    completion = None if n_completed is None else max(0.0, min(1.0, float(n_completed) / 10.0))
+    return {
+        "candidate_id": str(candidate_id),
+        "config": cfg,
+        "lr_lo": float(lo),
+        "lr_hi": float(hi),
+        "source": str(source),
+        "source_stage": str(source_stage),
+        "transfer_from_dataset": str(transfer_from_dataset),
+        "valid": valid,
+        "test": test,
+        "completion": completion,
+        "score": sg._candidate_score(valid, test, completion, source),
+    }
+
+
+def _anchor_candidate(
+    dataset: str,
+    model_option: str,
+    best_rec: Optional[Dict[str, Any]],
+    *,
+    step_name: str = "step1",
+) -> tuple[Dict[str, Any], str, str]:
     if isinstance(best_rec, dict):
-        cand = sg._candidate_from_row(
+        cand = _candidate_from_row_stagei(
             model_option=model_option,
             row=best_rec,
             source="stage_summary",
@@ -472,7 +772,13 @@ def _anchor_candidate(dataset: str, model_option: str, best_rec: Optional[Dict[s
         if cand:
             return cand, str(best_rec.get("run_id", "")).strip(), str(best_rec.get("axis", "")).strip()
 
-    cfg = _prepare_cfg_for_pass(dataset, model_option, sg._default_cfg_for_model(model_option), "pass2")
+    cfg = _prepare_cfg_for_pass(
+        dataset,
+        model_option,
+        sg._default_cfg_for_model(model_option),
+        "pass2",
+        step_name=step_name,
+    )
     lo, hi = base._compute_lr_space(dataset, model_option, "H2")
     return {
         "candidate_id": "ANCHOR",
@@ -615,7 +921,7 @@ def _expand_candidate_bank(
     source_stage: str = "fallback",
     source: str = "history_perturb",
 ) -> list[Dict[str, Any]]:
-    out = sg._dedup_candidates(list(candidates))
+    out = _dedup_candidates_stagei(list(candidates))
     if len(out) >= int(target_count):
         return out[: int(target_count)]
 
@@ -677,7 +983,7 @@ def _expand_candidate_bank(
             "anchor_run_id": anchor_run_id,
             "batch_profile": str(profile["label"]),
         }
-        out = sg._dedup_candidates(out + [cand])
+        out = _dedup_candidates_stagei(out + [cand])
 
     if len(out) < int(target_count):
         raise RuntimeError(
@@ -764,6 +1070,983 @@ def _build_pass3_candidates(dataset: str, model_option: str, best_rec: Optional[
     )
 
 
+def _step2_family_spec(
+    name: str,
+    cfg: Dict[str, Any],
+    *,
+    lr_policy: str,
+    root_cause_tag: str,
+    is_control: bool = False,
+    search_overrides: Optional[Dict[str, Any]] = None,
+    search_space_type_overrides: Optional[Dict[str, Any]] = None,
+    lr_lo_override: Optional[float] = None,
+    lr_hi_override: Optional[float] = None,
+) -> Dict[str, Any]:
+    return {
+        "name": str(name),
+        "config": dict(cfg),
+        "lr_policy": str(lr_policy),
+        "root_cause_tag": str(root_cause_tag),
+        "is_control": bool(is_control),
+        "search_overrides": dict(search_overrides or {}),
+        "search_space_type_overrides": dict(search_space_type_overrides or {}),
+        "lr_lo_override": None if lr_lo_override is None else float(lr_lo_override),
+        "lr_hi_override": None if lr_hi_override is None else float(lr_hi_override),
+    }
+
+
+def _family_batch_policy(
+    dataset: str,
+    model_option: str,
+    cfg: Dict[str, Any],
+    pass_name: str,
+    *,
+    step_name: str = "step2",
+    hypothesis_family: str,
+) -> Dict[str, Any]:
+    return _batch_profile(
+        dataset,
+        model_option,
+        cfg,
+        pass_name,
+        step_name=step_name,
+        hypothesis_family=hypothesis_family,
+    )
+
+
+def _family_lr_band(
+    dataset: str,
+    model_option: str,
+    pass_name: str,
+    profile: Dict[str, Any],
+    *,
+    lr_lo: float,
+    lr_hi: float,
+    lr_policy: str,
+    variant: str,
+) -> tuple[float, float]:
+    raw_lo, raw_hi = sg._clamp_lr(float(lr_lo), float(lr_hi))
+    scaled_lo, scaled_hi = _lr_band_with_batch_scaling(model_option, profile, pass_name, raw_lo, raw_hi)
+    if raw_lo > 0 and raw_hi > raw_lo:
+        # Preserve family-specific absolute priors even when batch scaling nudges the
+        # center. This keeps low-stable step3 families genuinely low-LR.
+        base_lo = min(float(raw_lo), float(scaled_lo))
+        base_hi = min(float(raw_hi), float(scaled_hi))
+        if base_hi <= base_lo:
+            base_lo, base_hi = raw_lo, raw_hi
+    else:
+        base_lo, base_hi = scaled_lo, scaled_hi
+    policy_map = {
+        "low_stable": (0.62, 0.92),
+        "mid_balanced": (0.88, 0.86),
+        "high_control": (1.12, 0.88),
+    }
+    center_mult, span_mult = policy_map.get(str(lr_policy), (0.88, 0.86))
+    variant_map = {
+        "BASE": (1.00, 1.00),
+        "WIDTH": (1.02, 0.95),
+        "DEPTH": (0.92, 0.92),
+        "LEN": (0.90, 0.95),
+        "REG": (0.82, 0.92),
+        "CTRL": (1.18, 0.92),
+        "LR_DN": (0.80, 0.82),
+        "LR_UP": (1.08, 0.82),
+        "WIDTH_TUNE": (1.01, 0.84),
+        "DEPTH_TUNE": (0.95, 0.84),
+        "LEN_TUNE": (0.92, 0.86),
+        "REG_TUNE": (0.84, 0.84),
+        "ANCHOR": (1.00, 0.80),
+    }
+    vm_center, vm_span = variant_map.get(str(variant), (1.0, 1.0))
+    lo2, hi2 = _scale_center(
+        base_lo,
+        base_hi,
+        center_mult=center_mult * vm_center,
+        span_mult=span_mult * vm_span,
+    )
+    # Keep low-stable families from being pushed upward by batch scaling.
+    if str(lr_policy) == "low_stable":
+        lo2 = min(float(lo2), float(raw_lo))
+        hi2 = min(float(hi2), float(raw_hi))
+    lo2 = max(float(raw_lo), float(lo2))
+    hi2 = min(float(raw_hi), float(hi2))
+    return sg._clamp_lr(lo2, hi2)
+
+
+def _step2_prepare_family_cfg(
+    dataset: str,
+    model_option: str,
+    cfg: Dict[str, Any],
+    *,
+    family_name: str,
+    pass_name: str = "pass1",
+) -> Dict[str, Any]:
+    return _prepare_cfg_for_pass(
+        dataset,
+        model_option,
+        cfg,
+        pass_name,
+        step_name="step2",
+        hypothesis_family=family_name,
+    )
+
+
+def _select_step2_hypothesis_bank(
+    dataset: str,
+    model_option: str,
+    best_rec: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    anchor, anchor_run_id, source_stage = _anchor_candidate(dataset, model_option, best_rec, step_name="step2")
+    anchor_cfg = _normalize_stagei_cfg(model_option, dict(anchor["config"]))
+    anchor_lo = float(anchor["lr_lo"])
+    anchor_hi = float(anchor["lr_hi"])
+    families: list[Dict[str, Any]] = []
+
+    def fam(name: str, *, lr_policy: str, root: str, is_control: bool = False, **cfg_updates: Any) -> None:
+        cfg = dict(anchor_cfg)
+        cfg.update(cfg_updates)
+        families.append(
+            _step2_family_spec(
+                name,
+                _step2_prepare_family_cfg(dataset, model_option, cfg, family_name=name, pass_name="pass1"),
+                lr_policy=lr_policy,
+                root_cause_tag=root,
+                is_control=is_control,
+            )
+        )
+
+    combo = (dataset, model_option)
+    if combo == ("amazon_beauty", "bsarec"):
+        fam("freq_lowmix", lr_policy="low_stable", root="bsarec_missing_alpha", hidden_size=160, embedding_size=160, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=320, max_len=16, bsarec_alpha=0.20, dropout=0.12, weight_decay=1.6e-4)
+        fam("freq_midmix", lr_policy="mid_balanced", root="bsarec_missing_alpha", hidden_size=192, embedding_size=192, num_layers=3, layers=3, num_heads=4, heads=4, inner_size=384, max_len=14, bsarec_alpha=0.50, dropout=0.10, weight_decay=1.2e-4)
+        fam("freq_highmix", lr_policy="high_control", root="bsarec_missing_alpha", hidden_size=160, embedding_size=160, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=320, max_len=10, bsarec_alpha=0.75, dropout=0.11, weight_decay=1.4e-4, is_control=True)
+        fam("long_sparse", lr_policy="low_stable", root="bsarec_short_len_bias", hidden_size=160, embedding_size=160, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=320, max_len=20, bsarec_alpha=0.35, dropout=0.12, weight_decay=1.6e-4)
+    elif combo == ("amazon_beauty", "fame"):
+        fam("moe_shallow_stable", lr_policy="low_stable", root="fame_degenerate_short_high_lr", hidden_size=128, embedding_size=128, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=256, num_experts=2, fame_moe_last_k_layers=1, max_len=14, dropout=0.12, weight_decay=1.2e-4)
+        fam("moe_deeper", lr_policy="low_stable", root="fame_degenerate_short_high_lr", hidden_size=144, embedding_size=144, num_layers=3, layers=3, num_heads=4, heads=4, inner_size=288, num_experts=4, fame_moe_last_k_layers=2, max_len=14, dropout=0.10, weight_decay=1.1e-4)
+        fam("expert_sparse", lr_policy="mid_balanced", root="fame_expert_head_mismatch", hidden_size=128, embedding_size=128, num_layers=2, layers=2, num_heads=2, heads=2, inner_size=256, num_experts=2, fame_moe_last_k_layers=1, max_len=12, dropout=0.12, weight_decay=1.3e-4)
+        fam("facet_wide", lr_policy="mid_balanced", root="fame_expert_head_mismatch", hidden_size=192, embedding_size=192, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=384, num_experts=4, fame_moe_last_k_layers=2, max_len=16, dropout=0.10, weight_decay=1.0e-4)
+    elif combo == ("amazon_beauty", "gru4rec"):
+        fam("stable_low_lr", lr_policy="low_stable", root="gru_short_high_lr_bias", hidden_size=128, embedding_size=128, num_layers=2, layers=2, inner_size=256, max_len=14, dropout=0.15, weight_decay=8e-5)
+        fam("mid_len_mid_lr", lr_policy="mid_balanced", root="gru_short_high_lr_bias", hidden_size=160, embedding_size=160, num_layers=2, layers=2, inner_size=320, max_len=16, dropout=0.12, weight_decay=7e-5)
+        fam("deep_small", lr_policy="mid_balanced", root="gru_short_high_lr_bias", hidden_size=112, embedding_size=112, num_layers=3, layers=3, inner_size=224, max_len=12, dropout=0.16, weight_decay=1e-4)
+        fam("high_lr_control", lr_policy="high_control", root="gru_short_high_lr_bias", hidden_size=192, embedding_size=192, num_layers=2, layers=2, inner_size=384, max_len=10, dropout=0.08, weight_decay=5e-5, is_control=True)
+    elif combo == ("KuaiRecLargeStrictPosV2_0.2", "gru4rec"):
+        fam("high_lr_control", lr_policy="high_control", root="gru_single_family_lockin", hidden_size=320, embedding_size=320, num_layers=3, layers=3, inner_size=640, max_len=10, dropout=0.06, weight_decay=2.5e-5, is_control=True)
+        fam("mid_lr_stable", lr_policy="mid_balanced", root="gru_single_family_lockin", hidden_size=224, embedding_size=224, num_layers=2, layers=2, inner_size=448, max_len=12, dropout=0.10, weight_decay=4.0e-5)
+        fam("longer_context", lr_policy="low_stable", root="gru_single_family_lockin", hidden_size=192, embedding_size=192, num_layers=2, layers=2, inner_size=384, max_len=18, dropout=0.10, weight_decay=4.0e-5)
+        fam("small_width_fast", lr_policy="mid_balanced", root="gru_single_family_lockin", hidden_size=128, embedding_size=128, num_layers=2, layers=2, inner_size=256, max_len=10, dropout=0.12, weight_decay=7.0e-5)
+    elif combo == ("retail_rocket", "tisasrec"):
+        fam("time_short_dense", lr_policy="mid_balanced", root="tisas_struct_time_coupling", hidden_size=144, embedding_size=144, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=288, max_len=12, time_span=192, dropout=0.10, weight_decay=1.2e-4)
+        fam("time_balanced", lr_policy="low_stable", root="tisas_struct_time_coupling", hidden_size=160, embedding_size=160, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=320, max_len=18, time_span=432, dropout=0.10, weight_decay=1.1e-4)
+        fam("time_depth", lr_policy="mid_balanced", root="tisas_struct_time_coupling", hidden_size=128, embedding_size=128, num_layers=3, layers=3, num_heads=4, heads=4, inner_size=256, max_len=16, time_span=384, dropout=0.12, weight_decay=1.3e-4)
+    elif combo == ("KuaiRecLargeStrictPosV2_0.2", "tisasrec"):
+        fam("struct_small", lr_policy="low_stable", root="tisas_structure_lockin", hidden_size=128, embedding_size=128, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=256, max_len=16, time_span=256, dropout=0.10, weight_decay=1.3e-4)
+        fam("struct_balanced", lr_policy="mid_balanced", root="tisas_structure_lockin", hidden_size=160, embedding_size=160, num_layers=3, layers=3, num_heads=4, heads=4, inner_size=320, max_len=20, time_span=384, dropout=0.10, weight_decay=1.2e-4)
+        fam("time_compressed", lr_policy="high_control", root="tisas_structure_lockin", hidden_size=160, embedding_size=160, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=320, max_len=12, time_span=192, dropout=0.10, weight_decay=1.1e-4, is_control=True)
+    elif combo == ("retail_rocket", "gru4rec"):
+        fam("mid_lr_stable", lr_policy="mid_balanced", root="gru_memory_and_instability", hidden_size=192, embedding_size=192, num_layers=2, layers=2, inner_size=384, max_len=12, dropout=0.10, weight_decay=5.0e-5)
+        fam("small_depth", lr_policy="low_stable", root="gru_memory_and_instability", hidden_size=128, embedding_size=128, num_layers=1, layers=1, inner_size=256, max_len=14, dropout=0.14, weight_decay=9.0e-5)
+        fam("short_control", lr_policy="high_control", root="gru_memory_and_instability", hidden_size=224, embedding_size=224, num_layers=2, layers=2, inner_size=448, max_len=10, dropout=0.08, weight_decay=4.0e-5, is_control=True)
+    elif combo == ("foursquare", "gru4rec"):
+        fam("stable_low_lr", lr_policy="low_stable", root="gru_bimodal_instability", hidden_size=128, embedding_size=128, num_layers=2, layers=2, inner_size=256, max_len=12, dropout=0.14, weight_decay=8.0e-5)
+        fam("short_sparse", lr_policy="high_control", root="gru_bimodal_instability", hidden_size=160, embedding_size=160, num_layers=2, layers=2, inner_size=320, max_len=8, dropout=0.08, weight_decay=4.0e-5, is_control=True)
+        fam("mid_len_balanced", lr_policy="mid_balanced", root="gru_bimodal_instability", hidden_size=144, embedding_size=144, num_layers=2, layers=2, inner_size=288, max_len=14, dropout=0.12, weight_decay=6.0e-5)
+    elif combo == ("retail_rocket", "sasrec"):
+        fam("reg_relief_low_lr", lr_policy="low_stable", root="sasrec_reg_lr_mismatch", hidden_size=160, embedding_size=160, num_layers=3, layers=3, num_heads=4, heads=4, inner_size=320, max_len=14, dropout=0.08, weight_decay=7.5e-5)
+        fam("depth_balanced", lr_policy="mid_balanced", root="sasrec_reg_lr_mismatch", hidden_size=160, embedding_size=160, num_layers=4, layers=4, num_heads=4, heads=4, inner_size=320, max_len=12, dropout=0.10, weight_decay=1.0e-4)
+        fam("mid_len_lowdrop", lr_policy="mid_balanced", root="sasrec_reg_lr_mismatch", hidden_size=144, embedding_size=144, num_layers=3, layers=3, num_heads=4, heads=4, inner_size=288, max_len=18, dropout=0.08, weight_decay=8.0e-5)
+    elif combo == ("retail_rocket", "duorec"):
+        fam("ce_dominant", lr_policy="low_stable", root="duorec_overstrong_ssl", hidden_size=144, embedding_size=144, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=288, max_len=12, contrast="un", tau=0.25, lmd=0.01, lmd_sem=0.0, semantic_sample_max_tries=2, dropout=0.10, weight_decay=1.0e-4)
+        fam("weak_ssl", lr_policy="mid_balanced", root="duorec_overstrong_ssl", hidden_size=144, embedding_size=144, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=288, max_len=12, contrast="un", tau=0.35, lmd=0.02, lmd_sem=0.01, semantic_sample_max_tries=2, dropout=0.10, weight_decay=1.0e-4)
+        fam("semantic_light", lr_policy="mid_balanced", root="duorec_overstrong_ssl", hidden_size=160, embedding_size=160, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=320, max_len=12, contrast="su", tau=0.40, lmd=0.0, lmd_sem=0.02, semantic_sample_max_tries=2, dropout=0.10, weight_decay=1.0e-4)
+    elif combo == ("retail_rocket", "fearec"):
+        fam("freq_balanced", lr_policy="low_stable", root="fearec_freq_contrast_mismatch", hidden_size=144, embedding_size=144, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=288, max_len=12, contrast="un", tau=0.18, lmd=0.02, lmd_sem=0.0, global_ratio=0.70, semantic_sample_max_tries=2, dropout=0.10, weight_decay=1.0e-4)
+        fam("wide_freq", lr_policy="mid_balanced", root="fearec_freq_contrast_mismatch", hidden_size=176, embedding_size=176, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=352, max_len=12, contrast="un", tau=0.20, lmd=0.03, lmd_sem=0.0, global_ratio=0.85, semantic_sample_max_tries=2, dropout=0.10, weight_decay=1.0e-4)
+        fam("contrast_light", lr_policy="mid_balanced", root="fearec_freq_contrast_mismatch", hidden_size=144, embedding_size=144, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=288, max_len=14, contrast="un", tau=0.25, lmd=0.01, lmd_sem=0.0, global_ratio=0.80, semantic_sample_max_tries=2, dropout=0.10, weight_decay=1.0e-4)
+    elif combo == ("foursquare", "sigma"):
+        fam("sigma_state_mid", lr_policy="mid_balanced", root="sigma_state_kernel_ratio_mismatch", hidden_size=128, embedding_size=128, num_layers=2, layers=2, inner_size=256, sigma_state=16, sigma_kernel=6, sigma_remaining_ratio=0.45, max_len=12, dropout=0.10, weight_decay=1.1e-4)
+        fam("sigma_wide_kernel", lr_policy="low_stable", root="sigma_state_kernel_ratio_mismatch", hidden_size=144, embedding_size=144, num_layers=2, layers=2, inner_size=288, sigma_state=24, sigma_kernel=8, sigma_remaining_ratio=0.55, max_len=14, dropout=0.10, weight_decay=1.0e-4)
+        fam("sigma_compact", lr_policy="high_control", root="sigma_state_kernel_ratio_mismatch", hidden_size=128, embedding_size=128, num_layers=1, layers=1, inner_size=256, sigma_state=12, sigma_kernel=4, sigma_remaining_ratio=0.35, max_len=10, dropout=0.12, weight_decay=1.2e-4, is_control=True)
+    else:
+        if model_option == "gru4rec":
+            fam("stable_low_lr", lr_policy="low_stable", root="gru_generic_root", hidden_size=128, embedding_size=128, num_layers=2, layers=2, inner_size=256, max_len=12, dropout=0.14, weight_decay=8e-5)
+            fam("mid_balanced", lr_policy="mid_balanced", root="gru_generic_root", hidden_size=160, embedding_size=160, num_layers=2, layers=2, inner_size=320, max_len=14, dropout=0.10, weight_decay=6e-5)
+            fam("high_lr_control", lr_policy="high_control", root="gru_generic_root", hidden_size=192, embedding_size=192, num_layers=2, layers=2, inner_size=384, max_len=10, dropout=0.08, weight_decay=5e-5, is_control=True)
+        elif model_option == "tisasrec":
+            fam("struct_balanced", lr_policy="mid_balanced", root="tisas_generic_root", hidden_size=160, embedding_size=160, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=320, max_len=16, time_span=320, dropout=0.10, weight_decay=1.2e-4)
+            fam("time_short_dense", lr_policy="mid_balanced", root="tisas_generic_root", hidden_size=144, embedding_size=144, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=288, max_len=12, time_span=192, dropout=0.10, weight_decay=1.3e-4)
+            fam("time_depth", lr_policy="low_stable", root="tisas_generic_root", hidden_size=128, embedding_size=128, num_layers=3, layers=3, num_heads=4, heads=4, inner_size=256, max_len=14, time_span=256, dropout=0.12, weight_decay=1.4e-4)
+        else:
+            fam("anchor_balanced", lr_policy="mid_balanced", root=f"{model_option}_generic_root")
+            fam("regularized", lr_policy="low_stable", root=f"{model_option}_generic_root", dropout=float(anchor_cfg.get("dropout", 0.1)) - 0.02, weight_decay=float(anchor_cfg.get("weight_decay", 1e-4)) * 0.75)
+            fam("control", lr_policy="high_control", root=f"{model_option}_generic_root", is_control=True, max_len=max(5, int(anchor_cfg.get("max_len", 12)) - 2))
+
+    return {
+        "anchor": anchor,
+        "anchor_run_id": anchor_run_id,
+        "source_stage": source_stage,
+        "families": families,
+        "anchor_cfg": anchor_cfg,
+        "anchor_lo": anchor_lo,
+        "anchor_hi": anchor_hi,
+    }
+
+
+def _apply_step2_variant(
+    dataset: str,
+    model_option: str,
+    base_cfg: Dict[str, Any],
+    *,
+    family_name: str,
+    variant: str,
+    pass_name: str,
+) -> Dict[str, Any]:
+    cfg = dict(base_cfg)
+    if variant in {"WIDTH", "WIDTH_TUNE"}:
+        cfg["hidden_size"] = int(cfg.get("hidden_size", 128) * 1.10)
+        cfg["embedding_size"] = int(cfg["hidden_size"])
+        cfg["inner_size"] = int(cfg.get("inner_size", 256) * 1.15)
+    elif variant == "DEPTH":
+        depth = int(cfg.get("num_layers", cfg.get("layers", 2))) + 1
+        cfg["num_layers"] = depth
+        cfg["layers"] = depth
+    elif variant == "DEPTH_TUNE":
+        depth = int(cfg.get("num_layers", cfg.get("layers", 2)))
+        cfg["num_layers"] = max(1, depth + 1)
+        cfg["layers"] = int(cfg["num_layers"])
+        cfg["dropout"] = float(cfg.get("dropout", 0.1)) + 0.01
+    elif variant in {"LEN", "LEN_TUNE"}:
+        cfg["max_len"] = int(round(int(cfg.get("max_len", 12)) * (1.20 if variant == "LEN" else 1.10)))
+        if model_option == "tisasrec":
+            cfg["time_span"] = int(round(int(cfg.get("time_span", 256)) * 1.20))
+    elif variant == "REG":
+        cfg["dropout"] = float(cfg.get("dropout", 0.1)) - 0.02
+        cfg["weight_decay"] = float(cfg.get("weight_decay", 1e-4)) * 0.70
+        if model_option in {"duorec", "fearec"}:
+            cfg["lmd"] = float(cfg.get("lmd", 0.04)) * 0.80
+            cfg["lmd_sem"] = float(cfg.get("lmd_sem", 0.0)) * 0.80
+    elif variant == "REG_TUNE":
+        cfg["dropout"] = float(cfg.get("dropout", 0.1)) - 0.015
+        cfg["weight_decay"] = float(cfg.get("weight_decay", 1e-4)) * 0.75
+    return _step2_prepare_family_cfg(dataset, model_option, cfg, family_name=family_name, pass_name=pass_name)
+
+
+def _make_step_candidate(
+    step_name: str,
+    dataset: str,
+    model_option: str,
+    pass_name: str,
+    family: Dict[str, Any],
+    *,
+    variant: str,
+    anchor_lo: float,
+    anchor_hi: float,
+    anchor_run_id: str,
+    source_stage: str,
+) -> Dict[str, Any]:
+    if str(step_name) == "step2":
+        cfg = _apply_step2_variant(
+            dataset,
+            model_option,
+            dict(family["config"]),
+            family_name=str(family["name"]),
+            variant=variant,
+            pass_name=pass_name,
+        )
+    else:
+        cfg = _prepare_cfg_for_pass(
+            dataset,
+            model_option,
+            dict(family["config"]),
+            pass_name,
+            step_name=str(step_name),
+            hypothesis_family=str(family["name"]),
+        )
+    profile = _family_batch_policy(
+        dataset,
+        model_option,
+        cfg,
+        pass_name,
+        step_name=str(step_name),
+        hypothesis_family=str(family["name"]),
+    )
+    fam_lo = float(family.get("lr_lo_override")) if family.get("lr_lo_override") is not None else float(anchor_lo)
+    fam_hi = float(family.get("lr_hi_override")) if family.get("lr_hi_override") is not None else float(anchor_hi)
+    lo, hi = _family_lr_band(
+        dataset,
+        model_option,
+        pass_name,
+        profile,
+        lr_lo=fam_lo,
+        lr_hi=fam_hi,
+        lr_policy=str(family["lr_policy"]),
+        variant=variant,
+    )
+    model_tag = base._sanitize_token(OPTION_TO_LABEL[model_option], upper=True)
+    token = _step_pass_token(str(step_name), pass_name)
+    fam_tag = base._sanitize_token(str(family["name"]), upper=True)
+    suffix = base._sanitize_token(str(variant), upper=True)
+    return {
+        "candidate_id": f"{token}_{model_tag}_{fam_tag}_{suffix}",
+        "config": cfg,
+        "lr_lo": float(lo),
+        "lr_hi": float(hi),
+        "source": "root_cause_hypothesis" if pass_name == "pass1" else "family_refine",
+        "source_stage": source_stage,
+        "transfer_from_dataset": "",
+        "anchor_run_id": anchor_run_id,
+        "batch_profile": str(profile["label"]),
+        "hypothesis_family": str(family["name"]),
+        "root_cause_tag": str(family["root_cause_tag"]),
+        "search_overrides": dict(family.get("search_overrides", {}) or {}),
+        "search_space_type_overrides": dict(family.get("search_space_type_overrides", {}) or {}),
+    }
+
+
+def _make_step2_candidate(
+    dataset: str,
+    model_option: str,
+    pass_name: str,
+    family: Dict[str, Any],
+    *,
+    variant: str,
+    anchor_lo: float,
+    anchor_hi: float,
+    anchor_run_id: str,
+    source_stage: str,
+) -> Dict[str, Any]:
+    return _make_step_candidate(
+        "step2",
+        dataset,
+        model_option,
+        pass_name,
+        family,
+        variant=variant,
+        anchor_lo=anchor_lo,
+        anchor_hi=anchor_hi,
+        anchor_run_id=anchor_run_id,
+        source_stage=source_stage,
+    )
+
+
+def _allocate_even_counts(total: int, families: list[Dict[str, Any]]) -> list[int]:
+    if not families:
+        return []
+    base_count = int(total) // len(families)
+    remainder = int(total) % len(families)
+    counts = [base_count] * len(families)
+    for i in range(remainder):
+        counts[i] += 1
+    return counts
+
+
+def _load_step_family_stats(step_name: str, dataset: str, model_label: str) -> Dict[str, Dict[str, Any]]:
+    path = base._summary_path(dataset)
+    stats: Dict[str, Dict[str, Any]] = {}
+    if not path.exists():
+        return stats
+    try:
+        with path.open("r", encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                if str(row.get("model", "")).strip() != str(model_label):
+                    continue
+                if str(row.get("step_name", "step1") or "step1").strip().lower() != str(step_name):
+                    continue
+                if str(row.get("pass_name", "")).strip() != "pass1":
+                    continue
+                family = str(row.get("hypothesis_family", "")).strip()
+                if not family:
+                    continue
+                bucket = stats.setdefault(
+                    family,
+                    {"vals": [], "fails": 0, "runs": 0, "root_cause_tag": str(row.get("root_cause_tag", "")).strip()},
+                )
+                bucket["runs"] += 1
+                if str(row.get("status", "")).strip().lower() != "run_complete":
+                    bucket["fails"] += 1
+                    continue
+                metric = base._metric_to_float(row.get("run_best_valid_mrr20"))
+                if metric is not None:
+                    bucket["vals"].append(float(metric))
+    except Exception:
+        return {}
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for family, bucket in stats.items():
+        vals = sorted(bucket["vals"], reverse=True)
+        best = vals[0] if vals else 0.0
+        topk = vals[: min(3, len(vals))]
+        top_mean = sum(topk) / float(len(topk)) if topk else 0.0
+        variance = (max(vals) - min(vals)) if len(vals) >= 2 else 0.0
+        fail_ratio = float(bucket["fails"]) / float(max(1, bucket["runs"]))
+        score = best * 0.60 + top_mean * 0.35 - variance * 0.20 - fail_ratio * max(best, top_mean, 0.01) * 0.20
+        out[family] = {
+            "best_valid": best,
+            "top_mean": top_mean,
+            "variance": variance,
+            "fail_ratio": fail_ratio,
+            "score": score,
+            "all_failed": not bool(vals),
+            "root_cause_tag": bucket["root_cause_tag"],
+        }
+    return out
+
+
+def _load_step2_family_stats(dataset: str, model_label: str) -> Dict[str, Dict[str, Any]]:
+    return _load_step_family_stats("step2", dataset, model_label)
+
+
+def _rank_step2_families(families: list[Dict[str, Any]], family_stats: Dict[str, Dict[str, Any]]) -> list[Dict[str, Any]]:
+    def _key(family: Dict[str, Any]) -> tuple[float, float, str]:
+        stat = family_stats.get(str(family["name"]), {})
+        return (
+            float(stat.get("score", -1.0)),
+            float(stat.get("best_valid", -1.0)),
+            str(family["name"]),
+        )
+
+    return sorted(families, key=_key, reverse=True)
+
+
+def _build_step2_pass1_candidates(dataset: str, model_option: str, best_rec: Optional[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    bank = _select_step2_hypothesis_bank(dataset, model_option, best_rec)
+    families = list(bank["families"])
+    counts = _allocate_even_counts(int(PASS_SPECS["pass1"]["candidate_count"]), families)
+    variant_order = [
+        "BASE",
+        "WIDTH",
+        "DEPTH",
+        "LEN",
+        "REG",
+        "CTRL",
+        "WIDTH_TUNE",
+        "LEN_TUNE",
+        "LR_DN",
+        "LR_UP",
+        "DEPTH_TUNE",
+        "ANCHOR",
+    ]
+    candidates: list[Dict[str, Any]] = []
+    for family, count in zip(families, counts):
+        for idx in range(int(count)):
+            variant = variant_order[idx % len(variant_order)]
+            candidates.append(
+                _make_step2_candidate(
+                    dataset,
+                    model_option,
+                    "pass1",
+                    family,
+                    variant=variant,
+                    anchor_lo=float(bank["anchor_lo"]),
+                    anchor_hi=float(bank["anchor_hi"]),
+                    anchor_run_id=str(bank["anchor_run_id"]),
+                    source_stage="step2_hypothesis_bank",
+                )
+            )
+    deduped = _dedup_candidates_stagei(candidates)
+    return deduped[: int(PASS_SPECS["pass1"]["candidate_count"])]
+
+
+def _build_step2_pass2_candidates(dataset: str, model_option: str, best_rec: Optional[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    bank = _select_step2_hypothesis_bank(dataset, model_option, best_rec)
+    families = list(bank["families"])
+    family_stats = _load_step2_family_stats(dataset, OPTION_TO_LABEL[model_option])
+    ranked = _rank_step2_families(families, family_stats)
+    winning = ranked[0] if ranked else None
+    second = ranked[1] if len(ranked) > 1 else None
+    control = next((f for f in families if bool(f.get("is_control")) and f is not winning and f is not second), None)
+    if control is None:
+        control = next((f for f in ranked if f is not winning and f is not second), second or winning)
+
+    candidates: list[Dict[str, Any]] = []
+    if winning is not None:
+        for variant in ["BASE", "LR_DN", "LR_UP", "WIDTH_TUNE", "DEPTH_TUNE", "LEN_TUNE"]:
+            candidates.append(
+                _make_step2_candidate(
+                    dataset,
+                    model_option,
+                    "pass2",
+                    winning,
+                    variant=variant,
+                    anchor_lo=float(bank["anchor_lo"]),
+                    anchor_hi=float(bank["anchor_hi"]),
+                    anchor_run_id=str(bank["anchor_run_id"]),
+                    source_stage="step2_family_refine",
+                )
+            )
+    if second is not None:
+        for variant in ["BASE", "LR_DN", "REG_TUNE"]:
+            candidates.append(
+                _make_step2_candidate(
+                    dataset,
+                    model_option,
+                    "pass2",
+                    second,
+                    variant=variant,
+                    anchor_lo=float(bank["anchor_lo"]),
+                    anchor_hi=float(bank["anchor_hi"]),
+                    anchor_run_id=str(bank["anchor_run_id"]),
+                    source_stage="step2_family_refine",
+                )
+            )
+    if control is not None:
+        for variant in ["BASE", "CTRL"]:
+            candidates.append(
+                _make_step2_candidate(
+                    dataset,
+                    model_option,
+                    "pass2",
+                    control,
+                    variant=variant,
+                    anchor_lo=float(bank["anchor_lo"]),
+                    anchor_hi=float(bank["anchor_hi"]),
+                    anchor_run_id=str(bank["anchor_run_id"]),
+                    source_stage="step2_family_refine",
+                )
+            )
+    anchor_family = winning or control or families[0]
+    candidates.append(
+        _make_step2_candidate(
+            dataset,
+            model_option,
+            "pass2",
+            anchor_family,
+            variant="ANCHOR",
+            anchor_lo=float(bank["anchor_lo"]),
+            anchor_hi=float(bank["anchor_hi"]),
+            anchor_run_id=str(bank["anchor_run_id"]),
+            source_stage="step2_family_refine",
+        )
+    )
+    deduped = _dedup_candidates_stagei(candidates)
+    if len(deduped) < int(PASS_SPECS["pass2"]["candidate_count"]) and winning is not None:
+        for variant in ["REG", "CTRL", "WIDTH", "LEN"]:
+            deduped = _dedup_candidates_stagei(
+                deduped
+                + [
+                    _make_step2_candidate(
+                        dataset,
+                        model_option,
+                        "pass2",
+                        winning,
+                        variant=variant,
+                        anchor_lo=float(bank["anchor_lo"]),
+                        anchor_hi=float(bank["anchor_hi"]),
+                        anchor_run_id=str(bank["anchor_run_id"]),
+                        source_stage="step2_family_refine",
+                    )
+                ]
+            )
+            if len(deduped) >= int(PASS_SPECS["pass2"]["candidate_count"]):
+                break
+    return deduped[: int(PASS_SPECS["pass2"]["candidate_count"])]
+
+
+def _choice_overrides(**kwargs: Any) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    search = {str(k): list(v) for k, v in kwargs.items()}
+    types = {str(k): "choice" for k in search.keys()}
+    return search, types
+
+
+def _select_step3_hypothesis_bank(
+    dataset: str,
+    model_option: str,
+    best_rec: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    anchor, anchor_run_id, source_stage = _anchor_candidate(dataset, model_option, best_rec, step_name="step3")
+    anchor_cfg = _normalize_stagei_cfg(model_option, dict(anchor["config"]))
+    anchor_lo = float(anchor["lr_lo"])
+    anchor_hi = float(anchor["lr_hi"])
+    families: list[Dict[str, Any]] = []
+
+    def fam(
+        name: str,
+        *,
+        lr_policy: str,
+        root: str,
+        is_control: bool = False,
+        search: Optional[Dict[str, Any]] = None,
+        search_types: Optional[Dict[str, Any]] = None,
+        lr_lo_override: Optional[float] = None,
+        lr_hi_override: Optional[float] = None,
+        **cfg_updates: Any,
+    ) -> None:
+        cfg = dict(anchor_cfg)
+        cfg.update(cfg_updates)
+        families.append(
+            _step2_family_spec(
+                name,
+                _prepare_cfg_for_pass(
+                    dataset,
+                    model_option,
+                    cfg,
+                    "pass1",
+                    step_name="step3",
+                    hypothesis_family=name,
+                ),
+                lr_policy=lr_policy,
+                root_cause_tag=root,
+                is_control=is_control,
+                search_overrides=search,
+                search_space_type_overrides=search_types,
+                lr_lo_override=lr_lo_override,
+                lr_hi_override=lr_hi_override,
+            )
+        )
+
+    combo = (dataset, model_option)
+    if combo == ("amazon_beauty", "bsarec"):
+        s1, t1 = _choice_overrides(
+            bsarec_alpha=[0.55, 0.70, 0.85],
+            bsarec_c=[3, 5, 7, 9],
+            num_heads=[1, 2],
+            n_heads=[1, 2],
+            hidden_size=[64, 96, 128],
+            embedding_size=[64, 96, 128],
+            inner_size=[256, 384, 512],
+            MAX_ITEM_LIST_LENGTH=[20, 32, 50],
+            hidden_dropout_prob=[0.30, 0.50],
+            dropout_prob=[0.30, 0.50],
+            dropout_ratio=[0.30, 0.50],
+            attn_dropout_prob=[0.30, 0.50],
+            weight_decay=[5e-5, 1e-4, 2e-4],
+        )
+        fam("beauty_official_sparse", lr_policy="low_stable", root="bsarec_official_recipe_gap", hidden_size=64, embedding_size=64, num_layers=2, layers=2, num_heads=1, heads=1, inner_size=256, max_len=32, bsarec_alpha=0.7, bsarec_c=5, dropout=0.5, weight_decay=1e-4, search=s1, search_types=t1, lr_lo_override=1.2e-4, lr_hi_override=8.0e-4)
+        s2, t2 = _choice_overrides(
+            bsarec_alpha=[0.40, 0.55, 0.70],
+            bsarec_c=[5, 7, 9, 11],
+            num_heads=[1, 2],
+            n_heads=[1, 2],
+            hidden_size=[64, 96],
+            embedding_size=[64, 96],
+            inner_size=[256, 384],
+            MAX_ITEM_LIST_LENGTH=[32, 40, 50],
+            hidden_dropout_prob=[0.20, 0.30, 0.50],
+            dropout_prob=[0.20, 0.30, 0.50],
+            dropout_ratio=[0.20, 0.30, 0.50],
+            attn_dropout_prob=[0.20, 0.30, 0.50],
+        )
+        fam("beauty_long_context", lr_policy="low_stable", root="bsarec_context_underreach", hidden_size=96, embedding_size=96, num_layers=2, layers=2, num_heads=1, heads=1, inner_size=384, max_len=40, bsarec_alpha=0.55, bsarec_c=7, dropout=0.3, weight_decay=1e-4, search=s2, search_types=t2, lr_lo_override=8.0e-5, lr_hi_override=6.0e-4)
+        s3, t3 = _choice_overrides(
+            bsarec_alpha=[0.50, 0.70],
+            bsarec_c=[3, 5, 7],
+            num_heads=[1, 2, 4],
+            n_heads=[1, 2, 4],
+            num_layers=[2, 3],
+            n_layers=[2, 3],
+            hidden_size=[96, 128, 160],
+            embedding_size=[96, 128, 160],
+            inner_size=[256, 384, 640],
+            MAX_ITEM_LIST_LENGTH=[16, 24, 32],
+            hidden_dropout_prob=[0.15, 0.30],
+            dropout_prob=[0.15, 0.30],
+            dropout_ratio=[0.15, 0.30],
+            attn_dropout_prob=[0.15, 0.30],
+        )
+        fam("beauty_mixed_capacity", lr_policy="mid_balanced", root="bsarec_depth_head_mismatch", hidden_size=128, embedding_size=128, num_layers=3, layers=3, num_heads=2, heads=2, inner_size=384, max_len=24, bsarec_alpha=0.6, bsarec_c=5, dropout=0.2, weight_decay=1.2e-4, search=s3, search_types=t3, lr_lo_override=1.5e-4, lr_hi_override=1.2e-3)
+        s4, t4 = _choice_overrides(
+            bsarec_alpha=[0.35, 0.50, 0.65],
+            bsarec_c=[3, 5, 7],
+            num_heads=[2, 4],
+            n_heads=[2, 4],
+            hidden_size=[128, 192],
+            embedding_size=[128, 192],
+            inner_size=[384, 768],
+            MAX_ITEM_LIST_LENGTH=[12, 16, 24],
+        )
+        fam("beauty_attention_control", lr_policy="high_control", root="bsarec_control_family", hidden_size=160, embedding_size=160, num_layers=2, layers=2, num_heads=4, heads=4, inner_size=640, max_len=16, bsarec_alpha=0.5, bsarec_c=3, dropout=0.15, weight_decay=8e-5, is_control=True, search=s4, search_types=t4)
+    elif combo == ("amazon_beauty", "fame"):
+        s1, t1 = _choice_overrides(
+            num_heads=[1, 2],
+            n_heads=[1, 2],
+            num_experts=[1, 2, 4],
+            fame_moe_last_k_layers=[1],
+            hidden_size=[64, 96, 128],
+            embedding_size=[64, 96, 128],
+            num_layers=[2, 3],
+            n_layers=[2, 3],
+            MAX_ITEM_LIST_LENGTH=[16, 24, 32],
+            hidden_dropout_prob=[0.10, 0.20, 0.30],
+            dropout_prob=[0.10, 0.20, 0.30],
+            dropout_ratio=[0.10, 0.20, 0.30],
+            attn_dropout_prob=[0.10, 0.20, 0.30],
+            weight_decay=[5e-5, 1e-4, 2e-4],
+        )
+        fam("beauty_few_heads", lr_policy="low_stable", root="fame_beauty_head_expert_mismatch", hidden_size=96, embedding_size=96, num_layers=2, layers=2, num_heads=1, heads=1, num_experts=2, fame_moe_last_k_layers=1, max_len=24, dropout=0.2, weight_decay=1e-4, search=s1, search_types=t1, lr_lo_override=1.5e-4, lr_hi_override=1.2e-3)
+        s2, t2 = _choice_overrides(
+            num_heads=[1, 2],
+            n_heads=[1, 2],
+            num_experts=[2, 4],
+            fame_moe_last_k_layers=[1, 2],
+            hidden_size=[96, 128],
+            embedding_size=[96, 128],
+            num_layers=[2, 3],
+            n_layers=[2, 3],
+            MAX_ITEM_LIST_LENGTH=[20, 32, 50],
+            hidden_dropout_prob=[0.10, 0.20],
+            dropout_prob=[0.10, 0.20],
+            dropout_ratio=[0.10, 0.20],
+            attn_dropout_prob=[0.10, 0.20],
+        )
+        fam("beauty_long_context", lr_policy="low_stable", root="fame_context_underreach", hidden_size=128, embedding_size=128, num_layers=2, layers=2, num_heads=2, heads=2, num_experts=2, fame_moe_last_k_layers=1, max_len=32, dropout=0.15, weight_decay=1e-4, search=s2, search_types=t2, lr_lo_override=1.0e-4, lr_hi_override=9.0e-4)
+        s3, t3 = _choice_overrides(
+            num_heads=[2, 4],
+            n_heads=[2, 4],
+            num_experts=[2, 4],
+            fame_moe_last_k_layers=[1, 2],
+            hidden_size=[128, 160, 192],
+            embedding_size=[128, 160, 192],
+            num_layers=[2, 3],
+            n_layers=[2, 3],
+            MAX_ITEM_LIST_LENGTH=[16, 24, 32],
+        )
+        fam("beauty_capacity_probe", lr_policy="mid_balanced", root="fame_capacity_shape_mismatch", hidden_size=160, embedding_size=160, num_layers=3, layers=3, num_heads=2, heads=2, num_experts=4, fame_moe_last_k_layers=2, max_len=24, dropout=0.1, weight_decay=1e-4, search=s3, search_types=t3, lr_lo_override=2.0e-4, lr_hi_override=1.5e-3)
+        s4, t4 = _choice_overrides(
+            num_heads=[2, 4],
+            n_heads=[2, 4],
+            num_experts=[2, 4],
+            fame_moe_last_k_layers=[1, 2],
+            hidden_size=[128, 192],
+            embedding_size=[128, 192],
+            MAX_ITEM_LIST_LENGTH=[12, 16, 24],
+        )
+        fam("beauty_midlr_control", lr_policy="high_control", root="fame_control_family", hidden_size=192, embedding_size=192, num_layers=2, layers=2, num_heads=4, heads=4, num_experts=4, fame_moe_last_k_layers=2, max_len=16, dropout=0.1, weight_decay=8e-5, is_control=True, search=s4, search_types=t4)
+    elif combo == ("amazon_beauty", "gru4rec"):
+        s1, t1 = _choice_overrides(
+            hidden_size=[64, 128, 192],
+            embedding_size=[64, 128, 192],
+            num_layers=[1],
+            n_layers=[1],
+            MAX_ITEM_LIST_LENGTH=[16, 24, 32, 50],
+            dropout_prob=[0.20, 0.30, 0.40],
+            weight_decay=[0.0, 1e-5, 1e-4],
+        )
+        fam("classic_single_layer", lr_policy="low_stable", root="gru_classic_recipe_missing", hidden_size=128, embedding_size=128, num_layers=1, layers=1, max_len=24, dropout=0.3, weight_decay=1e-5, search=s1, search_types=t1, lr_lo_override=1.5e-4, lr_hi_override=2.0e-3)
+        s2, t2 = _choice_overrides(
+            hidden_size=[64, 128],
+            embedding_size=[64, 128],
+            num_layers=[2, 3],
+            n_layers=[2, 3],
+            MAX_ITEM_LIST_LENGTH=[16, 24, 32],
+            dropout_prob=[0.20, 0.30, 0.40],
+            weight_decay=[1e-5, 1e-4, 3e-4],
+        )
+        fam("deeper_dropout", lr_policy="mid_balanced", root="gru_depth_regularization_gap", hidden_size=128, embedding_size=128, num_layers=2, layers=2, max_len=24, dropout=0.3, weight_decay=1e-4, search=s2, search_types=t2, lr_lo_override=2.0e-4, lr_hi_override=2.5e-3)
+        s3, t3 = _choice_overrides(
+            hidden_size=[96, 160, 224],
+            embedding_size=[96, 160, 224],
+            num_layers=[1, 2],
+            n_layers=[1, 2],
+            MAX_ITEM_LIST_LENGTH=[24, 32, 50],
+            dropout_prob=[0.10, 0.20, 0.30],
+            weight_decay=[0.0, 1e-5, 1e-4],
+        )
+        fam("long_context", lr_policy="low_stable", root="gru_context_underreach", hidden_size=160, embedding_size=160, num_layers=1, layers=1, max_len=32, dropout=0.2, weight_decay=1e-5, search=s3, search_types=t3, lr_lo_override=1.5e-4, lr_hi_override=1.6e-3)
+        s4, t4 = _choice_overrides(
+            hidden_size=[160, 224, 320],
+            embedding_size=[160, 224, 320],
+            num_layers=[1, 2],
+            n_layers=[1, 2],
+            MAX_ITEM_LIST_LENGTH=[10, 16, 24],
+            dropout_prob=[0.05, 0.10, 0.20],
+            weight_decay=[0.0, 1e-5],
+        )
+        fam("high_capacity_control", lr_policy="high_control", root="gru_control_family", hidden_size=224, embedding_size=224, num_layers=2, layers=2, max_len=16, dropout=0.1, weight_decay=1e-5, is_control=True, search=s4, search_types=t4)
+    elif combo == ("KuaiRecLargeStrictPosV2_0.2", "gru4rec"):
+        s1, t1 = _choice_overrides(
+            hidden_size=[128, 224, 320],
+            embedding_size=[128, 224, 320],
+            num_layers=[1, 2],
+            n_layers=[1, 2],
+            MAX_ITEM_LIST_LENGTH=[12, 20, 32, 50],
+            dropout_prob=[0.10, 0.20, 0.30],
+            weight_decay=[0.0, 1e-5, 5e-5],
+        )
+        fam("stable_midlr_classic", lr_policy="mid_balanced", root="gru_joint_capacity_search_needed", hidden_size=224, embedding_size=224, num_layers=1, layers=1, max_len=20, dropout=0.2, weight_decay=1e-5, search=s1, search_types=t1)
+        s2, t2 = _choice_overrides(
+            hidden_size=[128, 192, 256],
+            embedding_size=[128, 192, 256],
+            num_layers=[1, 2],
+            n_layers=[1, 2],
+            MAX_ITEM_LIST_LENGTH=[20, 32, 50],
+            dropout_prob=[0.10, 0.20, 0.30],
+            weight_decay=[0.0, 1e-5, 5e-5],
+        )
+        fam("long_context_probe", lr_policy="low_stable", root="gru_context_underreach", hidden_size=192, embedding_size=192, num_layers=1, layers=1, max_len=32, dropout=0.2, weight_decay=1e-5, search=s2, search_types=t2)
+        s3, t3 = _choice_overrides(
+            hidden_size=[64, 128, 192],
+            embedding_size=[64, 128, 192],
+            num_layers=[1, 2, 3],
+            n_layers=[1, 2, 3],
+            MAX_ITEM_LIST_LENGTH=[12, 20, 32],
+            dropout_prob=[0.20, 0.30, 0.40],
+            weight_decay=[1e-5, 1e-4],
+        )
+        fam("compact_dropout", lr_policy="mid_balanced", root="gru_overcapacity_bias", hidden_size=128, embedding_size=128, num_layers=1, layers=1, max_len=20, dropout=0.3, weight_decay=1e-4, search=s3, search_types=t3)
+        s4, t4 = _choice_overrides(
+            hidden_size=[224, 320, 384],
+            embedding_size=[224, 320, 384],
+            num_layers=[2, 3],
+            n_layers=[2, 3],
+            MAX_ITEM_LIST_LENGTH=[10, 16, 24],
+            dropout_prob=[0.05, 0.10, 0.20],
+            weight_decay=[0.0, 1e-5],
+        )
+        fam("high_capacity_control", lr_policy="high_control", root="gru_control_family", hidden_size=320, embedding_size=320, num_layers=2, layers=2, max_len=16, dropout=0.1, weight_decay=1e-5, is_control=True, search=s4, search_types=t4)
+    elif model_option == "gru4rec":
+        s, t = _choice_overrides(
+            hidden_size=[64, 128, 192],
+            embedding_size=[64, 128, 192],
+            num_layers=[1, 2],
+            n_layers=[1, 2],
+            MAX_ITEM_LIST_LENGTH=[12, 20, 32],
+            dropout_prob=[0.10, 0.20, 0.30],
+            weight_decay=[0.0, 1e-5, 1e-4],
+        )
+        fam("generic_gru_joint", lr_policy="mid_balanced", root="gru_joint_search_generic", hidden_size=128, embedding_size=128, num_layers=1, layers=1, max_len=20, dropout=0.2, weight_decay=1e-5, search=s, search_types=t)
+    else:
+        families = list(_select_step2_hypothesis_bank(dataset, model_option, best_rec)["families"])
+
+    return {
+        "anchor": anchor,
+        "anchor_run_id": anchor_run_id,
+        "source_stage": source_stage,
+        "families": families,
+        "anchor_cfg": anchor_cfg,
+        "anchor_lo": anchor_lo,
+        "anchor_hi": anchor_hi,
+    }
+
+
+def _build_step3_pass1_candidates(dataset: str, model_option: str, best_rec: Optional[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    bank = _select_step3_hypothesis_bank(dataset, model_option, best_rec)
+    families = list(bank["families"])
+    counts = _allocate_even_counts(int(PASS_SPECS["pass1"]["candidate_count"]), families)
+    variant_order = ["BASE", "WIDTH", "DEPTH", "LEN", "REG", "CTRL", "WIDTH_TUNE", "LEN_TUNE", "LR_DN", "LR_UP", "DEPTH_TUNE", "ANCHOR"]
+    candidates: list[Dict[str, Any]] = []
+    for family, count in zip(families, counts):
+        for idx in range(int(count)):
+            variant = variant_order[idx % len(variant_order)]
+            candidates.append(
+                _make_step_candidate(
+                    "step3",
+                    dataset,
+                    model_option,
+                    "pass1",
+                    family,
+                    variant=variant,
+                    anchor_lo=float(bank["anchor_lo"]),
+                    anchor_hi=float(bank["anchor_hi"]),
+                    anchor_run_id=str(bank["anchor_run_id"]),
+                    source_stage="step3_hypothesis_bank",
+                )
+            )
+    deduped = _dedup_candidates_stagei(candidates)
+    return deduped[: int(PASS_SPECS["pass1"]["candidate_count"])]
+
+
+def _build_step3_pass2_candidates(dataset: str, model_option: str, best_rec: Optional[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    bank = _select_step3_hypothesis_bank(dataset, model_option, best_rec)
+    families = list(bank["families"])
+    family_stats = _load_step_family_stats("step3", dataset, OPTION_TO_LABEL[model_option])
+    ranked = _rank_step2_families(families, family_stats)
+    winning = ranked[0] if ranked else None
+    second = ranked[1] if len(ranked) > 1 else None
+    control = next((f for f in families if bool(f.get("is_control")) and f is not winning and f is not second), None)
+    if control is None:
+        control = next((f for f in ranked if f is not winning and f is not second), second or winning)
+
+    candidates: list[Dict[str, Any]] = []
+    if winning is not None:
+        for variant in ["BASE", "LR_DN", "LR_UP", "WIDTH_TUNE", "DEPTH_TUNE", "LEN_TUNE"]:
+            candidates.append(
+                _make_step_candidate(
+                    "step3",
+                    dataset,
+                    model_option,
+                    "pass2",
+                    winning,
+                    variant=variant,
+                    anchor_lo=float(bank["anchor_lo"]),
+                    anchor_hi=float(bank["anchor_hi"]),
+                    anchor_run_id=str(bank["anchor_run_id"]),
+                    source_stage="step3_family_refine",
+                )
+            )
+    if second is not None:
+        for variant in ["BASE", "LR_DN", "REG_TUNE"]:
+            candidates.append(
+                _make_step_candidate(
+                    "step3",
+                    dataset,
+                    model_option,
+                    "pass2",
+                    second,
+                    variant=variant,
+                    anchor_lo=float(bank["anchor_lo"]),
+                    anchor_hi=float(bank["anchor_hi"]),
+                    anchor_run_id=str(bank["anchor_run_id"]),
+                    source_stage="step3_family_refine",
+                )
+            )
+    if control is not None:
+        for variant in ["BASE", "CTRL"]:
+            candidates.append(
+                _make_step_candidate(
+                    "step3",
+                    dataset,
+                    model_option,
+                    "pass2",
+                    control,
+                    variant=variant,
+                    anchor_lo=float(bank["anchor_lo"]),
+                    anchor_hi=float(bank["anchor_hi"]),
+                    anchor_run_id=str(bank["anchor_run_id"]),
+                    source_stage="step3_family_refine",
+                )
+            )
+    anchor_family = winning or control or families[0]
+    candidates.append(
+        _make_step_candidate(
+            "step3",
+            dataset,
+            model_option,
+            "pass2",
+            anchor_family,
+            variant="ANCHOR",
+            anchor_lo=float(bank["anchor_lo"]),
+            anchor_hi=float(bank["anchor_hi"]),
+            anchor_run_id=str(bank["anchor_run_id"]),
+            source_stage="step3_family_refine",
+        )
+    )
+    deduped = _dedup_candidates_stagei(candidates)
+    if len(deduped) < int(PASS_SPECS["pass2"]["candidate_count"]) and winning is not None:
+        for variant in ["REG", "CTRL", "WIDTH", "LEN"]:
+            deduped = _dedup_candidates_stagei(
+                deduped
+                + [
+                    _make_step_candidate(
+                        "step3",
+                        dataset,
+                        model_option,
+                        "pass2",
+                        winning,
+                        variant=variant,
+                        anchor_lo=float(bank["anchor_lo"]),
+                        anchor_hi=float(bank["anchor_hi"]),
+                        anchor_run_id=str(bank["anchor_run_id"]),
+                        source_stage="step3_family_refine",
+                    )
+                ]
+            )
+            if len(deduped) >= int(PASS_SPECS["pass2"]["candidate_count"]):
+                break
+    return deduped[: int(PASS_SPECS["pass2"]["candidate_count"])]
+
+
 def _estimated_cost(row: Dict[str, Any]) -> float:
     dataset = str(row["dataset"])
     model_option = str(row["model_option"]).lower()
@@ -799,6 +2082,7 @@ def _build_rows_for_pass(
     *,
     best_rows: Optional[list[Dict[str, Any]]] = None,
 ) -> tuple[list[Dict[str, Any]], list[Dict[str, Any]]]:
+    step_name = _step_name(args)
     datasets = _selected_datasets(args)
     model_options = _selected_model_options(args)
     rows_snapshot = best_rows
@@ -822,7 +2106,15 @@ def _build_rows_for_pass(
         model_option = str(target["model_option"])
         model_label = OPTION_TO_LABEL[model_option]
         best_rec = best_by_combo.get((dataset, model_option))
-        if pass_name == "pass1":
+        if step_name == "step2" and pass_name == "pass1":
+            candidates = _build_step2_pass1_candidates(dataset, model_option, best_rec)
+        elif step_name == "step2" and pass_name == "pass2":
+            candidates = _build_step2_pass2_candidates(dataset, model_option, best_rec)
+        elif step_name == "step3" and pass_name == "pass1":
+            candidates = _build_step3_pass1_candidates(dataset, model_option, best_rec)
+        elif step_name == "step3" and pass_name == "pass2":
+            candidates = _build_step3_pass2_candidates(dataset, model_option, best_rec)
+        elif pass_name == "pass1":
             candidates = _build_pass1_candidates(dataset, model_option)
         elif pass_name == "pass2":
             candidates = _build_pass2_candidates(dataset, model_option, best_rec)
@@ -830,17 +2122,40 @@ def _build_rows_for_pass(
             candidates = _build_pass3_candidates(dataset, model_option, best_rec)
 
         for cand_idx, cand in enumerate(candidates, start=1):
-            cfg = _prepare_cfg_for_pass(dataset, model_option, dict(cand["config"]), pass_name)
+            hypothesis_family = str(cand.get("hypothesis_family", ""))
+            cfg = _prepare_cfg_for_pass(
+                dataset,
+                model_option,
+                dict(cand["config"]),
+                pass_name,
+                step_name=step_name,
+                hypothesis_family=hypothesis_family,
+            )
             if str(cand.get("batch_profile", "")).strip():
                 batch_profile_label = str(cand["batch_profile"])
             else:
-                batch_profile_label = str(_batch_profile(dataset, model_option, cfg, pass_name)["label"])
+                batch_profile_label = str(
+                    _batch_profile(
+                        dataset,
+                        model_option,
+                        cfg,
+                        pass_name,
+                        step_name=step_name,
+                        hypothesis_family=hypothesis_family,
+                    )["label"]
+                )
 
             for seed_id in seeds:
                 run_cursor += 1
-                token = PASS_TOKEN[pass_name]
+                token = _step_pass_token(step_name, pass_name)
                 model_tag = base._sanitize_token(model_label, upper=True)
                 cand_tag = base._sanitize_token(str(cand["candidate_id"]), upper=True)[:48]
+                if step_name == "step1":
+                    phase_prefix = f"{base.PHASE_ID}_{token}"
+                elif step_name == "step2":
+                    phase_prefix = f"{base.PHASE_ID}_S2_{token}"
+                else:
+                    phase_prefix = f"{base.PHASE_ID}_S3_{token}"
                 row = {
                     "dataset": dataset,
                     "phase_id": base.PHASE_ID,
@@ -852,12 +2167,13 @@ def _build_rows_for_pass(
                     "hparam_id": cand_tag[:40],
                     "seed_id": int(seed_id),
                     "run_phase": (
-                        f"{base.PHASE_ID}_{token}_D{combo_idx:02d}_M{base._sanitize_token(model_tag, upper=True)}_"
+                        f"{phase_prefix}_D{combo_idx:02d}_M{base._sanitize_token(model_tag, upper=True)}_"
                         f"C{cand_idx:02d}_{cand_tag}_S{int(seed_id)}"
                     ),
                     "run_id": f"{token}_{base._sanitize_token(dataset, upper=True)}_{model_tag}_{cand_tag}_S{int(seed_id)}",
                     "runtime_seed": int(args.seed_base) + int(run_cursor - 1),
                     "stage": "stagei",
+                    "step_name": step_name,
                     "pass_name": pass_name,
                     "model_option": model_option,
                     "model_label": model_label,
@@ -866,10 +2182,14 @@ def _build_rows_for_pass(
                     "source_stage": str(cand["source_stage"]),
                     "transfer_from_dataset": str(cand.get("transfer_from_dataset", "")),
                     "anchor_run_id": str(cand.get("anchor_run_id", "")),
+                    "hypothesis_family": hypothesis_family,
+                    "root_cause_tag": str(cand.get("root_cause_tag", "")),
                     "batch_profile": batch_profile_label,
                     "candidate_config": cfg,
                     "lr_lo": float(cand["lr_lo"]),
                     "lr_hi": float(cand["lr_hi"]),
+                    "search_overrides": dict(cand.get("search_overrides", {}) or {}),
+                    "search_space_type_overrides": dict(cand.get("search_space_type_overrides", {}) or {}),
                     "max_evals": int(pass_spec["max_evals"]),
                     "tune_epochs": int(pass_spec["tune_epochs"]),
                     "tune_patience": int(pass_spec["tune_patience"]),
@@ -884,17 +2204,19 @@ def _build_rows_for_pass(
 
 
 def _write_manifest(pass_name: str, args: argparse.Namespace, rows: list[Dict[str, Any]], targets: list[Dict[str, Any]]) -> Path:
+    step_name = _step_name(args)
     axis_dir = base.LOG_ROOT / base.AXIS
     axis_dir.mkdir(parents=True, exist_ok=True)
     if str(args.manifest_out or "").strip():
         out = Path(str(args.manifest_out)).expanduser()
-        path = out.with_name(f"{out.stem}_{pass_name}.json")
+        path = out.with_name(f"{out.stem}_{step_name}_{pass_name}.json")
     else:
-        path = axis_dir / f"{pass_name}_manifest.json"
+        path = axis_dir / f"{step_name}_{pass_name}_manifest.json"
     payload = {
         "track": base.TRACK,
         "axis": base.AXIS,
         "phase": base.PHASE_ID,
+        "step_name": step_name,
         "pass_name": pass_name,
         "pass_spec": PASS_SPECS[pass_name],
         "target_count": len(targets),
@@ -909,6 +2231,7 @@ def _write_manifest(pass_name: str, args: argparse.Namespace, rows: list[Dict[st
                 "ratio": t["ratio"],
                 "axis": t["axis"],
                 "run_id": t["run_id"],
+                "step_name": t.get("step_name", "step1"),
             }
             for t in targets
         ],
@@ -924,13 +2247,14 @@ def _write_log_preamble(log_file: Path, row: Dict[str, Any], gpu_id: str, cmd: l
         (
             f"run_phase={row.get('run_phase','')} run_id={row.get('run_id','')} "
             f"phase_id={row.get('phase_id','')} axis_id={row.get('axis_id','')} "
-            f"pass_name={row.get('pass_name','')} model={row.get('model_label','')} "
+            f"step_name={row.get('step_name','')} pass_name={row.get('pass_name','')} model={row.get('model_label','')} "
             f"candidate_id={row.get('candidate_id','')} seed={row.get('seed_id','')}"
         ),
         (
             f"dataset={row.get('dataset','')} gpu={gpu_id} "
             f"candidate_source={row.get('candidate_source','')} source_stage={row.get('source_stage','')} "
-            f"anchor_run_id={row.get('anchor_run_id','')} batch_profile={row.get('batch_profile','')}"
+            f"anchor_run_id={row.get('anchor_run_id','')} hypothesis_family={row.get('hypothesis_family','')} "
+            f"root_cause_tag={row.get('root_cause_tag','')} batch_profile={row.get('batch_profile','')}"
         ),
         (
             f"max_evals={row.get('max_evals','')} tune_epochs={row.get('tune_epochs','')} "
@@ -1029,15 +2353,124 @@ def _pop_next_launchable_row(shared_queue: deque, active: Dict[str, Dict[str, An
 
 
 def _build_command(row: Dict[str, Any], gpu_id: str) -> list[str]:
-    return sg._build_command(row, gpu_id, argparse.Namespace())
+    model_option = str(row["model_option"]).lower()
+    h = base._effective_model_hparams(row)
+    lr_lo = float(row["lr_lo"])
+    lr_hi = float(row["lr_hi"])
+    tune_epochs = int(row["tune_epochs"])
+    tune_patience = int(row["tune_patience"])
+    max_evals = int(row["max_evals"])
+
+    dropout = float(h["dropout"])
+    weight_decay = float(h["weight_decay"])
+    search: Dict[str, Any] = {"learning_rate": [float(lr_lo), float(lr_hi)]}
+    search_types: Dict[str, str] = {"learning_rate": "loguniform"}
+
+    fixed_search: Dict[str, Any] = {
+        "weight_decay": weight_decay,
+        "n_layers": int(h["layers"]),
+        "num_layers": int(h["layers"]),
+        "n_heads": int(h["heads"]),
+        "num_heads": int(h["heads"]),
+        "dropout_ratio": dropout,
+        "dropout_prob": dropout,
+        "hidden_dropout_prob": dropout,
+        "attn_dropout_prob": dropout,
+        "hidden_size": int(h["hidden_size"]),
+        "embedding_size": int(h["embedding_size"]),
+        "inner_size": int(h["inner_size"]),
+        "time_span": int(h["time_span"]),
+        "num_experts": int(h["num_experts"]),
+        "bsarec_c": int(dict(row.get("candidate_config", {}) or {}).get("bsarec_c", 3)),
+        "fame_moe_last_k_layers": int(dict(row.get("candidate_config", {}) or {}).get("fame_moe_last_k_layers", 1)),
+        "state_size": int(h["sigma_state"]),
+        "conv_kernel": int(h["sigma_kernel"]),
+        "remaining_ratio": float(h["sigma_remaining_ratio"]),
+        "MAX_ITEM_LIST_LENGTH": int(h["max_len"]),
+    }
+
+    extra_search = dict(row.get("search_overrides", {}) or {})
+    extra_search_types = dict(row.get("search_space_type_overrides", {}) or {})
+    searched_keys = {str(k) for k in extra_search.keys()}
+    for key, values in extra_search.items():
+        fixed_search.pop(str(key), None)
+        if isinstance(values, (list, tuple)):
+            search[str(key)] = list(values)
+        else:
+            search[str(key)] = [values]
+        search_types[str(key)] = str(extra_search_types.get(str(key), "choice"))
+
+    for key, value in fixed_search.items():
+        search[key] = [value]
+        search_types[key] = "choice"
+
+    python_bin = os.environ.get("RUN_PYTHON_BIN", "/venv/FMoE/bin/python")
+    cmd = [
+        python_bin,
+        "hyperopt_tune.py",
+        "--config-name",
+        base._dataset_config_name(str(row["dataset"])),
+        "--max-evals",
+        str(int(max_evals)),
+        "--tune-epochs",
+        str(int(tune_epochs)),
+        "--tune-patience",
+        str(int(tune_patience)),
+        "--seed",
+        str(int(row["runtime_seed"])),
+        "--run-group",
+        base.TRACK,
+        "--run-axis",
+        base.AXIS,
+        "--run-phase",
+        str(row["run_phase"]),
+        f"model={model_option}",
+        f"dataset={row['dataset']}",
+        "eval_mode=session_fixed",
+        "feature_mode=full_v3",
+        f"gpu_id={gpu_id}",
+        "log_wandb=false",
+        "show_progress=false",
+        "++special_logging=true",
+        f"++seed={int(row['runtime_seed'])}",
+        f"++search={base.hydra_literal(search)}",
+        f"++search_space_type_overrides={base.hydra_literal(search_types)}",
+        f"++weight_decay={weight_decay}",
+    ]
+
+    if model_option == "gru4rec":
+        cmd.append(f"++dropout_prob={dropout}")
+    else:
+        cmd.append(f"++dropout_ratio={dropout}")
+
+    def _filter_cli_overrides(overrides: list[str]) -> list[str]:
+        if not searched_keys:
+            return list(overrides)
+        out: list[str] = []
+        for item in overrides:
+            token = str(item)
+            if not token.startswith("++"):
+                out.append(token)
+                continue
+            key = token[2:].split("=", 1)[0].strip()
+            if key in searched_keys:
+                continue
+            out.append(token)
+        return out
+
+    cmd.extend(_filter_cli_overrides(base._model_algorithm_overrides(row)))
+    cmd.extend(base._model_runtime_resource_overrides(row))
+    cmd.extend(_filter_cli_overrides(base._base_hparam_overrides(row)))
+    return cmd
 
 
 def _print_pass_plan(pass_name: str, targets: list[Dict[str, Any]], rows: list[Dict[str, Any]]) -> None:
+    step_name = _row_step_name(rows[0]) if rows else "step1"
     spec = PASS_SPECS[pass_name]
     combos = len(targets)
     candidates = len({(str(r["dataset"]), str(r["model_option"]), str(r["candidate_id"])) for r in rows})
     print(
-        f"[{PASS_TOKEN[pass_name]}] combos={combos} candidates={candidates} runs={len(rows)} "
+        f"[{_step_pass_token(step_name, pass_name)}] combos={combos} candidates={candidates} runs={len(rows)} "
         f"epochs={spec['tune_epochs']} patience={spec['tune_patience']} max_evals={spec['max_evals']}"
     )
     for target in targets:
@@ -1055,8 +2488,9 @@ def _run_rows(
     global_total_runs: Optional[int] = None,
     global_done_base: int = 0,
 ) -> int:
+    step_name = _step_name(args)
     if not rows:
-        print(f"[{PASS_TOKEN[pass_name]}] no rows to run.")
+        print(f"[{_step_pass_token(step_name, pass_name)}] no rows to run.")
         return 0
 
     gpus = list(dict.fromkeys(base._parse_csv_strings(args.gpus)))
@@ -1083,8 +2517,9 @@ def _run_rows(
                     model = str(rec.get("model", "")).strip()
                     candidate_id = str(rec.get("candidate_id", "")).strip()
                     seed_id = str(rec.get("seed_id", "")).strip()
+                    rec_step_name = str(rec.get("step_name", "step1") or "step1").strip().lower()
                     if model and candidate_id and seed_id:
-                        done_keys.add((model, candidate_id, seed_id))
+                        done_keys.add((rec_step_name, model, candidate_id, seed_id))
         except Exception:
             pass
         completed_keys_by_dataset[dataset] = done_keys
@@ -1097,6 +2532,7 @@ def _run_rows(
         row["log_path"] = str(base._build_log_path(row))
         dataset = str(row["dataset"])
         resume_key = (
+            step_name,
             str(row.get("model_label", "")).strip(),
             str(row.get("candidate_id", "")).strip(),
             str(row.get("seed_id", "")).strip(),
@@ -1135,12 +2571,12 @@ def _run_rows(
         if global_total_runs is not None:
             os.environ["SLACK_NOTIFY_TOTAL_RUNS"] = str(int(global_total_runs))
         os.environ["SLACK_NOTIFY_GLOBAL_DONE_BASE"] = str(max(int(global_done_base), 0))
-        notifier = SlackProgressNotifier(phase_label=f"baseline StageI {pass_name}", rows=rows)
+        notifier = SlackProgressNotifier(phase_label=f"baseline StageI {step_name} {pass_name}", rows=rows)
         notifier.notify_plan(precompleted_rows=skipped_rows)
 
     try:
         if not runnable:
-            print(f"[{PASS_TOKEN[pass_name]}] all runs already complete.")
+            print(f"[{_step_pass_token(step_name, pass_name)}] all runs already complete.")
             for dataset in datasets:
                 base._update_baseline_phase_summary(dataset, base.PHASE_ID)
             return 0
@@ -1281,7 +2717,10 @@ def _run_rows(
                         "source_stage": row["source_stage"],
                         "transfer_from_dataset": row["transfer_from_dataset"],
                         "anchor_run_id": row["anchor_run_id"],
+                        "step_name": row["step_name"],
                         "pass_name": row["pass_name"],
+                        "hypothesis_family": row.get("hypothesis_family", ""),
+                        "root_cause_tag": row.get("root_cause_tag", ""),
                         "batch_profile": row["batch_profile"],
                         "result_path": result_path,
                         "timestamp_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -1320,9 +2759,23 @@ def _run_rows(
 
 
 def _pass_sequence(args: argparse.Namespace) -> list[str]:
-    if str(args.stagei_pass) == "all":
+    step_name = _step_name(args)
+    requested = str(args.stagei_pass)
+    if step_name == "step2":
+        if requested == "pass3":
+            raise RuntimeError("step2 does not support pass3; use --pass pass1|pass2|all")
+        if requested == "all":
+            return list(STEP2_PASS_SEQUENCE)
+        return [requested]
+    if step_name == "step3":
+        if requested == "pass3":
+            raise RuntimeError("step3 does not support pass3; use --pass pass1|pass2|all")
+        if requested == "all":
+            return list(STEP3_PASS_SEQUENCE)
+        return [requested]
+    if requested == "all":
         return list(PASS_ORDER)
-    return [str(args.stagei_pass)]
+    return [requested]
 
 
 def parse_args() -> argparse.Namespace:
@@ -1332,6 +2785,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
     parser.add_argument("--seeds", default="1")
     parser.add_argument("--seed-base", type=int, default=240000)
+    parser.add_argument("--step", dest="step_name", choices=STEP_ORDER, default="step1")
     parser.add_argument("--stagei-pass", "--pass", dest="stagei_pass", choices=["all", "pass1", "pass2", "pass3"], default="all")
     parser.add_argument("--manifest-out", default="")
     parser.add_argument("--resume-from-logs", action="store_true", default=True)
@@ -1360,33 +2814,50 @@ def main() -> int:
     sg._check_runtime_models(selected_models)
 
     selected_datasets = _selected_datasets(args)
-    best_rows_snapshot = _load_overall_best_table(datasets=set(selected_datasets), model_options=set(selected_models))
+    step_name = _step_name(args)
+    pass_names = _pass_sequence(args)
 
-    pass_plans: list[tuple[str, list[Dict[str, Any]], list[Dict[str, Any]]]] = []
-    overall_rows_for_manifest: list[Dict[str, Any]] = []
-    for pass_name in _pass_sequence(args):
-        targets, rows = _build_rows_for_pass(pass_name, args, best_rows=best_rows_snapshot)
-        pass_plans.append((pass_name, targets, rows))
-        overall_rows_for_manifest.extend(rows)
+    if step_name == "step1":
+        pass_plans: list[tuple[str, list[Dict[str, Any]], list[Dict[str, Any]]]] = []
+        best_rows_snapshot = _load_overall_best_table(datasets=set(selected_datasets), model_options=set(selected_models))
+        for pass_name in pass_names:
+            targets, rows = _build_rows_for_pass(pass_name, args, best_rows=best_rows_snapshot)
+            pass_plans.append((pass_name, targets, rows))
+        total_runs = sum(len(rows) for _, _, rows in pass_plans)
+        completed_base = 0
+        for pass_name, targets, rows in pass_plans:
+            _print_pass_plan(pass_name, targets, rows)
+            manifest_path = _write_manifest(pass_name, args, rows, targets)
+            print(f"[manifest] step={step_name} pass={pass_name} path={manifest_path}")
+            _run_rows(
+                pass_name,
+                args,
+                rows,
+                global_total_runs=total_runs if total_runs > 0 else None,
+                global_done_base=completed_base,
+            )
+            completed_base += len(rows)
+        print(
+            f"[All Done] baseline StageI progressive recovery completed: "
+            f"step={step_name} passes={','.join(pass_names)} total_runs={total_runs}"
+        )
+        return 0
 
-    total_runs = len(overall_rows_for_manifest)
     completed_base = 0
-    for pass_name, targets, rows in pass_plans:
+    total_runs = 0
+    for pass_name in pass_names:
+        current_best_rows = _load_overall_best_table(datasets=set(selected_datasets), model_options=set(selected_models))
+        targets, rows = _build_rows_for_pass(pass_name, args, best_rows=current_best_rows)
+        total_runs += len(rows)
         _print_pass_plan(pass_name, targets, rows)
         manifest_path = _write_manifest(pass_name, args, rows, targets)
-        print(f"[manifest] pass={pass_name} path={manifest_path}")
-        _run_rows(
-            pass_name,
-            args,
-            rows,
-            global_total_runs=total_runs if total_runs > 0 else None,
-            global_done_base=completed_base,
-        )
+        print(f"[manifest] step={step_name} pass={pass_name} path={manifest_path}")
+        _run_rows(pass_name, args, rows)
         completed_base += len(rows)
 
     print(
         f"[All Done] baseline StageI progressive recovery completed: "
-        f"passes={','.join(_pass_sequence(args))} total_runs={len(overall_rows_for_manifest)}"
+        f"step={step_name} passes={','.join(pass_names)} total_runs={completed_base}"
     )
     return 0
 

@@ -1,0 +1,123 @@
+[STAGEI_PROGRESSIVE_RECOVERY_ANCHOR2_CORE5_SETTING_HEADER]
+run_phase=P24_S3_I1S3_D01_MBSAREC_C12_I1S3_BSAREC_BEAUTY_LONG_CONTEXT_CTRL_S1 run_id=I1S3_AMAZON_BEAUTY_BSAREC_I1S3_BSAREC_BEAUTY_LONG_CONTEXT_CTRL_S1 phase_id=P24 axis_id=SI step_name=step3 pass_name=pass1 model=BSARec candidate_id=I1S3_BSAREC_BEAUTY_LONG_CONTEXT_CTRL seed=1
+dataset=amazon_beauty gpu=4 candidate_source=root_cause_hypothesis source_stage=step3_hypothesis_bank anchor_run_id=SH_AMAZON_BEAUTY_BSAREC_FAD_H3_R1_PASS5_DIM320_XHI_S1 hypothesis_family=beauty_long_context root_cause_tag=bsarec_context_underreach batch_profile=step3:pass1:bs2304/2560
+max_evals=10 tune_epochs=100 tune_patience=5
+seed=240011
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ab --max-evals 10 --tune-epochs 100 --tune-patience 5 --seed 240011 --run-group baseline --run-axis StageI_ProgressiveRecovery_anchor2_core5 --run-phase P24_S3_I1S3_D01_MBSAREC_C12_I1S3_BSAREC_BEAUTY_LONG_CONTEXT_CTRL_S1 model=bsarec dataset=amazon_beauty eval_mode=session_fixed feature_mode=full_v3 gpu_id=4 log_wandb=false show_progress=false ++special_logging=true ++seed=240011 ++search={learning_rate:[8e-05,0.00037153574400000005],bsarec_alpha:[0.4,0.55,0.7],bsarec_c:[5,7,9,11],num_heads:[1,2],n_heads:[1,2],hidden_size:[64,96],embedding_size:[64,96],inner_size:[256,384],MAX_ITEM_LIST_LENGTH:[32,40,50],hidden_dropout_prob:[0.2,0.3,0.5],dropout_prob:[0.2,0.3,0.5],dropout_ratio:[0.2,0.3,0.5],attn_dropout_prob:[0.2,0.3,0.5],weight_decay:[0.0001],n_layers:[2],num_layers:[2],time_span:[512],num_experts:[8],fame_moe_last_k_layers:[1],state_size:[32],conv_kernel:[8],remaining_ratio:[0.7]} ++search_space_type_overrides={learning_rate:"loguniform",bsarec_alpha:"choice",bsarec_c:"choice",num_heads:"choice",n_heads:"choice",hidden_size:"choice",embedding_size:"choice",inner_size:"choice",MAX_ITEM_LIST_LENGTH:"choice",hidden_dropout_prob:"choice",dropout_prob:"choice",dropout_ratio:"choice",attn_dropout_prob:"choice",weight_decay:"choice",n_layers:"choice",num_layers:"choice",time_span:"choice",num_experts:"choice",fame_moe_last_k_layers:"choice",state_size:"choice",conv_kernel:"choice",remaining_ratio:"choice"} ++weight_decay=0.0001 ++dropout_ratio=0.3 ++train_batch_size=2304 ++eval_batch_size=2560 ++num_layers=2 ++n_layers=2
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=541683 ts=2026-04-13T07:15:53
+
+=================================================================
+  Hyperopt TPE  |  BSARec x amazon_beauty
+  max_evals=10  epochs=100  patience=5  wandb=off
+  batch_size(train/valid/test)=2304/2560/2560
+  track=baseline  axis=stagei_progressiverecovery_anchor2_core5  phase=P24_S3_I1S3_D01_MBSAREC_C12_I1S3_BSAREC_BEAUTY_LONG_CONTEXT_CTRL_S1
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, bsarec_alpha, bsarec_c, dropout_prob, dropout_ratio, embedding_size, hidden_dropout_prob, hidden_size, inner_size, learning_rate, n_heads, ... (+1)
+Tuned params(len>1): 13  (~93312 discrete combos)
+Tuned groups: 13
+  [optimization]
+    hidden_dropout_prob             [0.2, 0.3, 0.5]                           -> choice
+    learning_rate                   [8e-05, 0.00037153574400000005]           -> loguniform
+  [model_core]
+    attn_dropout_prob               [0.2, 0.3, 0.5]                           -> choice
+    dropout_prob                    [0.2, 0.3, 0.5]                           -> choice
+    dropout_ratio                   [0.2, 0.3, 0.5]                           -> choice
+    embedding_size                  [64, 96]                                  -> choice
+    hidden_size                     [64, 96]                                  -> choice
+    inner_size                      [256, 384]                                -> choice
+    num_heads                       [1, 2]                                    -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [32, 40, 50]                              -> choice
+    bsarec_alpha                    [0.4, 0.55, 0.7]                          -> choice
+    bsarec_c                        [5, 7, 9, 11]                             -> choice
+    n_heads                         [1, 2]                                    -> choice
+Fixed params(singleton/non-list): 9
+Fixed groups: 9
+  [optimization]
+    weight_decay                    0.0001                                  
+  [model_core]
+    num_layers                      2                                       
+  [other]
+    conv_kernel                     8                                       
+    fame_moe_last_k_layers          1                                       
+    n_layers                        2                                       
+    num_experts                     8                                       
+    remaining_ratio                 0.7                                     
+    state_size                      32                                      
+    time_span                       512                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] MAX_ITEM_LIST_LENGTH=40, attn_dropout_prob=0.2, bsarec_alpha=0.4, bsarec_c=9, dropout_prob=0.3, dropout_ratio=0.2, embedding_size=64, hidden_dropout_prob=0.3, hidden_size=96, inner_size=256, learning_rate=0.0003051, n_heads=1, num_heads=1
+  -> MRR@20=0.001300  best=0.001300  (early_stop@8, trial=2s, avg=4s/trial, total=4s, ETA=34s)
+[TRIAL_METRICS] cur_best_mrr20=0.001300 cur_best_hr10=0.008800 cur_test_mrr20=0.001000 cur_test_hr10=0.008800 run_best_mrr20=0.001300 run_best_hr10=0.008800 run_test_mrr20=0.001000 run_test_hr10=0.008800
+
+[2/10] MAX_ITEM_LIST_LENGTH=40, attn_dropout_prob=0.3, bsarec_alpha=0.7, bsarec_c=7, dropout_prob=0.3, dropout_ratio=0.2, embedding_size=96, hidden_dropout_prob=0.2, hidden_size=64, inner_size=256, learning_rate=0.0003401, n_heads=2, num_heads=2
+  -> MRR@20=0.000000  best=0.001300  (early_stop@6, trial=1s, avg=2s/trial, total=5s, ETA=19s)
+[TRIAL_METRICS] cur_best_mrr20=0.000000 cur_best_hr10=0.000000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.001300 run_best_hr10=0.008800 run_test_mrr20=0.001000 run_test_hr10=0.008800
+
+[3/10] MAX_ITEM_LIST_LENGTH=32, attn_dropout_prob=0.3, bsarec_alpha=0.4, bsarec_c=11, dropout_prob=0.3, dropout_ratio=0.2, embedding_size=96, hidden_dropout_prob=0.2, hidden_size=64, inner_size=384, learning_rate=0.0003679, n_heads=2, num_heads=1
+  -> MRR@20=0.003600  best=0.003600  (early_stop@6, trial=1s, avg=2s/trial, total=6s, ETA=14s)
+[TRIAL_METRICS] cur_best_mrr20=0.003600 cur_best_hr10=0.026500 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.003600 run_best_hr10=0.026500 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[4/10] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.2, bsarec_alpha=0.4, bsarec_c=5, dropout_prob=0.3, dropout_ratio=0.3, embedding_size=64, hidden_dropout_prob=0.2, hidden_size=96, inner_size=256, learning_rate=0.0003293, n_heads=2, num_heads=2
+  -> MRR@20=0.003500  best=0.003600  (early_stop@8, trial=1s, avg=2s/trial, total=8s, ETA=12s)
+[TRIAL_METRICS] cur_best_mrr20=0.003500 cur_best_hr10=0.008800 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.003600 run_best_hr10=0.026500 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[5/10] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.5, bsarec_alpha=0.7, bsarec_c=9, dropout_prob=0.3, dropout_ratio=0.3, embedding_size=64, hidden_dropout_prob=0.5, hidden_size=64, inner_size=384, learning_rate=0.0001213, n_heads=2, num_heads=2
+  -> MRR@20=0.001900  best=0.003600  (early_stop@6, trial=1s, avg=2s/trial, total=9s, ETA=9s)
+[TRIAL_METRICS] cur_best_mrr20=0.001900 cur_best_hr10=0.008800 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.003600 run_best_hr10=0.026500 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[6/10] MAX_ITEM_LIST_LENGTH=40, attn_dropout_prob=0.2, bsarec_alpha=0.4, bsarec_c=5, dropout_prob=0.3, dropout_ratio=0.2, embedding_size=96, hidden_dropout_prob=0.3, hidden_size=64, inner_size=384, learning_rate=9.302e-05, n_heads=1, num_heads=2
+  -> MRR@20=0.003700  best=0.003700  (early_stop@14, trial=2s, avg=2s/trial, total=11s, ETA=7s)
+[TRIAL_METRICS] cur_best_mrr20=0.003700 cur_best_hr10=0.017700 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.003700 run_best_hr10=0.017700 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[7/10] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.3, bsarec_alpha=0.7, bsarec_c=7, dropout_prob=0.3, dropout_ratio=0.5, embedding_size=64, hidden_dropout_prob=0.5, hidden_size=96, inner_size=384, learning_rate=8.231e-05, n_heads=2, num_heads=2
+  -> MRR@20=0.000000  best=0.003700  (early_stop@6, trial=1s, avg=2s/trial, total=12s, ETA=5s)
+[TRIAL_METRICS] cur_best_mrr20=0.000000 cur_best_hr10=0.000000 cur_test_mrr20=0.001400 cur_test_hr10=0.000000 run_best_mrr20=0.003700 run_best_hr10=0.017700 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[8/10] MAX_ITEM_LIST_LENGTH=40, attn_dropout_prob=0.2, bsarec_alpha=0.55, bsarec_c=7, dropout_prob=0.5, dropout_ratio=0.3, embedding_size=64, hidden_dropout_prob=0.5, hidden_size=64, inner_size=384, learning_rate=0.0002354, n_heads=2, num_heads=1
+  -> MRR@20=0.002200  best=0.003700  (early_stop@6, trial=1s, avg=2s/trial, total=13s, ETA=3s)
+[TRIAL_METRICS] cur_best_mrr20=0.002200 cur_best_hr10=0.008800 cur_test_mrr20=0.001600 cur_test_hr10=0.008800 run_best_mrr20=0.003700 run_best_hr10=0.017700 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[9/10] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.5, bsarec_alpha=0.7, bsarec_c=9, dropout_prob=0.2, dropout_ratio=0.3, embedding_size=64, hidden_dropout_prob=0.5, hidden_size=64, inner_size=384, learning_rate=0.0002162, n_heads=2, num_heads=1
+  -> MRR@20=0.001600  best=0.003700  (early_stop@6, trial=1s, avg=2s/trial, total=14s, ETA=2s)
+[TRIAL_METRICS] cur_best_mrr20=0.001600 cur_best_hr10=0.008800 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.003700 run_best_hr10=0.017700 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[10/10] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.3, bsarec_alpha=0.55, bsarec_c=9, dropout_prob=0.3, dropout_ratio=0.2, embedding_size=96, hidden_dropout_prob=0.2, hidden_size=64, inner_size=384, learning_rate=0.0003363, n_heads=1, num_heads=1
+  -> MRR@20=0.000000  best=0.003700  (early_stop@6, trial=1s, avg=2s/trial, total=15s, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.000000 cur_best_hr10=0.000000 cur_test_mrr20=0.007300 cur_test_hr10=0.017500 run_best_mrr20=0.003700 run_best_hr10=0.017700 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+=================================================================
+  DONE  |  BSARec x amazon_beauty
+  Best MRR@20 = 0.003700  |  10/10 trials OK
+  Best HR@10  = 0.017700
+  Test MRR@20 = 0.000000  (best-valid checkpoint)
+  Test HR@10  = 0.000000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.003700 best_valid_hr10=0.017700 test_mrr20=0.000000 test_hr10=0.000000
+  Total time: 0.3 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 40
+    attn_dropout_prob: 0.2
+    bsarec_alpha: 0.4
+    bsarec_c: 5
+    dropout_prob: 0.3
+    dropout_ratio: 0.2
+    embedding_size: 96
+    hidden_dropout_prob: 0.3
+    hidden_size: 64
+    inner_size: 384
+    learning_rate: 9.30176e-05
+    n_heads: 1
+    num_heads: 2
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline/amazon_beauty_BSARec_p24_s3_i1s3_d01_mbsarec_c12_i1s3_bsarec_beauty_long_context_ctrl_s1_20260413_071553_632489_pid541683.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline/normal/stagei_progressiverecovery_anchor2_core5/P24/amazon_beauty/BSARec/amazon_beauty_BSARec_p24_s3_i1s3_d01_mbsarec_c12_i1s3_bsarec_beauty_long_context_ctrl_s1_20260413_071553_632489_pid541683.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline/special/stagei_progressiverecovery_anchor2_core5/P24/amazon_beauty/BSARec/amazon_beauty_BSARec_p24_s3_i1s3_d01_mbsarec_c12_i1s3_bsarec_beauty_long_context_ctrl_s1_20260413_071553_632489_pid541683_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline/special/stagei_progressiverecovery_anchor2_core5/P24/amazon_beauty/BSARec/amazon_beauty_BSARec_p24_s3_i1s3_d01_mbsarec_c12_i1s3_bsarec_beauty_long_context_ctrl_s1_20260413_071553_632489_pid541683_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=541683 start=2026-04-13T07:15:53 end=2026-04-13T07:16:09

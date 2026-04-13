@@ -11,6 +11,7 @@ MODELS="sasrec,gru4rec,tisasrec,duorec,sigma,bsarec,fearec,difsr,fame"
 GPU_LIST="4,5,6,7"
 SEEDS="1"
 SEED_BASE="240000"
+STEP_NAME="step1"
 STAGEI_PASS="all"
 
 MANIFEST_OUT=""
@@ -24,6 +25,7 @@ usage() {
   cat <<USAGE
 Usage: $0 [--datasets ...] [--models ...] [--gpus 0,1,2,3,4,5,6,7]
           [--seeds 1] [--seed-base 240000]
+          [--step step1|step2|step3]
           [--pass all|pass1|pass2|pass3]
           [--manifest-out path] [--resume-from-logs|--no-resume-from-logs]
           [--verify-logging|--no-verify-logging]
@@ -38,6 +40,7 @@ while [ "$#" -gt 0 ]; do
     --gpus) GPU_LIST="$2"; shift 2 ;;
     --seeds) SEEDS="$2"; shift 2 ;;
     --seed-base) SEED_BASE="$2"; shift 2 ;;
+    --step) STEP_NAME="$2"; shift 2 ;;
     --pass) STAGEI_PASS="$2"; shift 2 ;;
     --manifest-out) MANIFEST_OUT="$2"; shift 2 ;;
     --resume-from-logs) RESUME_FROM_LOGS="true"; shift ;;
@@ -65,6 +68,7 @@ CMD=(
   --gpus "${GPU_LIST}"
   --seeds "${SEEDS}"
   --seed-base "${SEED_BASE}"
+  --step "${STEP_NAME}"
   --pass "${STAGEI_PASS}"
   --smoke-max-runs "${SMOKE_MAX_RUNS}"
 )
@@ -92,4 +96,4 @@ fi
 run_echo_cmd "${CMD[@]}"
 "${CMD[@]}"
 
-echo "[All Done] baseline StageI progressive recovery completed: pass=${STAGEI_PASS} datasets=${DATASETS}"
+echo "[All Done] baseline StageI progressive recovery completed: step=${STEP_NAME} pass=${STAGEI_PASS} datasets=${DATASETS}"

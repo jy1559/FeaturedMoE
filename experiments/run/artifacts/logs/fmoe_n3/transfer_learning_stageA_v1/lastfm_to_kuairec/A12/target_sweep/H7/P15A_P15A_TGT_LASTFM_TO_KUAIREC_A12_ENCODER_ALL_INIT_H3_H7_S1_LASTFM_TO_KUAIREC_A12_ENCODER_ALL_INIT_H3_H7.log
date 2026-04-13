@@ -1,0 +1,84 @@
+[TRANSFER_LEARNING_STAGEA_SETTING_HEADER]
+run_phase=P15A_TGT_lastfm_to_kuairec_A12_encoder_all_init_H3_H7_S1 exp_brief=A12 encoder_all_init H7 phase_id=P15A axis_id=TLA setting_id=P15A_TGT_lastfm_to_kuairec_A12_encoder_all_init_H3_H7_S1 hparam_id=H7 seed=1
+desc=lastfm_to_kuairec A12 encoder_all_init H3->H7
+dataset=KuaiRecLargeStrictPosV2_0.2 gpu=2 order=25
+max_evals= tune_epochs= tune_patience=
+seed=161009
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 5 --tune-epochs 80 --tune-patience 8 --seed 161009 --run-group fmoe_n3 --run-axis transfer_learning_stageA_v1 --run-phase P15A_TGT_lastfm_to_kuairec_A12_encoder_all_init_H3_H7_S1 model=featured_moe_n3_tune dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session_fixed feature_mode=full_v3 gpu_id=2 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only fmoe_artifact_logging_policy=combo_best ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A12" ++fmoe_architecture_key="A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5" ++fmoe_hparam_id="H7" ++fmoe_phase="P15A" MAX_ITEM_LIST_LENGTH=20 train_batch_size=4096 eval_batch_size=4096 embedding_size=160 num_heads=4 attn_dropout_prob=0.1 d_ff=320 d_feat_emb=16 d_expert_hidden=160 d_router_hidden=80 expert_scale=3 ++search.learning_rate=[0.00025,0.00036,0.00052,0.00082,0.005] ++search.weight_decay=[1e-06] ++search.hidden_dropout_prob=[0.15] ++search.lr_scheduler_type=["warmup_cosine"] ++search_space_type_overrides.learning_rate="choice" ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice ++search_space_type_overrides.lr_scheduler_type=choice ++phase_run_type="transfer_stageA" ++phase_axis_id="TLA" ++phase_axis_desc="transfer_learning_stageA_v1" ++phase_setting_id="P15A_TGT_lastfm_to_kuairec_A12_encoder_all_init_H3_H7_S1" ++phase_setting_key="encoder_all_init_lastfm_to_kuairec_A12_H3_H7" ++phase_hparam_id="H7" ++phase_seed_id=1 ++phase_run_id="lastfm_to_kuairec_A12_encoder_all_init_H3_H7_S1" ++phase_transfer_pair_id="lastfm_to_kuairec" ++phase_transfer_mode="macro_encoder_all" ++phase_transfer_source_dataset="lastfm0.03" ++phase_transfer_target_dataset="KuaiRecLargeStrictPosV2_0.2" ++phase_transfer_source_hparam_id="H3" ++phase_transfer_target_hparam_id="H7" ++transfer.enable=true ++transfer.mode="macro_encoder_all" ++transfer.source_checkpoint="/workspace/FeaturedMoE/experiments/run/fmoe_n3/transfer_learning/ckpt/stageA/A12/lastfm_to_kuairec/lastfm0_03_H3_s1_best.pth" ++transfer.source_architecture="A12" ++transfer.strict_shape=false ++layer_layout=["attn","macro_ffn","mid_ffn","attn","micro_ffn"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0002 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0008 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w5_exd",mid:"w5_exd",micro:"w5_exd"} ++macro_history_window=5 ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_family_dropout_prob={macro:0.1,mid:0.1,micro:0.1} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++bias_mode="none"
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=660301 ts=2026-04-13T14:11:12
+[UniqueChoice] enabled: dedupe/remap duplicates across 5 finite combos
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x KuaiRecLargeStrictPosV2_0.2
+  max_evals=5  epochs=80  patience=8  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/4096/4096
+  track=fmoe_n3  axis=transfer_learning_stagea_v1  phase=P15A_TGT_lastfm_to_kuairec_A12_encoder_all_init_H3_H7_S1
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~5 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.00025, 0.00036, 0.00052, 0.00082, 0.005]  -> choice
+Fixed params(singleton/non-list): 3
+Fixed groups: 3
+  [optimization]
+    hidden_dropout_prob             0.15                                    
+    weight_decay                    1e-06                                   
+  [other]
+    lr_scheduler_type               warmup_cosine                           
+
+[Wandb] disabled for this hyperopt run
+
+[1/5] learning_rate=0.00082
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+[transfer-init] mode=macro_encoder_all source_architecture=A12 loaded=26/26 skipped_shape=0 skipped_missing=0 source=/workspace/FeaturedMoE/experiments/run/fmoe_n3/transfer_learning/ckpt/stageA/A12/lastfm_to_kuairec/lastfm0_03_H3_s1_best.pth
+  -> MRR@20=0.167900  best=0.167900  (early_stop@12, trial=2.0min, avg=2.3min/trial, total=2.3min, ETA=9.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.167900 cur_best_hr10=0.177700 cur_test_mrr20=0.167600 cur_test_hr10=0.174300 run_best_mrr20=0.167900 run_best_hr10=0.177700 run_test_mrr20=0.167600 run_test_hr10=0.174300
+
+[2/5] learning_rate=0.005
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+[transfer-init] mode=macro_encoder_all source_architecture=A12 loaded=26/26 skipped_shape=0 skipped_missing=0 source=/workspace/FeaturedMoE/experiments/run/fmoe_n3/transfer_learning/ckpt/stageA/A12/lastfm_to_kuairec/lastfm0_03_H3_s1_best.pth
+  -> MRR@20=0.059800  best=0.167900  (early_stop@9, trial=1.5min, avg=1.9min/trial, total=3.8min, ETA=5.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.059800 cur_best_hr10=0.086300 cur_test_mrr20=0.058100 cur_test_hr10=0.081600 run_best_mrr20=0.167900 run_best_hr10=0.177700 run_test_mrr20=0.167600 run_test_hr10=0.174300
+
+[3/5] learning_rate=0.00036
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+[transfer-init] mode=macro_encoder_all source_architecture=A12 loaded=26/26 skipped_shape=0 skipped_missing=0 source=/workspace/FeaturedMoE/experiments/run/fmoe_n3/transfer_learning/ckpt/stageA/A12/lastfm_to_kuairec/lastfm0_03_H3_s1_best.pth
+  -> MRR@20=0.169700  best=0.169700  (early_stop@20, trial=3.3min, avg=2.4min/trial, total=7.1min, ETA=4.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.169700 cur_best_hr10=0.177700 cur_test_mrr20=0.167700 cur_test_hr10=0.172400 run_best_mrr20=0.169700 run_best_hr10=0.177700 run_test_mrr20=0.167700 run_test_hr10=0.172400
+
+[4/5] learning_rate=0.00052
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+[transfer-init] mode=macro_encoder_all source_architecture=A12 loaded=26/26 skipped_shape=0 skipped_missing=0 source=/workspace/FeaturedMoE/experiments/run/fmoe_n3/transfer_learning/ckpt/stageA/A12/lastfm_to_kuairec/lastfm0_03_H3_s1_best.pth
+  -> MRR@20=0.168900  best=0.169700  (early_stop@16, trial=2.7min, avg=2.5min/trial, total=9.9min, ETA=2.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.168900 cur_best_hr10=0.175300 cur_test_mrr20=0.167600 cur_test_hr10=0.174300 run_best_mrr20=0.169700 run_best_hr10=0.177700 run_test_mrr20=0.167700 run_test_hr10=0.172400
+
+[5/5] learning_rate=0.00025
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+[transfer-init] mode=macro_encoder_all source_architecture=A12 loaded=26/26 skipped_shape=0 skipped_missing=0 source=/workspace/FeaturedMoE/experiments/run/fmoe_n3/transfer_learning/ckpt/stageA/A12/lastfm_to_kuairec/lastfm0_03_H3_s1_best.pth
+  -> MRR@20=0.170700  best=0.170700  (early_stop@28, trial=4.7min, avg=2.9min/trial, total=14.6min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.170700 cur_best_hr10=0.176100 cur_test_mrr20=0.168900 cur_test_hr10=0.173800 run_best_mrr20=0.170700 run_best_hr10=0.176100 run_test_mrr20=0.168900 run_test_hr10=0.173800
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+[1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 10.20 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.35s/it, [1;33mGPU RAM: 10.20 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 10.20 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.34s/it, [1;33mGPU RAM: 10.20 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 10.20 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.35s/it, [1;33mGPU RAM: 10.20 G/23.52 G[0m][0m                                                                                                    
+=================================================================
+  DONE  |  FeaturedMoE_N3 x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.170700  |  5/5 trials OK
+  Best HR@10  = 0.176100
+  Test MRR@20 = 0.168900  (best-valid checkpoint)
+  Test HR@10  = 0.173800  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.170700 best_valid_hr10=0.176100 test_mrr20=0.168900 test_hr10=0.173800
+  Total time: 14.7 min
+  Best params:
+    learning_rate: 0.00025
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p15a_tgt_lastfm_to_kuairec_a12_encoder_all_init_h3_h7_s1_20260413_141113_323414_pid660301.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n3/normal/transfer_learning_stagea_v1/P15A/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p15a_tgt_lastfm_to_kuairec_a12_encoder_all_init_h3_h7_s1_20260413_141113_323414_pid660301.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n3/special/transfer_learning_stagea_v1/P15A/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p15a_tgt_lastfm_to_kuairec_a12_encoder_all_init_h3_h7_s1_20260413_141113_323414_pid660301_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/fmoe_n3/special/transfer_learning_stagea_v1/P15A/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p15a_tgt_lastfm_to_kuairec_a12_encoder_all_init_h3_h7_s1_20260413_141113_323414_pid660301_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=660301 start=2026-04-13T14:11:12 end=2026-04-13T14:25:56

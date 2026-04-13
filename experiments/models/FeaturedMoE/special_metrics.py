@@ -39,24 +39,47 @@ _SESSION_LEN_BINS_LEGACY = (
 @dataclass
 class _MetricAccumulator:
     count: int = 0
+    hit5_sum: float = 0.0
+    hit10_sum: float = 0.0
     hit20_sum: float = 0.0
+    ndcg5_sum: float = 0.0
+    ndcg10_sum: float = 0.0
     ndcg20_sum: float = 0.0
+    mrr5_sum: float = 0.0
+    mrr10_sum: float = 0.0
     mrr20_sum: float = 0.0
 
-    def update(self, *, hit20: float, ndcg20: float, mrr20: float) -> None:
+    def update(self, *, metrics: Dict[str, float]) -> None:
         self.count += 1
-        self.hit20_sum += float(hit20)
-        self.ndcg20_sum += float(ndcg20)
-        self.mrr20_sum += float(mrr20)
+        self.hit5_sum += float(metrics.get("hit@5", 0.0))
+        self.hit10_sum += float(metrics.get("hit@10", 0.0))
+        self.hit20_sum += float(metrics.get("hit@20", 0.0))
+        self.ndcg5_sum += float(metrics.get("ndcg@5", 0.0))
+        self.ndcg10_sum += float(metrics.get("ndcg@10", 0.0))
+        self.ndcg20_sum += float(metrics.get("ndcg@20", 0.0))
+        self.mrr5_sum += float(metrics.get("mrr@5", 0.0))
+        self.mrr10_sum += float(metrics.get("mrr@10", 0.0))
+        self.mrr20_sum += float(metrics.get("mrr@20", 0.0))
 
     def finalize(self) -> dict:
         if self.count <= 0:
-            return {"count": 0, "hit@20": 0.0, "ndcg@20": 0.0, "mrr@20": 0.0}
+            return {
+                "count": 0,
+                "hit@5": 0.0, "hit@10": 0.0, "hit@20": 0.0,
+                "ndcg@5": 0.0, "ndcg@10": 0.0, "ndcg@20": 0.0,
+                "mrr@5": 0.0, "mrr@10": 0.0, "mrr@20": 0.0,
+            }
         denom = float(self.count)
         return {
             "count": int(self.count),
+            "hit@5": self.hit5_sum / denom,
+            "hit@10": self.hit10_sum / denom,
             "hit@20": self.hit20_sum / denom,
+            "ndcg@5": self.ndcg5_sum / denom,
+            "ndcg@10": self.ndcg10_sum / denom,
             "ndcg@20": self.ndcg20_sum / denom,
+            "mrr@5": self.mrr5_sum / denom,
+            "mrr@10": self.mrr10_sum / denom,
             "mrr@20": self.mrr20_sum / denom,
         }
 
@@ -123,6 +146,8 @@ class SpecialMetricCollector:
         self.config_snapshot = dict(config_snapshot)
 
         self.overall = _MetricAccumulator()
+        self.overall_seen_target = _MetricAccumulator()
+        self.overall_unseen_target = _MetricAccumulator()
         self.slices = {
             "target_popularity_abs": {name: _MetricAccumulator() for name, _, _ in _POPULARITY_BINS},
             "target_popularity_abs_legacy": {name: _MetricAccumulator() for name, _, _ in _POPULARITY_BINS_LEGACY},
@@ -136,16 +161,21 @@ class SpecialMetricCollector:
             }
 
     @staticmethod
-    def _rank_metrics(ranks: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _rank_metrics(ranks: torch.Tensor) -> Dict[str, torch.Tensor]:
         ranks = ranks.float()
-        hit20 = (ranks <= 20).float()
-        ndcg20 = torch.where(
-            ranks <= 20,
-            1.0 / torch.log2(ranks + 1.0),
-            torch.zeros_like(ranks),
-        )
-        mrr20 = torch.where(ranks <= 20, 1.0 / ranks, torch.zeros_like(ranks))
-        return hit20, ndcg20, mrr20
+        out: Dict[str, torch.Tensor] = {}
+        for k in (5, 10, 20):
+            hit = (ranks <= k).float()
+            ndcg = torch.where(
+                ranks <= k,
+                1.0 / torch.log2(ranks + 1.0),
+                torch.zeros_like(ranks),
+            )
+            mrr = torch.where(ranks <= k, 1.0 / ranks, torch.zeros_like(ranks))
+            out[f"hit@{k}"] = hit
+            out[f"ndcg@{k}"] = ndcg
+            out[f"mrr@{k}"] = mrr
+        return out
 
     def update(self, *, interaction, scores: torch.Tensor, positive_u, positive_i) -> None:
         if scores is None:
@@ -160,7 +190,7 @@ class SpecialMetricCollector:
         batch_scores = scores.index_select(0, row_idx)
         pos_scores = batch_scores.gather(1, pos_idx.view(-1, 1)).squeeze(1)
         ranks = (batch_scores > pos_scores.unsqueeze(1)).sum(dim=1) + 1
-        hit20, ndcg20, mrr20 = self._rank_metrics(ranks)
+        metrics_tensor = self._rank_metrics(ranks)
 
         item_seq_len = None
         if self.item_seq_len_field in interaction:
@@ -193,51 +223,34 @@ class SpecialMetricCollector:
         else:
             new_user = None
 
-        hit_values = hit20.detach().cpu().tolist()
-        ndcg_values = ndcg20.detach().cpu().tolist()
-        mrr_values = mrr20.detach().cpu().tolist()
+        metrics_values = {
+            key: tensor.detach().cpu().tolist()
+            for key, tensor in metrics_tensor.items()
+        }
         session_len_values = session_len.detach().cpu().tolist()
         new_user_values = new_user.detach().cpu().tolist() if new_user is not None else None
 
         for idx, pop_count in enumerate(pop_values):
-            hit_val = float(hit_values[idx])
-            ndcg_val = float(ndcg_values[idx])
-            mrr_val = float(mrr_values[idx])
+            point = {k: float(v[idx]) for k, v in metrics_values.items()}
 
-            self.overall.update(hit20=hit_val, ndcg20=ndcg_val, mrr20=mrr_val)
+            self.overall.update(metrics=point)
+            if int(pop_count) <= 0:
+                self.overall_unseen_target.update(metrics=point)
+            else:
+                self.overall_seen_target.update(metrics=point)
             pop_bucket = _bucket_name(int(pop_count), _POPULARITY_BINS)
-            self.slices["target_popularity_abs"][pop_bucket].update(
-                hit20=hit_val,
-                ndcg20=ndcg_val,
-                mrr20=mrr_val,
-            )
+            self.slices["target_popularity_abs"][pop_bucket].update(metrics=point)
             pop_bucket_legacy = _bucket_name(int(pop_count), _POPULARITY_BINS_LEGACY)
-            self.slices["target_popularity_abs_legacy"][pop_bucket_legacy].update(
-                hit20=hit_val,
-                ndcg20=ndcg_val,
-                mrr20=mrr_val,
-            )
+            self.slices["target_popularity_abs_legacy"][pop_bucket_legacy].update(metrics=point)
 
             session_bucket = _bucket_name(int(session_len_values[idx]), _SESSION_LEN_BINS)
-            self.slices["session_len"][session_bucket].update(
-                hit20=hit_val,
-                ndcg20=ndcg_val,
-                mrr20=mrr_val,
-            )
+            self.slices["session_len"][session_bucket].update(metrics=point)
             session_bucket_legacy = _bucket_name(int(session_len_values[idx]), _SESSION_LEN_BINS_LEGACY)
-            self.slices["session_len_legacy"][session_bucket_legacy].update(
-                hit20=hit_val,
-                ndcg20=ndcg_val,
-                mrr20=mrr_val,
-            )
+            self.slices["session_len_legacy"][session_bucket_legacy].update(metrics=point)
 
             if new_user_values is not None and "new_user" in self.slices:
                 label = "new" if float(new_user_values[idx]) >= 0.5 else "existing"
-                self.slices["new_user"][label].update(
-                    hit20=hit_val,
-                    ndcg20=ndcg_val,
-                    mrr20=mrr_val,
-                )
+                self.slices["new_user"][label].update(metrics=point)
 
     def finalize(self) -> dict:
         slice_payload = {
@@ -259,6 +272,8 @@ class SpecialMetricCollector:
         return {
             "split": self.split_name,
             "overall": self.overall.finalize(),
+            "overall_seen_target": self.overall_seen_target.finalize(),
+            "overall_unseen_target": self.overall_unseen_target.finalize(),
             "slices": slice_payload,
             "counts": count_payload,
             "config_snapshot": dict(self.config_snapshot),

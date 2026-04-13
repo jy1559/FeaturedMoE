@@ -1,0 +1,297 @@
+\documentclass[sigconf,anonymous,review]{acmart-primary/acmart}
+
+\AtBeginDocument{%
+  \providecommand\BibTeX{{%
+    Bib\TeX}}}
+
+% ACM review-submission settings.
+% For an author-visible draft, switch the line above to:
+% \documentclass[sigconf,authordraft]{acmart}
+% Replace these metadata fields later when you know the target venue.
+\setcopyright{none}
+\settopmatter{printacmref=false}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+
+\acmConference[RouteRec Draft]{Draft Venue Placeholder}{2026}{TBD}
+\acmBooktitle{Draft Template for RouteRec Paper}
+\acmDOI{}
+\acmISBN{}
+% Uncomment this when you receive an official submission ID.
+% \acmSubmissionID{123-A56-BU3}
+
+% ------------------------------------------------------------------
+% Notes for future editing
+% ------------------------------------------------------------------
+% Figure example:
+% \begin{figure}[t]
+%   \centering
+%   \includegraphics[width=\linewidth]{figures/overview.pdf}
+%   \caption{Overall framework of RouteRec.}
+%   \label{fig:overview}
+% \end{figure}
+%
+% Bibliography example:
+% 1) Create refs.bib in the same project folder.
+% 2) Add entries there.
+% 3) Uncomment the bibliography commands at the end of this file.
+
+% Compile even when draft figures are not ready yet.
+\newcommand{\safeincludegraphics}[2][]{%
+  \IfFileExists{#2}{%
+    \includegraphics[#1]{#2}%
+  }{%
+    \fbox{%
+      \parbox[c][0.22\textheight][c]{0.9\linewidth}{%
+        \centering Missing figure file:\\texttt{\detokenize{#2}}%
+      }%
+    }%
+  }%
+}
+
+\begin{document}
+
+\title[RouteRec for Sequential Recommendation]{RouteRec: Behavior-Guided Expert Routing for Sequential Recommendation}
+
+\author{First Author}
+\affiliation{%
+  \institution{KAIST}
+  \department{Kim Jaechul Graduate School of AI}
+  \city{Daejeon}
+  \country{Republic of Korea}}
+\email{first.author@kaist.ac.kr}
+
+\author{Second Author}
+\affiliation{%
+  \institution{KAIST}
+  \department{Kim Jaechul Graduate School of AI}
+  \city{Daejeon}
+  \country{Republic of Korea}}
+\email{second.author@kaist.ac.kr}
+
+\renewcommand{\shortauthors}{Author et al.}
+
+\begin{abstract}
+Most sequential recommenders still process users and sessions through a largely shared computation path, even though behavioral patterns vary substantially across examples. A session may reflect stable long-term preference, repeated consumption, or short-term exploration, and the dominant pattern can shift over time. Existing expert-based variants partly address this issue, but many of them route mainly from hidden states, which makes specialization harder to interpret and control.
+
+We propose RouteRec, a feature-guided mixture-of-experts framework for sequential recommendation. RouteRec extracts compact behavioral cues from broadly available signals (interaction order, timestamps, and coarse item categories) and uses them only for routing, while expert networks transform sequence hidden states. This design separates why an example is routed from how its representation is transformed. We further apply routing at macro, mid, and micro temporal scopes so expert selection can respond to both stable preference and immediate intent.
+
+Experiments show consistent gains over strong sequential recommendation baselines, and diagnostic analyses indicate more behavior-aligned and stable specialization. Overall, the results suggest that lightweight cues from standard interaction logs are sufficient to provide practical and interpretable routing signals for adaptive computation.
+\end{abstract}
+
+\begin{CCSXML}
+<ccs2012>
+ <concept>
+  <concept_id>10002951.10003317.10003347.10003350</concept_id>
+  <concept_desc>Information systems~Recommender systems</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Information systems~Recommender systems}
+
+\keywords{sequential recommendation, mixture of experts, conditional computation, routing, behavioral features}
+
+\maketitle
+
+
+\section{Introduction}
+Sequential recommendation predicts the next item from a temporally ordered interaction history. In realistic production logs, this history is usually sessionized, sparse, and heterogeneous: each record almost always contains item identity and timestamp, while richer metadata may be inconsistent across datasets. The practical importance of this setting is clear. Recommendation systems continuously face the next-action problem, and user satisfaction depends on whether a model can react to intent shifts quickly rather than only fitting global averages.
+
+The formal task is straightforward: given a sequence prefix, estimate the most likely next item. The modeling challenge is not the objective itself, but the behavioral variability hidden behind it. A user can display long-horizon preference regularity at one moment, short-term intent drift in another session, and abrupt local transition behavior near the current prediction point. These patterns are not exceptional corner cases; they are central characteristics of sequential and session-based recommendation~\cite{wang2019seqsurvey,wang2021sessionsurvey}.
+
+This leads to a central tension. Modern sequence models are increasingly strong at representation learning, yet many still process behaviorally different cases through largely shared transformations. Shared computation is efficient and often robust, but it can also blur distinctions among samples that should ideally trigger different computational pathways. When non-stationary behavior is compressed into one dominant pathway, specialization opportunities may be underused.
+
+Figure~\ref{fig:intro-behavioral-features} illustrates this motivation from a practical angle. Even when two users have similar global activity levels, their short-range rhythm, category focus, and repetition structure can be very different. A single unified path can still make good average predictions, but it does not explicitly encode why one case should activate a different expert than another.
+
+\begin{figure}[t]
+  \centering
+  \safeincludegraphics[width=\columnwidth]{figures/figure1_different_user.pdf}
+  \caption{Motivating example of RouteRec. Different users and sessions can exhibit different behavioral characteristics, suggesting that they need not share the same computation path. RouteRec addresses this by extracting compact behavioral cues from simple sequential signals and using them as explicit routing signals.}
+  \label{fig:intro-behavioral-features}
+\end{figure}
+
+Many strong baselines still follow this shared-backbone paradigm. Progress from recurrent models to Transformer-based models has largely come from stronger sequence encoders, better augmentation, and better objectives~\cite{hidasi2016gru4rec,kang2018sasrec,qiu2022duorec}. This line is highly successful, but it leaves an open design question: if behavior regimes differ by temporal scope, should routing also be scope-aware?
+
+Two adjacent research trends suggest that the answer can be yes. Feature-aware sequential models show that lightweight auxiliary signals can improve prediction quality~\cite{zhang2019fdsa,xie2022difsr}. Meanwhile, MoE and conditional-computation studies show that expert specialization works well when routing is informative and numerically stable~\cite{shazeer2017moe,fedus2022switch}. However, in many sequential recommendation settings, routing decisions are still mostly implicit functions of hidden states. This often makes it hard to interpret routing semantics and to diagnose whether specialization corresponds to meaningful behavioral factors.
+
+This paper investigates a practical alternative: use compact behavioral cues as explicit routing signals. We propose \textbf{RouteRec}, a feature-guided MoE framework built on top of SASRec. RouteRec keeps the backbone representation pipeline simple, but equips it with stage-wise routers that consume lightweight features from commonly available logs (sequence order, timestamp dynamics, and optional coarse categories). Experts continue to operate on hidden states, while routing decisions are controlled by the feature branch.
+
+The architecture is organized into macro, mid, and micro stages, each aligned with a different temporal scope. The macro stage captures broad cross-session tendency, the mid stage captures evolving within-session intent, and the micro stage captures immediate local transitions close to the prediction target. This staged design introduces a clear role split: behavioral features explain route selection, and expert networks realize representation transformation.
+
+Beyond performance, this split improves analytical clarity. Because route selection is feature-guided, routing behavior can be examined against concrete behavioral descriptors instead of opaque hidden-state geometry alone. This improves interpretability, supports diagnosis of expert usage patterns, and provides a more controllable pathway for refinement when transferring across datasets with different temporal characteristics.
+
+Our contributions are as follows. First, we introduce RouteRec, a stage-wise feature-guided MoE design for sequential recommendation. Second, we present a compact behavioral feature bank constructed from raw interaction signals and use it exclusively for routing control rather than direct representation enrichment. Third, we empirically evaluate the architecture against strong baselines and provide diagnostics on stage composition, route consistency, and specialization behavior. Together, these results show that explicit behavior-aware routing can complement strong sequence backbones in a practically deployable way.
+
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Sequential backbones and behavioral heterogeneity.}
+Sequential recommendation has evolved from recurrent, convolutional, and graph-oriented encoders to Transformer backbones. Early approaches such as GRU4Rec, NARM, and SR-GNN focused on stronger transition and session-intent modeling~\cite{hidasi2016gru4rec,li2017narm,wu2019srgnn}. SASRec and BERT4Rec then established self-attention as a dominant backbone for balancing short- and long-range dependency modeling~\cite{kang2018sasrec,sun2019bert4rec}. More recent studies improve objective design or structural bias, including contrastive augmentation and frequency-aware inductive assumptions~\cite{qiu2022duorec,du2023fearec,shin2024bsarec,liu2025sigma}. These models are highly competitive, but most still apply mostly shared transformation to behaviorally heterogeneous inputs.
+
+\paragraph{Feature-aware sequential modeling.}
+Another active direction uses time and side information to improve sequence modeling quality. TiSASRec injects interval information directly into attention~\cite{li2020tisasrec}. FDSA and DIF-SR model interactions between item transitions and auxiliary feature channels~\cite{zhang2019fdsa,xie2022difsr}. The key insight of this line is that light side signals can improve recommendation even when metadata is partial. In most cases, however, these features are consumed as representation enrichers, while computation routing remains implicit.
+
+\paragraph{MoE and conditional computation.}
+MoE and conditional-computation literature provides the specialization perspective behind RouteRec. Classical gated experts and hierarchical mixtures introduced the idea of conditional capacity allocation~\cite{jacobs1991adaptive,jordan1994hme}, and modern sparse MoE studies emphasized scalable and stable routing~\cite{shazeer2017moe,fedus2022switch}. In recommendation, MMoE and PLE demonstrated expert decomposition in multi-task regimes~\cite{ma2018mmoe,tang2020ple}, while FAME explored expert mixtures in sequential recommendation~\cite{liu2025fame}. RouteRec is aligned with this specialization viewpoint, but differs in routing semantics: compact behavioral cues from raw logs are used as the primary control signal for stage-wise expert selection.
+
+\section{Methodology}
+\label{sec:method}
+
+\begin{figure*}[!t]
+  \centering
+  \safeincludegraphics[width=0.94\textwidth]{figures/figure2_overall_arch_simple.pdf}
+  \caption{Overall RouteRec framework. (a) RouteRec keeps the SASRec backbone and replaces shared feed-forward computation with stage-wise mixture-of-experts routing; stage features determine routing weights, while expert FFNs transform hidden states. (b) The routing computation is built from three reusable components: group-level routing, conditional within-group expert routing, and direct expert routing. (c) The three stages combine these components differently: the macro stage uses hierarchical routing, the mid stage blends hierarchical and direct routing, and the micro stage uses direct expert routing.}
+  \label{fig:framework}
+\end{figure*}
+
+\subsection{Problem Setting and RouteRec Overview}
+\label{sec:problem-framework}
+
+Sequential recommendation predicts the next item from an ordered interaction prefix. We organize each user history into sessions and omit the user index for readability. Let $\mathcal{S}=[s_1,\dots,s_M]$ denote the session sequence, and let $s_m=[x_1,\dots,x_{|s_m|}]$ denote the current session. Each interaction $x_t$ contains at least item identity and timestamp, and may include a coarse category label. Given observations up to position $t$, the model estimates the next-item distribution.
+
+RouteRec keeps the SASRec backbone unchanged at the representation level~\cite{kang2018sasrec}, but replaces shared feed-forward transformation with stage-wise MoE routing~\cite{jordan1994hme,shazeer2017moe,fedus2022switch}. The architectural principle is explicit role separation: stage features determine routing preference, while experts transform hidden representations. This separation allows the model to keep a strong common encoder while still allocating computational capacity according to behavioral context.
+
+Let $\mathcal{T}=\{\mathrm{macro},\mathrm{mid},\mathrm{micro}\}$ be the stage set, $\mathbf{h}_t$ be the hidden state at position $t$, and $\mathbf{f}^{(s)}_t$ be the stage feature used by router $s$. Route selection and expert aggregation are written as
+\begin{align}
+\boldsymbol{\pi}^{(s)}_t
+&=
+\mathrm{softmax}\!\left(\mathrm{Router}_s(\mathbf{f}^{(s)}_t)/\tau_s\right), \\
+\tilde{\mathbf{h}}^{(s)}_t
+&=
+\sum_{e=1}^{E}\pi^{(s)}_{t,e}\,\mathrm{Expert}^{(s)}_e(\mathbf{h}_t).
+\label{eq:stage-routing}
+\end{align}
+Equation~\eqref{eq:stage-routing} is shared across stages, but temporal meaning and routing structure differ. Macro routing captures broad cross-session tendency, mid routing adapts to evolving within-session context, and micro routing reacts to immediate transition signals. In this way, RouteRec aligns routing granularity with temporal scope instead of relying on a single fixed specialization rule.
+
+\subsection{Behavioral Features from Raw Signals}
+\label{sec:feature-construction}
+
+RouteRec is designed for realistic data availability. It uses signals that are commonly present in interaction logs: item identity, timestamp, optional category, and optional corpus-level popularity. We intentionally avoid heavy side-information encoders in the routing branch. Instead, raw signals are converted into compact scalar summaries that are easy to compute, stable across datasets, and interpretable at analysis time.
+
+For session $s_m$ and target position $t$, the stage windows are
+\begin{align}
+\mathcal{R}^{\mathrm{macro}}_t &= [s_{\max(1,m-H)},\dots,s_{m-1}], \\
+\mathcal{R}^{\mathrm{mid}}_t &= [x_1,\dots,x_{t-1}], \\
+\mathcal{R}^{\mathrm{micro}}_t &= [x_{\max(1,t-w)},\dots,x_{t-1}],
+\end{align}
+where $H=5$ and $w=5$ in our main setting. A shared summary operator $\mathcal{A}(\cdot)$ maps each window to a low-dimensional feature vector:
+\[
+\mathbf{f}^{(s)}_t=\mathcal{A}(\mathcal{R}^{(s)}_t),\qquad s\in\mathcal{T}.
+\]
+
+The summary dimensions are grouped into four semantic families: \textit{Tempo}, \textit{Focus}, \textit{Memory}, and \textit{Exposure}. Tempo captures pace and interval statistics. Focus captures concentration and switching behavior over coarse categories or item groups. Memory captures recurrence, repetition, and overlap with recent context. Exposure captures interactions with popularity strata and their local drift. This decomposition is semantic rather than architectural: it gives routing modules an interpretable behavioral basis.
+
+Importantly, the feature template is shared across stages, but each stage reads it through a different temporal lens. Macro features reflect persistent tendency and broad preference shape. Mid features track evolving intent inside the current session. Micro features emphasize immediate cues around the prediction target. This shared-template, stage-specific-view design keeps the feature branch compact while preserving temporal specificity.
+
+\subsection{Feature-Guided Multi-Stage Routing}
+
+The same routing interface is used at all stages, but each stage adopts a different routing bias to match its temporal evidence quality.
+
+\paragraph{Macro stage (group-first).}
+Macro features are comparatively stable within one session and are better suited for coarse specialization than fine-grained instant decisions. We therefore use hierarchical group-first routing. Let $g(e)$ be the group index of expert $e$. Group logits and within-group logits are added in logit space:
+\[
+q^{\mathrm{macro}}_{t,e}=q^{\mathrm{grp}}_{t,g(e)}+q^{\mathrm{intra}}_{t,e\mid g(e)}.
+\]
+This first selects a broad specialization regime and then refines expert preference inside that regime, which is a natural match for long-horizon behavioral evidence.
+
+\paragraph{Mid stage (hybrid).}
+Mid features evolve at every position and can deviate from long-range tendency while still preserving meaningful structure. To reflect this, the mid router combines structured and direct branches:
+\[
+\mathbf{q}^{\mathrm{mid}}_t=\alpha\,\mathbf{q}^{\mathrm{struct}}_t+(1-\alpha)\,\mathbf{q}^{\mathrm{direct}}_t,
+\]
+where $\alpha\in[0,1]$ balances regularity and flexibility. The structured branch retains group-aware prior, while the direct branch allows fast correction when current session dynamics diverge from that prior.
+
+\paragraph{Micro stage (direct).}
+Micro features are highly local and closest to the prediction target. At this scope, forcing an additional group bottleneck is often unnecessary, so direct routing is used:
+\[
+\mathbf{q}^{\mathrm{micro}}_t=\mathbf{q}^{\mathrm{direct}}_t.
+\]
+Routing weights follow the softmax rule in Eq.~\eqref{eq:stage-routing}. Overall, RouteRec forms a coarse-to-fine routing pipeline in which routing structure is explicitly synchronized with temporal scope.
+
+\subsection{Training Objective}
+\label{sec:training-objective}
+
+RouteRec is trained with a standard next-item objective and two router-side regularizers: route consistency and z-loss. The first regularizer shapes routing semantics, and the second stabilizes routing numerics.
+
+Let $\mathbf{z}$ be final logits and $y$ be the target item. The main loss is
+\[
+\mathcal{L}_{\mathrm{CE}}
+=
+-\log \frac{\exp z_y}{\sum_{j}\exp z_j}.
+\]
+For route consistency, we first compute a sample-level routing distribution at each stage by averaging token-level routing weights:
+\[
+\bar{\boldsymbol{\pi}}_i^{\,s}
+=
+\frac{1}{L_i}\sum_{t=1}^{L_i}\boldsymbol{\pi}_{i,t}^{\,s}
+\]
+where $L_i$ is the valid sequence length. For each stage $s$, we construct a pair set $\mathcal{P}_s$ from feature-similar samples in the mini-batch and minimize
+\[
+\mathcal{L}_{\mathrm{cons}}
+=
+\frac{1}{|\mathcal{T}|}
+\sum_{s \in \mathcal{T}}
+\frac{1}{|\mathcal{P}_s|}
+\sum_{(i,j)\in \mathcal{P}_s}
+\mathrm{JSD}\!\left(\bar{\boldsymbol{\pi}}_i^{\,s}, \bar{\boldsymbol{\pi}}_j^{\,s}\right),
+\]
+which encourages neighboring behavioral states to produce compatible routing distributions. In other words, semantically similar inputs should not induce arbitrarily different routing behavior.
+
+To stabilize gating numerics, we adopt z-loss on router logits~\cite{zoph2022stmoe}:
+\[
+\mathcal{L}_{z}
+=
+\frac{1}{|\mathcal{T}|}
+\sum_{s \in \mathcal{T}}
+\frac{1}{N_s}
+\sum_{(i,t)\in\mathcal{V}_s}
+\left(
+\log \sum_{e=1}^{E}\exp q_{i,t,e}^{\,s}
+\right)^2,
+\]
+where $\mathcal{V}_s$ is the set of valid positions and $N_s=|\mathcal{V}_s|$. This term discourages excessive logit scale and helps prevent unstable, overly sharp routing. The final objective is
+\[
+\mathcal{L}
+=
+\mathcal{L}_{\mathrm{CE}}
++
+\lambda_{\mathrm{cons}}\,\mathcal{L}_{\mathrm{cons}}
++
+\lambda_{z}\,\mathcal{L}_{z},
+\]
+where $\lambda_{\mathrm{cons}}$ and $\lambda_z$ are trade-off coefficients. This objective jointly optimizes prediction quality, semantic consistency of routing, and numerical stability of expert selection.
+
+
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Experimental Setup}
+Our main model follows Section~\ref{sec:method}: macro--mid--micro stage composition, hierarchical macro routing, hybrid mid routing, direct micro routing, feature-guided learned routers, and no bias-specific routing terms. Training uses next-item cross-entropy with route consistency and z-loss, as defined in Section~\ref{sec:training-objective}. Unless otherwise stated, all reported RouteRec results use this unified configuration.
+
+We compare RouteRec against representative recurrent, graph-based, Transformer-based, frequency-aware, Mamba-based, and MoE-style sequential recommenders. The primary baseline set includes GRU4Rec, SASRec, TiSASRec, and DuoRec~\cite{hidasi2016gru4rec,kang2018sasrec,li2020tisasrec,qiu2022duorec}, plus BSARec, SIGMA, DIF-SR, and FAME~\cite{shin2024bsarec,liu2025sigma,xie2022difsr,liu2025fame}. When budget and space allow, we additionally include Caser, SR-GNN, BERT4Rec, FMLP-Rec, and FEARec~\cite{tang2018caser,wu2019srgnn,sun2019bert4rec,zhou2022fmlprec,du2023fearec} to broaden architectural coverage.
+
+For fairness, we prioritize a unified training framework: matched embedding dimension, hidden dimension, optimizer family, batch regime, and early-stopping protocol wherever implementation permits. Data preprocessing is documented with sessionization policy, filtering thresholds, sequence truncation rules, and feature availability (timestamp/category/popularity). Evaluation follows standard top-$K$ ranking metrics, including HR@K, NDCG@K, and MRR@K. We report MRR@20 as the primary summary metric and present other metrics for completeness.
+
+\subsection{Main Results}
+This subsection provides the overall performance comparison between RouteRec and all baselines across target datasets. The main table reports ranking metrics at common cutoffs and highlights RouteRec gains over strong Transformer and MoE references.
+
+We focus analysis on three questions. First, does feature-guided routing improve over a strong shared-backbone baseline such as SASRec under matched training conditions? Second, are gains consistent across datasets with different temporal density and behavioral regularity? Third, does RouteRec remain competitive when compared with recent feature-aware or MoE-style alternatives rather than only classical baselines?
+
+Beyond absolute ranking numbers, we summarize relative improvements against SASRec and the strongest non-RouteRec competitor on each dataset. This framing clarifies whether improvements are robust or concentrated in a narrow subset of settings.
+
+\subsection{Ablation and Diagnostic Analysis}
+This subsection analyzes why RouteRec works through controlled ablations and routing diagnostics. We first evaluate router-design variants (hierarchical, hybrid, direct combinations) to test whether stage-specific routing bias is necessary. We then evaluate feature-family ablations to measure the contribution of Tempo, Focus, Memory, and Exposure cues.
+
+Next, we examine stage composition by removing or altering macro, mid, and micro branches, verifying whether coarse-to-fine routing is materially better than a single-stage or uniformly structured alternative. We also include corrupted-feature sanity checks to confirm that gains are tied to meaningful behavioral cues rather than incidental regularization effects.
+
+Finally, we present routing diagnostics, including expert usage distribution, stage-wise route entropy, and consistency behavior under similar feature states. These analyses connect quantitative improvements to the intended mechanism: behavior-aware specialization rather than opaque capacity inflation.
+
+\section{Conclusion}
+\label{sec:conclusion}
+The conclusion will restate the central claim of the paper: compact behavioral cues can serve as explicit routing guidance for mixture-of-experts sequential recommendation. It will summarize the empirical findings and discuss portability, interpretability, and future extensions of the framework.
+
+\bibliographystyle{acmart-primary/ACM-Reference-Format}
+\bibliography{refs}
+
+\end{document}

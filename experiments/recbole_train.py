@@ -159,6 +159,57 @@ def _build_item_counts_from_loader(data_loader):
     return torch.bincount(item_ids, minlength=n_items)[:n_items].cpu()
 
 
+def _extract_cold_slice_metrics(special_metrics: dict | None) -> dict:
+    payload = {
+        "count": 0,
+        "hit@5": 0.0,
+        "hit@10": 0.0,
+        "mrr@20": 0.0,
+        "mrr@5": 0.0,
+        "mrr@10": 0.0,
+        "hit@20": 0.0,
+        "ndcg@5": 0.0,
+        "ndcg@10": 0.0,
+        "ndcg@20": 0.0,
+    }
+    if not isinstance(special_metrics, dict):
+        return payload
+    try:
+        slices = special_metrics.get("slices", {}) or {}
+        pop = slices.get("target_popularity_abs", {}) or {}
+        cold = pop.get("cold_0", {}) or {}
+        payload["count"] = int(cold.get("count", 0) or 0)
+        payload["hit@5"] = float(cold.get("hit@5", 0.0) or 0.0)
+        payload["hit@10"] = float(cold.get("hit@10", 0.0) or 0.0)
+        payload["mrr@20"] = float(cold.get("mrr@20", 0.0) or 0.0)
+        payload["mrr@5"] = float(cold.get("mrr@5", 0.0) or 0.0)
+        payload["mrr@10"] = float(cold.get("mrr@10", 0.0) or 0.0)
+        payload["hit@20"] = float(cold.get("hit@20", 0.0) or 0.0)
+        payload["ndcg@5"] = float(cold.get("ndcg@5", 0.0) or 0.0)
+        payload["ndcg@10"] = float(cold.get("ndcg@10", 0.0) or 0.0)
+        payload["ndcg@20"] = float(cold.get("ndcg@20", 0.0) or 0.0)
+    except Exception:
+        return payload
+    return payload
+
+
+def _extract_main_eval_seen_unseen_stats(trainer, split_name: str) -> dict:
+    out = {"total_targets": 0, "seen_targets": 0, "unseen_targets": 0, "dropped_eval_rows": 0, "enabled": False}
+    stats = getattr(trainer, "_main_eval_unseen_filter_stats", None)
+    if not isinstance(stats, dict):
+        return out
+    rec = stats.get(str(split_name), None)
+    if not isinstance(rec, dict):
+        return out
+    for k in ("total_targets", "seen_targets", "unseen_targets", "dropped_eval_rows"):
+        try:
+            out[k] = int(rec.get(k, 0) or 0)
+        except Exception:
+            out[k] = 0
+    out["enabled"] = bool(rec.get("enabled", False))
+    return out
+
+
 def _get_wandb_module():
     """Import wandb with clear diagnostics for shadowing/missing package."""
     global _WANDB_MODULE, _WANDB_IMPORT_ERROR
@@ -415,7 +466,7 @@ def _resolve_cache_source_tag(cfg_dict):
         return "basic"
 
     feature_mode = str(cfg_dict.get("feature_mode", "")).lower()
-    if feature_mode in ("full", "feature_added"):
+    if feature_mode in ("full", "full_v2", "full_v3", "full_v4", "feature_added"):
         return "feature_added"
     if feature_mode == "basic":
         return "basic"
@@ -741,6 +792,7 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     trainer = trainer_cls(config, model)
     setattr(trainer, '_disable_patch_logging', True)  # bypass patched valid/train hooks
     trainer._fmoe_special_item_counts_train = _build_item_counts_from_loader(train_data)
+    trainer._main_eval_unseen_filter_stats = {}
     special_logging_enabled = bool(_cfg_get(config, "special_logging", cfg_i.get("special_logging", False)))
     if model_name_l in _FEATURE_AWARE_MOE_MODELS:
         special_logging_enabled = special_logging_enabled or bool(
@@ -1026,11 +1078,24 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
         test_result = next((x for x in test_result if isinstance(x, dict)), test_result[0])
     elapsed_time = time.time() - start_time
 
+    valid_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "valid")
+    test_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "test")
+    valid_cold = _extract_cold_slice_metrics(best_valid_special_metrics)
+    test_cold = _extract_cold_slice_metrics(test_special_metrics)
+
     result = {
         'best_valid_score': best_metric,
         'best_valid_result': best_valid_result or {},
         'test_result': test_result,
         'elapsed_time': elapsed_time,
+        'main_eval_filter': {
+            'valid': valid_main_filter,
+            'test': test_main_filter,
+        },
+        'cold_target_metrics': {
+            'valid': valid_cold,
+            'test': test_cold,
+        },
     }
 
     # RunLogger: save final summary
@@ -1051,6 +1116,10 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
                     "dataset": cfg_i.get("dataset", ""),
                     "phase": cfg_i.get("fmoe_phase", cfg_i.get("phase", "")),
                     "run_id": cfg_i.get("fmoe_run_id", ""),
+                    "main_eval_valid_seen_targets": int(valid_main_filter.get("seen_targets", 0)),
+                    "main_eval_valid_unseen_targets": int(valid_main_filter.get("unseen_targets", 0)),
+                    "main_eval_test_seen_targets": int(test_main_filter.get("seen_targets", 0)),
+                    "main_eval_test_unseen_targets": int(test_main_filter.get("unseen_targets", 0)),
                 },
             )
             run_logger.log_router_diagnostics(

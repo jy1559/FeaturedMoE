@@ -8,6 +8,8 @@ from typing import Any, Dict
 
 import run_final_all_datasets as base
 
+_BASE_SELECTED_HPARAMS_FOR_DATASET = base._selected_hparams_for_dataset
+
 
 ARCH_ORDER = ("A8", "A10", "A11", "A12")
 ARCH_METADATA: Dict[str, Dict[str, str]] = {
@@ -154,7 +156,7 @@ def _selected_hparams_for_dataset(dataset: str, args: argparse.Namespace) -> lis
         selected = [h for h in preset if h in base.HPARAM_BANK]
         if selected:
             return selected
-    return base._selected_hparams_for_dataset(dataset, args)
+    return _BASE_SELECTED_HPARAMS_FOR_DATASET(dataset, args)
 
 
 def _attn_micro_before_core(args: argparse.Namespace, wrapper_map: Dict[str, str], *, bias_mode: str) -> Dict[str, Any]:

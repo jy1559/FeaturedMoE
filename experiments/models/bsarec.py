@@ -17,62 +17,36 @@ import math
 
 class FrequencyLayer(nn.Module):
     """
-    Frequency enhancement layer using Fourier transform.
-    Captures high-frequency components for fine-grained sequential patterns.
-    Uses learnable frequency filter to emphasize relevant frequency bands.
+    Frequency layer aligned with the official BSARec implementation.
+
+    A short low-pass component is preserved up to cutoff ``c`` and the
+    remaining high-frequency residual is scaled by a learnable beta term.
     """
-    
-    def __init__(self, hidden_size, max_seq_len=50, alpha=0.5):
+
+    def __init__(self, hidden_size, dropout=0.1, c=3):
         super(FrequencyLayer, self).__init__()
         self.hidden_size = hidden_size
-        self.alpha = alpha  # Balance between low and high frequency
-        
-        # Learnable complex-valued filter (real + imag parts)
-        # Max frequency bins = max_seq_len // 2 + 1
-        max_freq_bins = max_seq_len // 2 + 1
-        self.freq_filter_real = nn.Parameter(torch.ones(max_freq_bins, hidden_size))
-        self.freq_filter_imag = nn.Parameter(torch.zeros(max_freq_bins, hidden_size))
-        
-        # Initialize: emphasize higher frequencies (short-term patterns)
-        with torch.no_grad():
-            freq_idx = torch.arange(max_freq_bins).float()
-            # Higher frequencies get larger initial weights
-            high_freq_bias = 0.5 + 0.5 * (freq_idx / max_freq_bins)
-            self.freq_filter_real.data = high_freq_bias.unsqueeze(-1).expand(-1, hidden_size)
-    
+        self.out_dropout = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(hidden_size)
+        self.c = max(1, int(c))
+        self.sqrt_beta = nn.Parameter(torch.randn(1, 1, hidden_size))
+
     def forward(self, x):
-        """
-        Args:
-            x: (batch_size, seq_len, hidden_size)
-        
-        Returns:
-            output: (batch_size, seq_len, hidden_size) with frequency enhancement
-        """
         batch_size, seq_len, hidden_size = x.shape
-        
-        # FFT along sequence dimension
-        x_fft = torch.fft.rfft(x, dim=1, norm='ortho')  # (batch, freq_bins, hidden_size)
+
+        x_fft = torch.fft.rfft(x, dim=1, norm="ortho")
         freq_bins = x_fft.shape[1]
-        
-        # Apply learnable filter (complex multiplication)
-        filter_real = self.freq_filter_real[:freq_bins]  # (freq_bins, hidden_size)
-        filter_imag = self.freq_filter_imag[:freq_bins]
-        
-        # Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        x_real = x_fft.real
-        x_imag = x_fft.imag
-        
-        out_real = x_real * filter_real - x_imag * filter_imag
-        out_imag = x_real * filter_imag + x_imag * filter_real
-        
-        x_fft_filtered = torch.complex(out_real, out_imag)
-        
-        # Inverse FFT
-        x_ifft = torch.fft.irfft(x_fft_filtered, n=seq_len, dim=1, norm='ortho')
-        
-        # Weighted combination: alpha * original + (1-alpha) * frequency-enhanced
-        output = self.alpha * x + (1 - self.alpha) * x_ifft
-        return output
+        cutoff = min(freq_bins, max(1, self.c // 2 + 1))
+
+        low_pass = x_fft.clone()
+        if cutoff < freq_bins:
+            low_pass[:, cutoff:, :] = 0
+        low_pass = torch.fft.irfft(low_pass, n=seq_len, dim=1, norm="ortho")
+        high_pass = x - low_pass
+        sequence_fft = low_pass + (self.sqrt_beta ** 2) * high_pass
+
+        hidden_states = self.out_dropout(sequence_fft)
+        return self.norm(hidden_states + x)
 
 
 class MultiHeadAttention(nn.Module):
@@ -130,28 +104,23 @@ class BSARecLayer(nn.Module):
     Combines self-attention with frequency domain analysis.
     """
     
-    def __init__(self, hidden_size, num_heads=4, dropout=0.1, max_seq_len=50):
+    def __init__(self, hidden_size, num_heads=4, dropout=0.1, max_seq_len=50, alpha=0.5, c=3, inner_size=None):
         super(BSARecLayer, self).__init__()
-        
-        # Multi-head attention
+
         self.attention = MultiHeadAttention(hidden_size, num_heads, dropout)
-        
-        # Frequency layer with learnable filter
-        self.frequency = FrequencyLayer(hidden_size, max_seq_len)
-        
-        # Feed-forward network
+        self.attn_dropout = nn.Dropout(dropout)
+        self.attn_norm = nn.LayerNorm(hidden_size)
+        self.frequency = FrequencyLayer(hidden_size, dropout=dropout, c=c)
+        ff_inner = int(inner_size) if inner_size is not None else hidden_size * 4
         self.feed_forward = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size * 4),
+            nn.Linear(hidden_size, ff_inner),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_size * 4, hidden_size),
+            nn.Linear(ff_inner, hidden_size),
             nn.Dropout(dropout)
         )
-        
-        # Layer normalization
-        self.norm1 = nn.LayerNorm(hidden_size)
-        self.norm2 = nn.LayerNorm(hidden_size)
-        self.norm3 = nn.LayerNorm(hidden_size)
+        self.ff_norm = nn.LayerNorm(hidden_size)
+        self.alpha = float(alpha)
     
     def forward(self, x, mask=None):
         """
@@ -162,19 +131,12 @@ class BSARecLayer(nn.Module):
         Returns:
             output: (batch_size, seq_len, hidden_size)
         """
-        # Self-attention
         attn_out = self.attention(x, x, x, mask)
-        x = self.norm1(x + attn_out)
-        
-        # Frequency enhancement (always applied)
-        freq_out = self.frequency(x)
-        x = self.norm2(freq_out)  # freq_out already includes residual
-        
-        # Feed-forward
+        gsp = self.attn_norm(x + self.attn_dropout(attn_out))
+        dsp = self.frequency(x)
+        x = self.alpha * dsp + (1.0 - self.alpha) * gsp
         ff_out = self.feed_forward(x)
-        x = self.norm3(x + ff_out)
-        
-        return x
+        return self.ff_norm(x + ff_out)
 
 
 class BSARec(SequentialRecommender):
@@ -197,6 +159,9 @@ class BSARec(SequentialRecommender):
         self.num_heads = config['num_heads'] if 'num_heads' in config else 4
         self.dropout_prob = config['hidden_dropout_prob'] if 'hidden_dropout_prob' in config else 0.1
         self.max_seq_length = config['MAX_ITEM_LIST_LENGTH'] if 'MAX_ITEM_LIST_LENGTH' in config else 50
+        self.bsarec_alpha = config['bsarec_alpha'] if 'bsarec_alpha' in config else 0.5
+        self.bsarec_c = config['bsarec_c'] if 'bsarec_c' in config else 3
+        self.inner_size = config['inner_size'] if 'inner_size' in config else self.hidden_size * 4
         
         # Item embedding
         self.item_embedding = nn.Embedding(self.n_items, self.embedding_size, padding_idx=0)
@@ -212,7 +177,15 @@ class BSARec(SequentialRecommender):
         
         # BSARec transformer layers with frequency enhancement
         self.transformer_layers = nn.ModuleList([
-            BSARecLayer(self.hidden_size, self.num_heads, self.dropout_prob, self.max_seq_length)
+            BSARecLayer(
+                self.hidden_size,
+                self.num_heads,
+                self.dropout_prob,
+                self.max_seq_length,
+                alpha=self.bsarec_alpha,
+                c=self.bsarec_c,
+                inner_size=self.inner_size,
+            )
             for _ in range(self.num_layers)
         ])
         

@@ -11,6 +11,7 @@ _MODEL_MODULES = {
 	"CLRec": "clrec",
 	"DuoRec": "duorec",
 	"FEARec": "fearec",
+	"FDSA": "fdsa",
 	"TiSASRec": "tisasrec",
 	"BSARec": "bsarec",
 	"FAME": "fame",

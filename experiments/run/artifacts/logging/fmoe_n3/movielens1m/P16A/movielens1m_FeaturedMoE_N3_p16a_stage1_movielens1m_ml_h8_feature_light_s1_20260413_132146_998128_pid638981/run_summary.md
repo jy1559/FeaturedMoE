@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: movielens1m
+- run_group: fmoe_n3
+- run_axis: final_tuning_a12
+- run_phase: P16A_STAGE1_MOVIELENS1M_ML_H8_FEATURE_LIGHT_S1
+- best_mrr@20: 0.0696
+- test_mrr@20: 0.0667
+- test_hr@10: 0.1804
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P16A/movielens1m_FeaturedMoE_N3_p16a_stage1_movielens1m_ml_h8_feature_light_s1_20260413_132146_998128_pid638981/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: 
+- diag_raw_best_valid: 
+- diag_raw_test: 
+- diag_raw_epoch_trace: 
+- feature_ablation: 

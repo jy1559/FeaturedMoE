@@ -5,9 +5,9 @@
 - run_group: baseline
 - run_axis: stagei_progressiverecovery_anchor2_core5
 - run_phase: P24_I3_D20_MFEAREC_C03_I3_FEAREC_VERIFY_REG_S1
-- best_mrr@20: 0.2244
-- test_mrr@20: 0.223
-- test_hr@10: 0.2909
+- best_mrr@20: 0.2247
+- test_mrr@20: 0.2256
+- test_hr@10: 0.2893
 
 ## Artifacts
 

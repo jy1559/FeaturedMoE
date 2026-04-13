@@ -1,0 +1,197 @@
+[A12_FINAL_TUNING_STAGE1_SETTING_HEADER]
+run_phase=P16A_STAGE1_LASTFM0_03_LFM_H11_BALANCED_S1 exp_brief=A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5 phase_id=P16A axis_id=FTA12 setting_id=LFM_H11_balanced hparam_id= seed=1
+desc=LFM_H11_balanced
+dataset=lastfm0.03 gpu=7 order=7
+max_evals= tune_epochs= tune_patience=
+seed=160006
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --search-algo random --max-evals 20 --tune-epochs 35 --tune-patience 4 --seed 160006 --run-group fmoe_n3 --run-axis Final_tuning_A12 --run-phase P16A_STAGE1_LASTFM0_03_LFM_H11_BALANCED_S1 model=featured_moe_n3_tune dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v3 gpu_id=7 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A12" ++fmoe_architecture_key="A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5" ++fmoe_hparam_id="H11" ++fmoe_phase="P16A" train_batch_size=4096 eval_batch_size=4096 ++phase_run_type="stage1" ++phase_axis_id="FTA12" ++phase_axis_desc="final_tuning_a12" ++phase_setting_id="LFM_H11_balanced" ++phase_setting_key="LFM_H11_balanced" ++phase_hparam_id="H11" ++phase_seed_id=1 ++phase_run_id="STAGE1_LASTFM0_03_LFM_H11_BALANCED_S1" ++layer_layout=["attn","macro_ffn","mid_ffn","attn","micro_ffn"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0002 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0008 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w5_exd",mid:"w5_exd",micro:"w5_exd"} ++macro_history_window=5 ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_family_dropout_prob={macro:0.03,mid:0.03,micro:0.03} ++stage_feature_dropout_prob={macro:0.02,mid:0.02,micro:0.02} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++bias_mode="none" ++embedding_size=224 ++d_ff=448 ++d_expert_hidden=224 ++d_router_hidden=112 ++weight_decay=6e-07 ++num_heads=4 ++attn_dropout_prob=0.1 ++lr_scheduler_type="warmup_cosine" ++search.learning_rate=[0.0001,0.00022,0.0005,0.00075,0.0011] ++search_space_type_overrides.learning_rate=choice ++search.hidden_dropout_prob=[0.09,0.12,0.15] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.MAX_ITEM_LIST_LENGTH=[15,20,30,40] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.d_feat_emb=[8,12] ++search_space_type_overrides.d_feat_emb=choice ++search.expert_scale=[2,3] ++search_space_type_overrides.expert_scale=choice ++search.stage_family_dropout_prob=[{macro:0.03,mid:0.03,micro:0.03},{macro:0.05,mid:0.05,micro:0.05},{macro:0.07,mid:0.07,micro:0.07}] ++search_space_type_overrides.stage_family_dropout_prob=choice ++search.stage_feature_dropout_prob=[{macro:0.02,mid:0.02,micro:0.02},{macro:0.05,mid:0.05,micro:0.05},{macro:0.08,mid:0.08,micro:0.08}] ++search_space_type_overrides.stage_feature_dropout_prob=choice
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=575336 ts=2026-04-13T08:46:50
+[UniqueChoice] enabled: dedupe/remap duplicates across 2160 finite combos
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x lastfm0.03
+  max_evals=20  epochs=35  patience=4  wandb=off
+  search_algo=random
+  batch_size(train/valid/test)=4096/4096/4096
+  track=fmoe_n3  axis=final_tuning_a12  phase=P16A_STAGE1_LASTFM0_03_LFM_H11_BALANCED_S1
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, d_feat_emb, expert_scale, hidden_dropout_prob, learning_rate, stage_family_dropout_prob, stage_feature_dropout_prob
+Tuned params(len>1): 7  (~2160 discrete combos)
+Tuned groups: 7
+  [optimization]
+    hidden_dropout_prob             [0.09, 0.12, 0.15]                        -> choice
+    learning_rate                   [0.0001, 0.00022, 0.0005, 0.00075, 0.0011]  -> choice
+  [model_core]
+    d_feat_emb                      [8, 12]                                   -> choice
+    expert_scale                    [2, 3]                                    -> choice
+    stage_family_dropout_prob       [{'macro': 0.03, 'mid': 0.03, 'micro': 0.03}, {'macro': 0.05, 'mid': 0.05, 'micro': 0.05}, {'macro': 0.07, 'mid': 0.07, 'micro': 0.07}]  -> choice
+    stage_feature_dropout_prob      [{'macro': 0.02, 'mid': 0.02, 'micro': 0.02}, {'macro': 0.05, 'mid': 0.05, 'micro': 0.05}, {'macro': 0.08, 'mid': 0.08, 'micro': 0.08}]  -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [15, 20, 30, 40]                          -> choice
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/20] MAX_ITEM_LIST_LENGTH=30, d_feat_emb=12, expert_scale=2, hidden_dropout_prob=0.12, learning_rate=0.00075, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  -> MRR@20=0.238400  best=0.238400  (early_stop@18, trial=5.9min, avg=6.0min/trial, total=6.0min, ETA=1.89h)
+[TRIAL_METRICS] cur_best_mrr20=0.238400 cur_best_hr10=0.297400 cur_test_mrr20=0.240000 cur_test_hr10=0.295400 run_best_mrr20=0.238400 run_best_hr10=0.297400 run_test_mrr20=0.240000 run_test_hr10=0.295400
+
+[2/20] MAX_ITEM_LIST_LENGTH=15, d_feat_emb=12, expert_scale=2, hidden_dropout_prob=0.09, learning_rate=0.00022, stage_family_dropout_prob={'macro': 0.03, 'micro': 0.03, 'mid': 0.03}, stage_feature_dropout_prob={'macro': 0.05, 'micro': 0.05, 'mid': 0.05}
+  -> MRR@20=0.207500  best=0.238400  (full@35, trial=9.8min, avg=8.1min/trial, total=16.1min, ETA=2.42h)
+[TRIAL_METRICS] cur_best_mrr20=0.207500 cur_best_hr10=0.304000 cur_test_mrr20=0.210300 cur_test_hr10=0.299400 run_best_mrr20=0.238400 run_best_hr10=0.297400 run_test_mrr20=0.240000 run_test_hr10=0.295400
+
+[3/20] MAX_ITEM_LIST_LENGTH=15, d_feat_emb=12, expert_scale=2, hidden_dropout_prob=0.09, learning_rate=0.00075, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.02, 'micro': 0.02, 'mid': 0.02}
+  -> MRR@20=0.236700  best=0.238400  (early_stop@18, trial=5.0min, avg=7.1min/trial, total=21.2min, ETA=2.00h)
+[TRIAL_METRICS] cur_best_mrr20=0.236700 cur_best_hr10=0.293100 cur_test_mrr20=0.240600 cur_test_hr10=0.295400 run_best_mrr20=0.238400 run_best_hr10=0.297400 run_test_mrr20=0.240000 run_test_hr10=0.295400
+
+[4/20] MAX_ITEM_LIST_LENGTH=40, d_feat_emb=8, expert_scale=3, hidden_dropout_prob=0.12, learning_rate=0.00022, stage_family_dropout_prob={'macro': 0.03, 'micro': 0.03, 'mid': 0.03}, stage_feature_dropout_prob={'macro': 0.02, 'micro': 0.02, 'mid': 0.02}
+  -> FAILED: CUDA out of memory. Tried to allocate 1.64 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.30 GiB is free. Including non-PyTorch memory, this process has 22.19 GiB memory in use. Of the allocated memory 21.68 GiB is allocated by PyTorch, and 57.73 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4044, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2790, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1221, in calculate_loss
+    seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1194, in forward
+    tokens, gate_weights, gate_logits, router_aux, dense_aux, stage_merge_weights, stage_merge_logits = self.stage_executor(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_executor.py", line 526, in forward
+    next_hidden, weights, logits, stage_router_aux, stage_dense_aux = self.stage_blocks[op["stage"]](
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 1135, in forward
+    delta, expert_outputs = self._expert_delta(hidden_in, gate_weights)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 1041, in _expert_delta
+    expert_outputs = torch.stack([expert(hidden) for expert in self.experts], dim=-2)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.64 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.30 GiB is free. Including non-PyTorch memory, this process has 22.19 GiB memory in use. Of the allocated memory 21.68 GiB is allocated by PyTorch, and 57.73 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[5/20] MAX_ITEM_LIST_LENGTH=15, d_feat_emb=12, expert_scale=3, hidden_dropout_prob=0.12, learning_rate=0.0005, stage_family_dropout_prob={'macro': 0.03, 'micro': 0.03, 'mid': 0.03}, stage_feature_dropout_prob={'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  -> MRR@20=0.237000  best=0.238400  (early_stop@33, trial=9.9min, avg=6.2min/trial, total=31.1min, ETA=1.56h)
+[TRIAL_METRICS] cur_best_mrr20=0.237000 cur_best_hr10=0.297900 cur_test_mrr20=0.237900 cur_test_hr10=0.293800 run_best_mrr20=0.238400 run_best_hr10=0.297400 run_test_mrr20=0.240000 run_test_hr10=0.295400
+
+[6/20] MAX_ITEM_LIST_LENGTH=20, d_feat_emb=8, expert_scale=3, hidden_dropout_prob=0.15, learning_rate=0.0005, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  -> MRR@20=0.238500  best=0.238500  (early_stop@33, trial=10.7min, avg=7.0min/trial, total=41.9min, ETA=1.63h)
+[TRIAL_METRICS] cur_best_mrr20=0.238500 cur_best_hr10=0.299200 cur_test_mrr20=0.238600 cur_test_hr10=0.298600 run_best_mrr20=0.238500 run_best_hr10=0.299200 run_test_mrr20=0.238600 run_test_hr10=0.298600
+
+[7/20] MAX_ITEM_LIST_LENGTH=20, d_feat_emb=12, expert_scale=3, hidden_dropout_prob=0.12, learning_rate=0.00022, stage_family_dropout_prob={'macro': 0.05, 'micro': 0.05, 'mid': 0.05}, stage_feature_dropout_prob={'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  -> MRR@20=0.200800  best=0.238500  (full@35, trial=11.4min, avg=7.6min/trial, total=53.2min, ETA=1.65h)
+[TRIAL_METRICS] cur_best_mrr20=0.200800 cur_best_hr10=0.303700 cur_test_mrr20=0.205200 cur_test_hr10=0.304700 run_best_mrr20=0.238500 run_best_hr10=0.299200 run_test_mrr20=0.238600 run_test_hr10=0.298600
+
+[8/20] MAX_ITEM_LIST_LENGTH=40, d_feat_emb=8, expert_scale=2, hidden_dropout_prob=0.09, learning_rate=0.00075, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  -> MRR@20=0.236900  best=0.238500  (early_stop@17, trial=6.2min, avg=7.4min/trial, total=59.5min, ETA=1.49h)
+[TRIAL_METRICS] cur_best_mrr20=0.236900 cur_best_hr10=0.295800 cur_test_mrr20=0.237200 cur_test_hr10=0.292000 run_best_mrr20=0.238500 run_best_hr10=0.299200 run_test_mrr20=0.238600 run_test_hr10=0.298600
+
+[9/20] MAX_ITEM_LIST_LENGTH=20, d_feat_emb=12, expert_scale=2, hidden_dropout_prob=0.09, learning_rate=0.0011, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.05, 'micro': 0.05, 'mid': 0.05}
+  -> MRR@20=0.239400  best=0.239400  (early_stop@13, trial=3.7min, avg=7.0min/trial, total=1.05h, ETA=1.29h)
+[TRIAL_METRICS] cur_best_mrr20=0.239400 cur_best_hr10=0.298400 cur_test_mrr20=0.239600 cur_test_hr10=0.295400 run_best_mrr20=0.239400 run_best_hr10=0.298400 run_test_mrr20=0.239600 run_test_hr10=0.295400
+
+[10/20] MAX_ITEM_LIST_LENGTH=20, d_feat_emb=8, expert_scale=2, hidden_dropout_prob=0.12, learning_rate=0.0011, stage_family_dropout_prob={'macro': 0.03, 'micro': 0.03, 'mid': 0.03}, stage_feature_dropout_prob={'macro': 0.02, 'micro': 0.02, 'mid': 0.02}
+  -> MRR@20=0.239300  best=0.239400  (early_stop@14, trial=4.1min, avg=6.7min/trial, total=1.12h, ETA=1.12h)
+[TRIAL_METRICS] cur_best_mrr20=0.239300 cur_best_hr10=0.297400 cur_test_mrr20=0.241800 cur_test_hr10=0.293800 run_best_mrr20=0.239400 run_best_hr10=0.298400 run_test_mrr20=0.239600 run_test_hr10=0.295400
+
+[11/20] MAX_ITEM_LIST_LENGTH=15, d_feat_emb=12, expert_scale=2, hidden_dropout_prob=0.12, learning_rate=0.0011, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.02, 'micro': 0.02, 'mid': 0.02}
+  -> MRR@20=0.234000  best=0.239400  (early_stop@16, trial=4.4min, avg=6.5min/trial, total=1.20h, ETA=58.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.234000 cur_best_hr10=0.291500 cur_test_mrr20=0.240800 cur_test_hr10=0.291700 run_best_mrr20=0.239400 run_best_hr10=0.298400 run_test_mrr20=0.239600 run_test_hr10=0.295400
+
+[12/20] MAX_ITEM_LIST_LENGTH=20, d_feat_emb=8, expert_scale=3, hidden_dropout_prob=0.15, learning_rate=0.00022, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.02, 'micro': 0.02, 'mid': 0.02}
+  -> MRR@20=0.196200  best=0.239400  (full@35, trial=11.4min, avg=6.9min/trial, total=1.39h, ETA=55.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.196200 cur_best_hr10=0.306100 cur_test_mrr20=0.201400 cur_test_hr10=0.301000 run_best_mrr20=0.239400 run_best_hr10=0.298400 run_test_mrr20=0.239600 run_test_hr10=0.295400
+
+[13/20] MAX_ITEM_LIST_LENGTH=40, d_feat_emb=8, expert_scale=3, hidden_dropout_prob=0.15, learning_rate=0.00022, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.05, 'micro': 0.05, 'mid': 0.05}
+  -> FAILED: CUDA out of memory. Tried to allocate 1.64 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.32 GiB is free. Including non-PyTorch memory, this process has 22.17 GiB memory in use. Of the allocated memory 21.68 GiB is allocated by PyTorch, and 38.11 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4044, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2790, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 883, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1221, in calculate_loss
+    seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1194, in forward
+    tokens, gate_weights, gate_logits, router_aux, dense_aux, stage_merge_weights, stage_merge_logits = self.stage_executor(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_executor.py", line 526, in forward
+    next_hidden, weights, logits, stage_router_aux, stage_dense_aux = self.stage_blocks[op["stage"]](
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 1135, in forward
+    delta, expert_outputs = self._expert_delta(hidden_in, gate_weights)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 1041, in _expert_delta
+    expert_outputs = torch.stack([expert(hidden) for expert in self.experts], dim=-2)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.64 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.32 GiB is free. Including non-PyTorch memory, this process has 22.17 GiB memory in use. Of the allocated memory 21.68 GiB is allocated by PyTorch, and 38.11 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[14/20] MAX_ITEM_LIST_LENGTH=15, d_feat_emb=8, expert_scale=2, hidden_dropout_prob=0.09, learning_rate=0.00075, stage_family_dropout_prob={'macro': 0.03, 'micro': 0.03, 'mid': 0.03}, stage_feature_dropout_prob={'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  -> MRR@20=0.241400  best=0.241400  (early_stop@19, trial=5.4min, avg=6.3min/trial, total=1.48h, ETA=38.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.241400 cur_best_hr10=0.296000 cur_test_mrr20=0.242100 cur_test_hr10=0.296000 run_best_mrr20=0.241400 run_best_hr10=0.296000 run_test_mrr20=0.242100 run_test_hr10=0.296000
+
+[15/20] MAX_ITEM_LIST_LENGTH=20, d_feat_emb=12, expert_scale=3, hidden_dropout_prob=0.09, learning_rate=0.0005, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.05, 'micro': 0.05, 'mid': 0.05}
+  -> MRR@20=0.240400  best=0.241400  (early_stop@32, trial=10.5min, avg=6.6min/trial, total=1.65h, ETA=33.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.240400 cur_best_hr10=0.295800 cur_test_mrr20=0.239900 cur_test_hr10=0.291400 run_best_mrr20=0.241400 run_best_hr10=0.296000 run_test_mrr20=0.242100 run_test_hr10=0.296000
+
+[16/20] MAX_ITEM_LIST_LENGTH=30, d_feat_emb=12, expert_scale=3, hidden_dropout_prob=0.09, learning_rate=0.00075, stage_family_dropout_prob={'macro': 0.03, 'micro': 0.03, 'mid': 0.03}, stage_feature_dropout_prob={'macro': 0.05, 'micro': 0.05, 'mid': 0.05}
+  -> MRR@20=0.238600  best=0.241400  (early_stop@17, trial=6.3min, avg=6.6min/trial, total=1.76h, ETA=26.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.238600 cur_best_hr10=0.298700 cur_test_mrr20=0.238100 cur_test_hr10=0.294600 run_best_mrr20=0.241400 run_best_hr10=0.296000 run_test_mrr20=0.242100 run_test_hr10=0.296000
+
+[17/20] MAX_ITEM_LIST_LENGTH=20, d_feat_emb=8, expert_scale=2, hidden_dropout_prob=0.12, learning_rate=0.00075, stage_family_dropout_prob={'macro': 0.03, 'micro': 0.03, 'mid': 0.03}, stage_feature_dropout_prob={'macro': 0.05, 'micro': 0.05, 'mid': 0.05}
+  -> MRR@20=0.238800  best=0.241400  (early_stop@20, trial=5.9min, avg=6.6min/trial, total=1.86h, ETA=19.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.238800 cur_best_hr10=0.294700 cur_test_mrr20=0.239600 cur_test_hr10=0.294400 run_best_mrr20=0.241400 run_best_hr10=0.296000 run_test_mrr20=0.242100 run_test_hr10=0.296000
+
+[18/20] MAX_ITEM_LIST_LENGTH=15, d_feat_emb=12, expert_scale=2, hidden_dropout_prob=0.15, learning_rate=0.00075, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  -> MRR@20=0.239000  best=0.241400  (early_stop@18, trial=5.0min, avg=6.5min/trial, total=1.94h, ETA=12.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.239000 cur_best_hr10=0.299000 cur_test_mrr20=0.239200 cur_test_hr10=0.299700 run_best_mrr20=0.241400 run_best_hr10=0.296000 run_test_mrr20=0.242100 run_test_hr10=0.296000
+
+[19/20] MAX_ITEM_LIST_LENGTH=15, d_feat_emb=12, expert_scale=3, hidden_dropout_prob=0.15, learning_rate=0.0005, stage_family_dropout_prob={'macro': 0.03, 'micro': 0.03, 'mid': 0.03}, stage_feature_dropout_prob={'macro': 0.05, 'micro': 0.05, 'mid': 0.05}
+  -> MRR@20=0.236700  best=0.241400  (early_stop@30, trial=9.0min, avg=6.6min/trial, total=2.09h, ETA=6.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.236700 cur_best_hr10=0.299000 cur_test_mrr20=0.237800 cur_test_hr10=0.295400 run_best_mrr20=0.241400 run_best_hr10=0.296000 run_test_mrr20=0.242100 run_test_hr10=0.296000
+
+[20/20] MAX_ITEM_LIST_LENGTH=30, d_feat_emb=8, expert_scale=3, hidden_dropout_prob=0.09, learning_rate=0.0005, stage_family_dropout_prob={'macro': 0.07, 'micro': 0.07, 'mid': 0.07}, stage_feature_dropout_prob={'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  -> MRR@20=0.238700  best=0.241400  (early_stop@32, trial=12.0min, avg=6.9min/trial, total=2.29h, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.238700 cur_best_hr10=0.294400 cur_test_mrr20=0.242200 cur_test_hr10=0.295200 run_best_mrr20=0.241400 run_best_hr10=0.296000 run_test_mrr20=0.242100 run_test_hr10=0.296000
+[1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 22.74 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.34s/it, [1;33mGPU RAM: 22.74 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 22.74 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.32s/it, [1;33mGPU RAM: 22.74 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 22.74 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.33s/it, [1;33mGPU RAM: 22.74 G/23.52 G[0m][0m                                                                                                    
+=================================================================
+  DONE  |  FeaturedMoE_N3 x lastfm0.03
+  Best MRR@20 = 0.241400  |  18/20 trials OK
+  Best HR@10  = 0.296000
+  Test MRR@20 = 0.242100  (best-valid checkpoint)
+  Test HR@10  = 0.296000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.241400 best_valid_hr10=0.296000 test_mrr20=0.242100 test_hr10=0.296000
+  Total time: 137.6 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 15
+    d_feat_emb: 8
+    expert_scale: 2
+    hidden_dropout_prob: 0.09
+    learning_rate: 0.00075
+    stage_family_dropout_prob: {'macro': 0.03, 'micro': 0.03, 'mid': 0.03}
+    stage_feature_dropout_prob: {'macro': 0.08, 'micro': 0.08, 'mid': 0.08}
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/lastfm0.03_FeaturedMoE_N3_p16a_stage1_lastfm0_03_lfm_h11_balanced_s1_20260413_084650_595542_pid575336.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n3/normal/final_tuning_a12/P16A/lastfm0.03/FMoEN3/lastfm0.03_FeaturedMoE_N3_p16a_stage1_lastfm0_03_lfm_h11_balanced_s1_20260413_084650_595542_pid575336.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n3/special/final_tuning_a12/P16A/lastfm0.03/FMoEN3/lastfm0.03_FeaturedMoE_N3_p16a_stage1_lastfm0_03_lfm_h11_balanced_s1_20260413_084650_595542_pid575336_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/fmoe_n3/special/final_tuning_a12/P16A/lastfm0.03/FMoEN3/lastfm0.03_FeaturedMoE_N3_p16a_stage1_lastfm0_03_lfm_h11_balanced_s1_20260413_084650_595542_pid575336_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=575336 start=2026-04-13T08:46:50 end=2026-04-13T11:04:27

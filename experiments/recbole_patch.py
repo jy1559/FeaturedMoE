@@ -117,6 +117,8 @@ _CUSTOM_MODEL_SPECS = {
     'duorec': ('duorec', 'DuoRec'),
     'FEARec': ('fearec', 'FEARec'),
     'fearec': ('fearec', 'FEARec'),
+    'FDSA': ('fdsa', 'FDSA'),
+    'fdsa': ('fdsa', 'FDSA'),
     'TiSASRec': ('tisasrec', 'TiSASRec'),
     'tisasrec': ('tisasrec', 'TiSASRec'),
     'BSARec': ('bsarec', 'BSARec'),
@@ -986,6 +988,59 @@ def _build_special_metric_item_counts(data_loader):
     return torch.bincount(item_ids, minlength=n_items)[:n_items].cpu()
 
 
+def _seen_target_mask_from_train_counts(trainer, positive_i: torch.Tensor, collector=None):
+    """Return boolean mask for targets seen in train split (internal item ids)."""
+    item_counts = getattr(trainer, "_fmoe_special_item_counts_train", None)
+    if item_counts is None:
+        item_counts = getattr(trainer, "_fmoe_special_item_counts", None)
+    if item_counts is None and collector is not None:
+        item_counts = getattr(collector, "item_counts", None)
+    if item_counts is None:
+        return None
+    if not torch.is_tensor(item_counts):
+        item_counts = torch.as_tensor(item_counts)
+    item_counts = item_counts.long().cpu()
+    if item_counts.numel() <= 0:
+        return None
+    pos_cpu = positive_i.detach().long().cpu().clamp(min=0, max=max(int(item_counts.numel()) - 1, 0))
+    return item_counts.index_select(0, pos_cpu) > 0
+
+
+def _update_main_eval_unseen_stats(trainer, split_name: str, *, total: int, seen: int, unseen: int, dropped_rows: int) -> None:
+    stats = getattr(trainer, "_main_eval_unseen_filter_stats", None)
+    if not isinstance(stats, dict):
+        stats = {}
+        trainer._main_eval_unseen_filter_stats = stats
+    split = str(split_name or "unknown")
+    rec = stats.get(split)
+    if not isinstance(rec, dict):
+        rec = {
+            "total_targets": 0,
+            "seen_targets": 0,
+            "unseen_targets": 0,
+            "dropped_eval_rows": 0,
+            "enabled": False,
+        }
+    rec["total_targets"] = int(rec.get("total_targets", 0)) + int(total)
+    rec["seen_targets"] = int(rec.get("seen_targets", 0)) + int(seen)
+    rec["unseen_targets"] = int(rec.get("unseen_targets", 0)) + int(unseen)
+    rec["dropped_eval_rows"] = int(rec.get("dropped_eval_rows", 0)) + int(dropped_rows)
+    rec["enabled"] = True
+    stats[split] = rec
+
+
+def _empty_like_eval_result(scores: torch.Tensor, interaction):
+    n_items = int(scores.size(1)) if scores.ndim >= 2 else 0
+    empty_scores = scores.new_empty((0, n_items))
+    try:
+        empty_interaction = interaction[[]]
+    except Exception:
+        empty_interaction = interaction
+    device = scores.device
+    empty_idx = torch.empty((0,), dtype=torch.long, device=device)
+    return empty_interaction, empty_scores, empty_idx, empty_idx
+
+
 def begin_special_eval(trainer, data_loader, *, split_name: str):
     model_name = str(_config_get(trainer.config, "model", "")).lower()
     generic_enabled = bool(_config_get(trainer.config, "special_logging", False))
@@ -1129,6 +1184,78 @@ def _patched_full_sort_batch_eval(self, batched_data):
                 self.logger.warning(f"special metric collection skipped for one batch: {e}")
             except Exception:
                 pass
+
+    # Optional: exclude unseen targets from main eval metrics while preserving
+    # special collector stats (collector update happened before this filter).
+    try:
+        exclude_unseen = bool(_config_get(self.config, "exclude_unseen_target_from_main_eval", False))
+    except Exception:
+        exclude_unseen = False
+    if exclude_unseen:
+        split_name = "unknown"
+        if collector is not None:
+            split_name = str(getattr(collector, "split_name", "unknown"))
+        seen_pos_mask = _seen_target_mask_from_train_counts(self, positive_i, collector=collector)
+        if seen_pos_mask is not None:
+            total_pos = int(positive_i.numel())
+            seen_pos = int(seen_pos_mask.sum().item())
+            unseen_pos = int(total_pos - seen_pos)
+            if total_pos > 0 and unseen_pos > 0:
+                keep_pos_idx = seen_pos_mask.nonzero(as_tuple=False).view(-1).to(device=positive_i.device)
+                keep_positive_u_old = positive_u.index_select(0, keep_pos_idx).long()
+                keep_positive_i = positive_i.index_select(0, keep_pos_idx).long()
+
+                orig_rows = int(scores.size(0))
+                row_keep = torch.zeros(orig_rows, dtype=torch.bool, device=scores.device)
+                if keep_positive_u_old.numel() > 0:
+                    row_keep[keep_positive_u_old] = True
+                kept_rows_idx = row_keep.nonzero(as_tuple=False).view(-1)
+                dropped_rows = int(orig_rows - kept_rows_idx.numel())
+
+                if keep_positive_u_old.numel() <= 0 or kept_rows_idx.numel() <= 0:
+                    _update_main_eval_unseen_stats(
+                        self,
+                        split_name,
+                        total=total_pos,
+                        seen=seen_pos,
+                        unseen=unseen_pos,
+                        dropped_rows=dropped_rows if dropped_rows > 0 else orig_rows,
+                    )
+                    return _empty_like_eval_result(scores, interaction)
+
+                if kept_rows_idx.numel() < orig_rows:
+                    scores = scores.index_select(0, kept_rows_idx)
+                    interaction = interaction[kept_rows_idx.detach().cpu()]
+                    remap = torch.full(
+                        (orig_rows,),
+                        fill_value=-1,
+                        dtype=torch.long,
+                        device=keep_positive_u_old.device,
+                    )
+                    remap[kept_rows_idx.to(device=keep_positive_u_old.device)] = torch.arange(
+                        kept_rows_idx.numel(),
+                        dtype=torch.long,
+                        device=keep_positive_u_old.device,
+                    )
+                    positive_u = remap.index_select(0, keep_positive_u_old)
+                    positive_i = keep_positive_i
+                _update_main_eval_unseen_stats(
+                    self,
+                    split_name,
+                    total=total_pos,
+                    seen=seen_pos,
+                    unseen=unseen_pos,
+                    dropped_rows=dropped_rows,
+                )
+            elif total_pos > 0:
+                _update_main_eval_unseen_stats(
+                    self,
+                    split_name,
+                    total=total_pos,
+                    seen=seen_pos,
+                    unseen=unseen_pos,
+                    dropped_rows=0,
+                )
 
     return (interaction, scores, positive_u, positive_i)
 

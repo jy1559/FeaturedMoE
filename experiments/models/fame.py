@@ -219,8 +219,10 @@ class FAME(SequentialRecommender):
         self.num_layers = config['num_layers'] if 'num_layers' in config else 2
         self.num_heads = config['num_heads'] if 'num_heads' in config else 4
         self.num_experts = config['num_experts'] if 'num_experts' in config else 4
+        self.fame_moe_last_k_layers = config['fame_moe_last_k_layers'] if 'fame_moe_last_k_layers' in config else 1
         self.dropout_prob = config['hidden_dropout_prob'] if 'hidden_dropout_prob' in config else 0.1
         self.max_seq_length = config['MAX_ITEM_LIST_LENGTH'] if 'MAX_ITEM_LIST_LENGTH' in config else 50
+        self.fame_moe_last_k_layers = max(1, min(self.num_layers, int(self.fame_moe_last_k_layers)))
         
         self.head_dim = self.hidden_size // self.num_heads
         
@@ -236,18 +238,16 @@ class FAME(SequentialRecommender):
         # Positional embedding
         self.position_embedding = nn.Embedding(self.max_seq_length + 1, self.hidden_size)
         
-        # FAME transformer layers
-        # Use standard attention for layers 0..num_layers-2
-        # Use MoE attention only for the final layer
+        # Use MoE attention for the final k layers. The default k=1 preserves
+        # the original FAME behavior while allowing step2 recovery sweeps to
+        # probe deeper MoE usage when needed.
         self.transformer_layers = nn.ModuleList()
         for i in range(self.num_layers):
-            if i < self.num_layers - 1:
-                # Regular transformer layer (without MoE for efficiency)
+            if i < self.num_layers - self.fame_moe_last_k_layers:
                 self.transformer_layers.append(
                     StandardTransformerLayer(self.hidden_size, self.num_heads, self.dropout_prob)
                 )
             else:
-                # Final layer with MoE
                 self.transformer_layers.append(
                     FAMELayer(self.hidden_size, self.num_heads, self.num_experts, self.dropout_prob)
                 )
@@ -297,11 +297,11 @@ class FAME(SequentialRecommender):
         
         # Pass through transformer layers
         for i, layer in enumerate(self.transformer_layers):
-            if i < self.num_layers - 1:
+            if i < self.num_layers - self.fame_moe_last_k_layers:
                 x = layer(x, mask)
             else:
-                # Final layer: get per-head outputs
-                x = layer(x, mask, return_per_head=True)  # (batch, seq_len, num_heads, head_dim)
+                return_heads = i == self.num_layers - 1
+                x = layer(x, mask, return_per_head=return_heads)
         
         # Get last valid position per-head outputs: F_t^(h)
         # x: (batch, seq_len, num_heads, head_dim)
