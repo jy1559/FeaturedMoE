@@ -50,8 +50,12 @@ DATASET_HPARAM_PRESET_4: Dict[str, list[str]] = {
     "lastfm0.03": ["H3", "H11", "H7", "H15"],
     "amazon_beauty": ["H14", "H10", "H13", "H3"],
     "foursquare": ["H15", "H5", "H1", "H3"],
-    "movielens1m": ["H9", "H16", "H8", "H3"],
-    "retail_rocket": ["H2", "H3", "H1", "H6", "H4", "H8", "H9", "H13"],
+    # Favor one proven A1 hparam (H5) while keeping the strongest wrapper
+    # candidates already seen on movielens (H8/H9) and the top A1 config (H3).
+    "movielens1m": ["H3", "H5", "H8", "H9"],
+    # Keep retail to a core-4 compare set so the remaining A sweep can finish
+    # in a single overnight window while preserving like-for-like A comparison.
+    "retail_rocket": ["H2", "H3", "H1", "H6"],
 }
 
 
@@ -92,6 +96,31 @@ def _parse_args() -> argparse.Namespace:
 
     parser.add_argument("--max-item-list-length", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=4096)
+    parser.add_argument(
+        "--dataset-batch-sizes",
+        default="movielens1m:8192,retail_rocket:8192",
+        help="CSV map: dataset:int,dataset2:int overriding train_batch_size",
+    )
+    parser.add_argument(
+        "--dataset-eval-batch-sizes",
+        default="movielens1m:12288,retail_rocket:12288",
+        help="CSV map: dataset:int,dataset2:int overriding eval_batch_size",
+    )
+    parser.add_argument(
+        "--dataset-max-evals",
+        default="",
+        help="Optional CSV map for per-dataset max_evals overrides",
+    )
+    parser.add_argument(
+        "--dataset-tune-epochs",
+        default="",
+        help="Optional CSV map for per-dataset tune_epochs overrides",
+    )
+    parser.add_argument(
+        "--dataset-tune-patience",
+        default="",
+        help="Optional CSV map for per-dataset tune_patience overrides",
+    )
     parser.add_argument("--num-heads", type=int, default=4)
     parser.add_argument("--attn-dropout-prob", type=float, default=0.1)
     parser.add_argument("--d-feat-emb", type=int, default=16)

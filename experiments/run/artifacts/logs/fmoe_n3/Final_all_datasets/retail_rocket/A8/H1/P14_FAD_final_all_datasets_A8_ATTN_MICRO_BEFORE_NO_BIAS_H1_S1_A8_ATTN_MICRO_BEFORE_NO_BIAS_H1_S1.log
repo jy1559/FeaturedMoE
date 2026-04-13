@@ -1,0 +1,103 @@
+[FINAL_ALL_DATASETS_SETTING_HEADER]
+run_phase=P14_FAD_A8_RETAIL_ROCKET_H1_S1 exp_brief=A8_ATTN_MICRO_BEFORE_NO_BIAS phase_id=P14 axis_id=FAD setting_id=A8_ATTN_MICRO_BEFORE_NO_BIAS_H1_S1 hparam_id=H1 seed=1
+desc=A8_ATTN_MICRO_BEFORE_NO_BIAS_H1_S1
+dataset=retail_rocket gpu=0 order=3
+max_evals=12 tune_epochs=100 tune_patience=10
+seed=97002
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --max-evals 12 --tune-epochs 100 --tune-patience 10 --seed 97002 --run-group fmoe_n3 --run-axis Final_all_datasets --run-phase P14_FAD_A8_RETAIL_ROCKET_H1_S1 model=featured_moe_n3_tune dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v3 gpu_id=0 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A8" ++fmoe_architecture_key="A8_ATTN_MICRO_BEFORE_NO_BIAS" ++fmoe_hparam_id="H1" ++fmoe_phase="P14" MAX_ITEM_LIST_LENGTH=20 train_batch_size=8192 eval_batch_size=12288 embedding_size=128 num_heads=4 attn_dropout_prob=0.1 d_ff=256 d_feat_emb=16 d_expert_hidden=128 d_router_hidden=64 expert_scale=3 ++search.learning_rate=[0.0007,0.003] ++search.weight_decay=[1e-06] ++search.hidden_dropout_prob=[0.15] ++search.lr_scheduler_type=["warmup_cosine"] ++search_space_type_overrides.learning_rate=loguniform ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.hidden_dropout_prob=choice ++search_space_type_overrides.lr_scheduler_type=choice ++phase_run_type="final" ++phase_axis_id="FAD" ++phase_axis_desc="final_all_datasets" ++phase_setting_id="A8_ATTN_MICRO_BEFORE_NO_BIAS_H1_S1" ++phase_setting_key="A8_ATTN_MICRO_BEFORE_NO_BIAS" ++phase_hparam_id="H1" ++phase_seed_id=1 ++phase_run_id="FAD_A8_RETAIL_ROCKET_H1_S1" ++layer_layout=["attn","macro_ffn","mid_ffn","attn","micro_ffn"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0002 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0008 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w4_bxd",mid:"w6_bxd_plus_a",micro:"w1_flat"} ++macro_history_window=5 ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_family_dropout_prob={macro:0.1,mid:0.1,micro:0.1} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++bias_mode="none"
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=236939 ts=2026-04-12T20:26:28
+
+=================================================================
+  Hyperopt TPE  |  FeaturedMoE_N3 x retail_rocket
+  max_evals=12  epochs=100  patience=10  wandb=off
+  batch_size(train/valid/test)=8192/12288/12288
+  track=fmoe_n3  axis=final_all_datasets  phase=P14_FAD_A8_RETAIL_ROCKET_H1_S1
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.0007, 0.003]                           -> loguniform
+Fixed params(singleton/non-list): 3
+Fixed groups: 3
+  [optimization]
+    hidden_dropout_prob             0.15                                    
+    weight_decay                    1e-06                                   
+  [other]
+    lr_scheduler_type               warmup_cosine                           
+
+[Wandb] disabled for this hyperopt run
+
+[1/12] learning_rate=0.002023
+SESSION mode: Failed to load split cache (pickle data was truncated)
+  -> MRR@20=0.284000  best=0.284000  (early_stop@18, trial=6.5min, avg=7.4min/trial, total=7.4min, ETA=1.35h)
+[TRIAL_METRICS] cur_best_mrr20=0.284000 cur_best_hr10=0.431400 cur_test_mrr20=0.286600 cur_test_hr10=0.434800 run_best_mrr20=0.284000 run_best_hr10=0.431400 run_test_mrr20=0.286600 run_test_hr10=0.434800
+
+[2/12] learning_rate=0.001557
+  -> MRR@20=0.282500  best=0.284000  (early_stop@22, trial=7.9min, avg=7.6min/trial, total=15.3min, ETA=1.27h)
+[TRIAL_METRICS] cur_best_mrr20=0.282500 cur_best_hr10=0.430600 cur_test_mrr20=0.287100 cur_test_hr10=0.435800 run_best_mrr20=0.284000 run_best_hr10=0.431400 run_test_mrr20=0.286600 run_test_hr10=0.434800
+
+[3/12] learning_rate=0.001653
+  -> MRR@20=0.283000  best=0.284000  (early_stop@14, trial=5.0min, avg=6.8min/trial, total=20.3min, ETA=1.01h)
+[TRIAL_METRICS] cur_best_mrr20=0.283000 cur_best_hr10=0.447400 cur_test_mrr20=0.283900 cur_test_hr10=0.449700 run_best_mrr20=0.284000 run_best_hr10=0.431400 run_test_mrr20=0.286600 run_test_hr10=0.434800
+
+[4/12] learning_rate=0.001002
+  -> MRR@20=0.283100  best=0.284000  (early_stop@26, trial=9.3min, avg=7.4min/trial, total=29.6min, ETA=59.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.283100 cur_best_hr10=0.432500 cur_test_mrr20=0.287600 cur_test_hr10=0.438200 run_best_mrr20=0.284000 run_best_hr10=0.431400 run_test_mrr20=0.286600 run_test_hr10=0.434800
+
+[5/12] learning_rate=0.002173
+  -> MRR@20=0.284000  best=0.284000  (early_stop@18, trial=6.4min, avg=7.2min/trial, total=36.1min, ETA=50.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.284000 cur_best_hr10=0.431300 cur_test_mrr20=0.286900 cur_test_hr10=0.435700 run_best_mrr20=0.284000 run_best_hr10=0.431300 run_test_mrr20=0.286900 run_test_hr10=0.435700
+
+[6/12] learning_rate=0.001115
+  -> MRR@20=0.284400  best=0.284400  (early_stop@24, trial=8.4min, avg=7.4min/trial, total=44.5min, ETA=44.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.284400 cur_best_hr10=0.434800 cur_test_mrr20=0.287800 cur_test_hr10=0.440300 run_best_mrr20=0.284400 run_best_hr10=0.434800 run_test_mrr20=0.287800 run_test_hr10=0.440300
+
+[7/12] learning_rate=0.002214
+  -> MRR@20=0.284200  best=0.284400  (early_stop@18, trial=6.5min, avg=7.3min/trial, total=51.0min, ETA=36.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.284200 cur_best_hr10=0.431000 cur_test_mrr20=0.286900 cur_test_hr10=0.435500 run_best_mrr20=0.284400 run_best_hr10=0.434800 run_test_mrr20=0.287800 run_test_hr10=0.440300
+
+[8/12] learning_rate=0.001537
+  -> MRR@20=0.282400  best=0.284400  (early_stop@22, trial=7.9min, avg=7.4min/trial, total=58.9min, ETA=29.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.282400 cur_best_hr10=0.430200 cur_test_mrr20=0.287100 cur_test_hr10=0.436300 run_best_mrr20=0.284400 run_best_hr10=0.434800 run_test_mrr20=0.287800 run_test_hr10=0.440300
+
+[9/12] learning_rate=0.001877
+  -> MRR@20=0.283500  best=0.284400  (early_stop@18, trial=6.4min, avg=7.3min/trial, total=1.09h, ETA=21.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.283500 cur_best_hr10=0.432400 cur_test_mrr20=0.285400 cur_test_hr10=0.436200 run_best_mrr20=0.284400 run_best_hr10=0.434800 run_test_mrr20=0.287800 run_test_hr10=0.440300
+
+[10/12] learning_rate=0.001408
+  -> MRR@20=0.282500  best=0.284400  (early_stop@22, trial=7.9min, avg=7.3min/trial, total=1.22h, ETA=14.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.282500 cur_best_hr10=0.430500 cur_test_mrr20=0.286000 cur_test_hr10=0.436100 run_best_mrr20=0.284400 run_best_hr10=0.434800 run_test_mrr20=0.287800 run_test_hr10=0.440300
+
+[11/12] learning_rate=0.001989
+  -> MRR@20=0.283800  best=0.284400  (early_stop@18, trial=6.5min, avg=7.3min/trial, total=1.33h, ETA=7.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.283800 cur_best_hr10=0.431500 cur_test_mrr20=0.286400 cur_test_hr10=0.434800 run_best_mrr20=0.284400 run_best_hr10=0.434800 run_test_mrr20=0.287800 run_test_hr10=0.440300
+
+[12/12] learning_rate=0.001037
+  -> MRR@20=0.283500  best=0.284400  (early_stop@24, trial=8.6min, avg=7.4min/trial, total=1.47h, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.283500 cur_best_hr10=0.435700 cur_test_mrr20=0.286900 cur_test_hr10=0.440900 run_best_mrr20=0.284400 run_best_hr10=0.434800 run_test_mrr20=0.287800 run_test_hr10=0.440300
+[1;35mEvaluate   [0m:   0%|                                                            | 0/2 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/2 [00:04<?, ?it/s, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 1/2 [00:04<00:04,  4.33s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0mspecial metric collection skipped for one batch: CUDA out of memory. Tried to allocate 7.17 GiB. GPU 0 has a total capacity of 23.52 GiB of which 4.90 GiB is free. Including non-PyTorch memory, this process has 18.59 GiB memory in use. Of the allocated memory 12.27 GiB is allocated by PyTorch, and 5.87 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[1;35mEvaluate   [0m:  50%|█████████████             | 1/2 [00:08<00:04,  4.33s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 2/2 [00:08<00:00,  3.99s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/2 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/2 [00:04<?, ?it/s, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 1/2 [00:04<00:04,  4.38s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0mspecial metric collection skipped for one batch: CUDA out of memory. Tried to allocate 7.17 GiB. GPU 0 has a total capacity of 23.52 GiB of which 4.90 GiB is free. Including non-PyTorch memory, this process has 18.59 GiB memory in use. Of the allocated memory 12.27 GiB is allocated by PyTorch, and 5.87 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[1;35mEvaluate   [0m:  50%|█████████████             | 1/2 [00:08<00:04,  4.38s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 2/2 [00:08<00:00,  3.97s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/2 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/2 [00:04<?, ?it/s, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████             | 1/2 [00:04<00:04,  4.36s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0mspecial metric collection skipped for one batch: CUDA out of memory. Tried to allocate 7.17 GiB. GPU 0 has a total capacity of 23.52 GiB of which 4.90 GiB is free. Including non-PyTorch memory, this process has 18.59 GiB memory in use. Of the allocated memory 12.27 GiB is allocated by PyTorch, and 5.87 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[1;35mEvaluate   [0m:  50%|█████████████             | 1/2 [00:08<00:04,  4.36s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 2/2 [00:08<00:00,  3.96s/it, [1;33mGPU RAM: 23.00 G/23.52 G[0m][0m                                                                                                    
+=================================================================
+  DONE  |  FeaturedMoE_N3 x retail_rocket
+  Best MRR@20 = 0.284400  |  12/12 trials OK
+  Best HR@10  = 0.434800
+  Test MRR@20 = 0.287800  (best-valid checkpoint)
+  Test HR@10  = 0.440300  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.284400 best_valid_hr10=0.434800 test_mrr20=0.287800 test_hr10=0.440300
+  Total time: 88.8 min
+  Best params:
+    learning_rate: 0.00111544
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/fmoe_n3/retail_rocket_FeaturedMoE_N3_p14_fad_a8_retail_rocket_h1_s1_20260412_202629_201508_pid236939.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n3/normal/final_all_datasets/P14/retail_rocket/FMoEN3/retail_rocket_FeaturedMoE_N3_p14_fad_a8_retail_rocket_h1_s1_20260412_202629_201508_pid236939.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n3/special/final_all_datasets/P14/retail_rocket/FMoEN3/retail_rocket_FeaturedMoE_N3_p14_fad_a8_retail_rocket_h1_s1_20260412_202629_201508_pid236939_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/fmoe_n3/special/final_all_datasets/P14/retail_rocket/FMoEN3/retail_rocket_FeaturedMoE_N3_p14_fad_a8_retail_rocket_h1_s1_20260412_202629_201508_pid236939_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=236939 start=2026-04-12T20:26:28 end=2026-04-12T21:55:17

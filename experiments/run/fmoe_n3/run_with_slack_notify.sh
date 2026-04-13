@@ -4,8 +4,8 @@ set -uo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  run_with_slack_notify.sh [--on|--off] [--title TITLE] -- <command> [args...]
-  run_with_slack_notify.sh [--on|--off] [--title TITLE] <command> [args...]
+  run_with_slack_notify.sh [--on|--off] [--title TITLE] [--note TEXT] -- <command> [args...]
+  run_with_slack_notify.sh [--on|--off] [--title TITLE] [--note TEXT] <command> [args...]
 
 Examples:
   ./run_with_slack_notify.sh --on python experiments/run/fmoe_n3/run_phase8_router_wrapper_diag.py
@@ -16,6 +16,7 @@ Notes:
   - Notification is OFF by default.
   - Enable with --on or SLACK_NOTIFY=1.
   - Set SLACK_WEBHOOK_URL in env or experiments/run/fmoe_n3/.env.slack.
+  - Add a short custom message with --note or SLACK_NOTIFY_NOTE.
 USAGE
 }
 
@@ -59,20 +60,26 @@ send_end_notification() {
   fi
 
   local text="${icon} [${title}] ${status_text}
-exit=${exit_code} duration=${elapsed}s
-user_host=${user_host}
-cwd=${cwd}
+elapsed=${elapsed}s
 started_kst=${start_kst}
 finished_kst=${end_kst}"
+
+  if [[ -n "${note}" ]]; then
+    text="${text}
+note=${note}"
+  fi
 
   if [[ -n "${interrupted_by}" ]]; then
     text="${text}
 interrupted_by=${interrupted_by}"
   fi
 
-  text="${text}
-cmd=${command_str}
-===================================================================="
+  if [[ "${verbose}" == "1" ]]; then
+    text="${text}
+user_host=${user_host}
+cwd=${cwd}
+cmd=${command_str}"
+  fi
   send_slack "${text}"
 }
 
@@ -86,6 +93,8 @@ fi
 
 notify="${SLACK_NOTIFY:-0}"
 title="${SLACK_NOTIFY_TITLE:-FMoE Run}"
+note="${SLACK_NOTIFY_NOTE:-}"
+verbose="${SLACK_NOTIFY_VERBOSE:-0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -103,6 +112,14 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       title="$2"
+      shift 2
+      ;;
+    --note)
+      if [[ $# -lt 2 ]]; then
+        echo "--note requires a value."
+        exit 2
+      fi
+      note="$2"
       shift 2
       ;;
     -h|--help)
@@ -167,16 +184,31 @@ on_interrupt() {
 trap 'on_interrupt INT' INT
 trap 'on_interrupt TERM' TERM
 
+export SLACK_NOTIFY="${notify}"
+export SLACK_NOTIFY_TITLE="${title}"
+export SLACK_NOTIFY_NOTE="${note}"
+export SLACK_NOTIFY_VERBOSE="${verbose}"
+
 if [[ "${notify}" == "1" ]]; then
   if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
     echo "Slack notify skipped: SLACK_WEBHOOK_URL is not set."
   else
-    start_text="====================================================================
-:rocket: [${title}] STARTED
-started_kst=${start_kst}
+    start_text=":rocket: [${title}] STARTED
+started_kst=${start_kst}"
+    if [[ -n "${SLACK_NOTIFY_TOTAL_RUNS:-}" ]]; then
+      start_text="${start_text}
+total_runs=${SLACK_NOTIFY_TOTAL_RUNS}"
+    fi
+    if [[ -n "${note}" ]]; then
+      start_text="${start_text}
+note=${note}"
+    fi
+    if [[ "${verbose}" == "1" ]]; then
+      start_text="${start_text}
 user_host=${user_host}
 cwd=${cwd}
 cmd=${command_str}"
+    fi
     send_slack "${start_text}"
   fi
 fi

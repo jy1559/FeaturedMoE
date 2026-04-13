@@ -9,11 +9,14 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+
+sys.path.append(str(Path(__file__).resolve().parents[1] / "common"))
 
 from run_phase9_auxloss import (  # noqa: E402
     ARTIFACT_ROOT,
@@ -21,8 +24,10 @@ from run_phase9_auxloss import (  # noqa: E402
     _load_result_index,
     _metric_to_float,
 )
+from slack_progress import SlackProgressNotifier
 
 _TRIAL_METRIC_KV_PATTERN = re.compile(r"([A-Za-z0-9_@./-]+)=([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?[0-9]+)?)")
+_RUN_METRIC_KV_PATTERN = re.compile(r"([A-Za-z0-9_@./-]+)=([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?[0-9]+)?)")
 
 
 def sanitize_token(text: str, *, upper: bool = True) -> str:
@@ -183,6 +188,34 @@ def _parse_trial_metrics_line(line: str) -> Optional[Dict[str, float]]:
             continue
         metrics[str(key)] = float(val)
     return metrics or None
+
+
+def _parse_run_metrics_line(line: str) -> Optional[Dict[str, float]]:
+    text = str(line or "")
+    if "[RUN_METRICS]" not in text:
+        return None
+    metrics: Dict[str, float] = {}
+    for key, raw_val in _RUN_METRIC_KV_PATTERN.findall(text):
+        val = _metric_to_float(raw_val)
+        if val is None:
+            continue
+        metrics[str(key)] = float(val)
+    return metrics or None
+
+
+def _scan_log_run_metrics(log_path: Path) -> Optional[Dict[str, float]]:
+    if not log_path.exists():
+        return None
+    latest: Optional[Dict[str, float]] = None
+    try:
+        with log_path.open("r", encoding="utf-8", errors="ignore") as fh:
+            for line in fh:
+                parsed = _parse_run_metrics_line(line)
+                if parsed:
+                    latest = parsed
+    except Exception:
+        return None
+    return latest
 
 
 def _scan_trial_metric_updates(log_path: Path, start_offset: int) -> tuple[int, list[Dict[str, float]]]:
@@ -466,6 +499,13 @@ def _record_run_complete_summary(
     else:
         status = "run_complete_no_result"
 
+    log_metrics = _scan_log_run_metrics(Path(str(row.get("log_path", "") or "")))
+    if log_metrics:
+        if run_best is None:
+            run_best = _metric_to_float(log_metrics.get("best_valid_mrr20"))
+        if test_mrr is None:
+            test_mrr = _metric_to_float(log_metrics.get("test_mrr20"))
+
     prev_global = _metric_to_float(summary_state.get("global_best_valid"))
     new_global = prev_global
     if run_best is not None:
@@ -536,7 +576,7 @@ def launch_wide_rows(
         row["assigned_order"] = idx + 1
 
     runnable: list[Dict[str, Any]] = []
-    skipped = 0
+    skipped_rows: list[Dict[str, Any]] = []
     if build_log_path is None:
         build_log_path = _log_path_from_row
     for row in rows:
@@ -546,12 +586,12 @@ def launch_wide_rows(
         row["summary_path"] = str(sp)
         _get_summary_state_for(sp)
         if bool(getattr(args, "resume_from_logs", True)) and _is_completed_log(lp):
-            skipped += 1
+            skipped_rows.append(row)
             continue
         runnable.append(row)
 
-    if skipped > 0:
-        print(f"[{phase_id}] resume_from_logs=on: skipped {skipped} completed runs by strict log-end marker.")
+    if skipped_rows:
+        print(f"[{phase_id}] resume_from_logs=on: skipped {len(skipped_rows)} completed runs by strict log-end marker.")
 
     if not runnable:
         print(f"[{phase_id}] all runs are already completed by strict log markers.")
@@ -570,6 +610,9 @@ def launch_wide_rows(
             )
             print("          " + " ".join(cmd))
         return 0
+
+    notifier = SlackProgressNotifier(phase_label=phase_name.lower().replace("_", " "), rows=rows)
+    notifier.notify_plan(precompleted_rows=skipped_rows)
 
     pending_queue: deque[Dict[str, Any]] = deque(runnable)
 
@@ -645,6 +688,7 @@ def launch_wide_rows(
                     extra_cols=extra_cols,
                     verify_logging=bool(verify_logging),
                 )
+            notifier.mark_complete(row)
 
         for gpu_id in done_gpu:
             active.pop(gpu_id, None)

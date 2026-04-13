@@ -26,8 +26,14 @@ PROMOTE_FROM_LATEST_RESCUE="false"
 PROMOTE_TOPK="4"
 PROMOTE_MIN_RATIO="0.95"
 UNDERPERFORM_SCREEN="false"
+LOWPERFORM2_SCREEN="false"
 WEAK_RATIO="0.90"
 STRONG_RATIO="0.75"
+LOWPERFORM2_RATIO="0.80"
+LOWPERFORM2_ULTRA_RATIO="0.50"
+LOWPERFORM2_REGULAR_MAX_EVALS="15"
+LOWPERFORM2_WIDE_MAX_EVALS="50"
+CANDIDATE_TAG=""
 
 usage() {
   cat <<USAGE
@@ -38,6 +44,9 @@ Usage: $0 [--datasets ...] [--models ...] [--gpus 0,1,2,3,4,5,6,7]
           [--dry-run] [--smoke-test] [--smoke-max-runs 8] [--fast-screen]
           [--followup-rescue] [--followup-full] [--overnight-auto]
           [--underperform-screen] [--weak-ratio 0.90] [--strong-ratio 0.75]
+          [--lowperform2-screen] [--lowperform2-ratio 0.80] [--lowperform2-ultra-ratio 0.50]
+          [--lowperform2-regular-max-evals 15] [--lowperform2-wide-max-evals 50]
+          [--candidate-tag TAG]
           [--promote-from-latest-rescue] [--promote-topk 4] [--promote-min-ratio 0.95]
 USAGE
 }
@@ -62,8 +71,14 @@ while [ "$#" -gt 0 ]; do
     --followup-full) FOLLOWUP_FULL="true"; shift ;;
     --overnight-auto) OVERNIGHT_AUTO="true"; shift ;;
     --underperform-screen) UNDERPERFORM_SCREEN="true"; shift ;;
+    --lowperform2-screen) LOWPERFORM2_SCREEN="true"; shift ;;
     --weak-ratio) WEAK_RATIO="$2"; shift 2 ;;
     --strong-ratio) STRONG_RATIO="$2"; shift 2 ;;
+    --lowperform2-ratio) LOWPERFORM2_RATIO="$2"; shift 2 ;;
+    --lowperform2-ultra-ratio) LOWPERFORM2_ULTRA_RATIO="$2"; shift 2 ;;
+    --lowperform2-regular-max-evals) LOWPERFORM2_REGULAR_MAX_EVALS="$2"; shift 2 ;;
+    --lowperform2-wide-max-evals) LOWPERFORM2_WIDE_MAX_EVALS="$2"; shift 2 ;;
+    --candidate-tag) CANDIDATE_TAG="$2"; shift 2 ;;
     --promote-from-latest-rescue) PROMOTE_FROM_LATEST_RESCUE="true"; shift ;;
     --promote-topk) PROMOTE_TOPK="$2"; shift 2 ;;
     --promote-min-ratio) PROMOTE_MIN_RATIO="$2"; shift 2 ;;
@@ -93,6 +108,9 @@ build_cmd() {
   if [ -n "${MANIFEST_OUT}" ]; then
     cmd+=(--manifest-out "${MANIFEST_OUT}")
   fi
+  if [ -n "${CANDIDATE_TAG}" ]; then
+    cmd+=(--candidate-tag "${CANDIDATE_TAG}")
+  fi
   if [ "${RESUME_FROM_LOGS}" = "true" ]; then
     cmd+=(--resume-from-logs)
   else
@@ -115,6 +133,7 @@ build_cmd() {
     full) cmd+=(--followup-full) ;;
     full_auto) cmd+=(--followup-full --promote-from-latest-rescue --promote-topk "${PROMOTE_TOPK}" --promote-min-ratio "${PROMOTE_MIN_RATIO}") ;;
     under) cmd+=(--underperform-screen --weak-ratio "${WEAK_RATIO}" --strong-ratio "${STRONG_RATIO}") ;;
+    low2) cmd+=(--lowperform2-screen --lowperform2-ratio "${LOWPERFORM2_RATIO}" --lowperform2-ultra-ratio "${LOWPERFORM2_ULTRA_RATIO}" --lowperform2-regular-max-evals "${LOWPERFORM2_REGULAR_MAX_EVALS}" --lowperform2-wide-max-evals "${LOWPERFORM2_WIDE_MAX_EVALS}") ;;
   esac
   printf '%s\n' "${cmd[@]}"
 }
@@ -136,6 +155,9 @@ else
   fi
   if [ "${UNDERPERFORM_SCREEN}" = "true" ]; then
     mode="under"
+  fi
+  if [ "${LOWPERFORM2_SCREEN}" = "true" ]; then
+    mode="low2"
   fi
   if [ "${FOLLOWUP_RESCUE}" = "true" ]; then
     mode="rescue"

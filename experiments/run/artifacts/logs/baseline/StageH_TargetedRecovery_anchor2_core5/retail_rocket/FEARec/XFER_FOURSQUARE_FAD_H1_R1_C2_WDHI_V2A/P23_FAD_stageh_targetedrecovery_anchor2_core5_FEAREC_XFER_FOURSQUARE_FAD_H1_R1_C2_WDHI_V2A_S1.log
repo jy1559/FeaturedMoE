@@ -1,0 +1,715 @@
+[STAGEH_TARGETEDRECOVERY_ANCHOR2_CORE5_SETTING_HEADER]
+run_phase=P23_SH_C08_MFEAREC_XFER_FOURSQUARE_FAD_H1_R1_C2_WDHI_V2A_S1 run_id=SH_RETAIL_ROCKET_FEAREC_XFER_FOURSQUARE_FAD_H1_R1_C2_WDHI_V2A_S1 phase_id=P23 axis_id=SH model=FEARec candidate_id=XFER_foursquare_FAD_H1_R1_C2_WDHI_V2A seed=1
+dataset=retail_rocket gpu=7 order=0 candidate_source=stageh_screen_variant source_stage=Final_all_datasets_variant transfer_from_dataset=foursquare
+max_evals=50 tune_epochs=16 tune_patience=3
+seed=230141
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --max-evals 50 --tune-epochs 16 --tune-patience 3 --seed 230141 --run-group baseline --run-axis StageH_TargetedRecovery_anchor2_core5 --run-phase P23_SH_C08_MFEAREC_XFER_FOURSQUARE_FAD_H1_R1_C2_WDHI_V2A_S1 model=fearec dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v3 gpu_id=7 log_wandb=false show_progress=false ++special_logging=true ++seed=230141 ++search={learning_rate:[2e-05,0.008]} ++search_space_type_overrides={learning_rate:"loguniform"} ++weight_decay=0.00015000000000000001 ++search.weight_decay=[0.00015000000000000001] ++search_space_type_overrides.weight_decay=choice ++search.n_layers=[2] ++search_space_type_overrides.n_layers=choice ++search.num_layers=[2] ++search_space_type_overrides.num_layers=choice ++search.n_heads=[2] ++search_space_type_overrides.n_heads=choice ++search.num_heads=[2] ++search_space_type_overrides.num_heads=choice ++search.dropout_ratio=[0.1] ++search_space_type_overrides.dropout_ratio=choice ++search.dropout_prob=[0.1] ++search_space_type_overrides.dropout_prob=choice ++search.hidden_dropout_prob=[0.1] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.1] ++search_space_type_overrides.attn_dropout_prob=choice ++search.hidden_size=[112] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[112] ++search_space_type_overrides.embedding_size=choice ++search.inner_size=[224] ++search_space_type_overrides.inner_size=choice ++search.time_span=[256] ++search_space_type_overrides.time_span=choice ++search.num_experts=[4] ++search_space_type_overrides.num_experts=choice ++search.state_size=[16] ++search_space_type_overrides.state_size=choice ++search.conv_kernel=[4] ++search_space_type_overrides.conv_kernel=choice ++search.remaining_ratio=[0.5] ++search_space_type_overrides.remaining_ratio=choice ++search.MAX_ITEM_LIST_LENGTH=[10] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++dropout_ratio=0.1 ++contrast=un ++tau=0.2 ++lmd=0.04 ++lmd_sem=0.0 ++global_ratio=0.85 ++semantic_sample_max_tries=2 ++train_batch_size=4096 ++eval_batch_size=8192 ++hidden_size=112 ++embedding_size=112 ++MAX_ITEM_LIST_LENGTH=10 ++n_layers=2 ++num_layers=2 ++n_heads=2 ++num_heads=2 ++inner_size=224
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=132054 ts=2026-04-12T11:34:25
+
+=================================================================
+  Hyperopt TPE  |  FEARec x retail_rocket
+  max_evals=50  epochs=16  patience=3  wandb=off
+  batch_size(train/valid/test)=4096/8192/8192
+  track=baseline  axis=stageh_targetedrecovery_anchor2_core5  phase=P23_SH_C08_MFEAREC_XFER_FOURSQUARE_FAD_H1_R1_C2_WDHI_V2A_S1
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [2e-05, 0.008]                            -> loguniform
+Fixed params(singleton/non-list): 18
+Fixed groups: 18
+  [optimization]
+    hidden_dropout_prob             0.1                                     
+    weight_decay                    0.00015000000000000001                  
+  [model_core]
+    attn_dropout_prob               0.1                                     
+    dropout_prob                    0.1                                     
+    dropout_ratio                   0.1                                     
+    embedding_size                  112                                     
+    hidden_size                     112                                     
+    inner_size                      224                                     
+    num_heads                       2                                       
+    num_layers                      2                                       
+  [other]
+    MAX_ITEM_LIST_LENGTH            10                                      
+    conv_kernel                     4                                       
+    n_heads                         2                                       
+    n_layers                        2                                       
+    num_experts                     4                                       
+    remaining_ratio                 0.5                                     
+    state_size                      16                                      
+    time_span                       256                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/50] learning_rate=5.459e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[2/50] learning_rate=0.002654
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[3/50] learning_rate=0.0004343
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[4/50] learning_rate=0.0003688
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[5/50] learning_rate=0.0001516
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[6/50] learning_rate=0.0002969
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[7/50] learning_rate=0.0003305
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[8/50] learning_rate=0.0008479
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[9/50] learning_rate=0.006416
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[10/50] learning_rate=0.0001982
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[11/50] learning_rate=0.003241
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[12/50] learning_rate=3.151e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[13/50] learning_rate=0.0002414
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[14/50] learning_rate=0.0001532
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[15/50] learning_rate=2.033e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[16/50] learning_rate=0.001601
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[17/50] learning_rate=0.0007862
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[18/50] learning_rate=9.048e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[19/50] learning_rate=0.000158
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[20/50] learning_rate=0.0002151
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[21/50] learning_rate=6.045e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[22/50] learning_rate=5.11e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[23/50] learning_rate=2.287e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[24/50] learning_rate=4.263e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[25/50] learning_rate=8.429e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[26/50] learning_rate=2.142e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[27/50] learning_rate=3.673e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[28/50] learning_rate=8.078e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[29/50] learning_rate=2.451e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[30/50] learning_rate=3.278e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[31/50] learning_rate=8.591e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[32/50] learning_rate=2.778e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[33/50] learning_rate=0.000111
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[34/50] learning_rate=0.0005515
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[35/50] learning_rate=5.931e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[36/50] learning_rate=0.0004581
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[37/50] learning_rate=5.822e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[38/50] learning_rate=0.0001104
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[39/50] learning_rate=4.709e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[40/50] learning_rate=0.007967
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[41/50] learning_rate=0.004973
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[42/50] learning_rate=0.00162
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[43/50] learning_rate=0.0003511
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[44/50] learning_rate=4.009e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[45/50] learning_rate=0.0001277
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[46/50] learning_rate=0.0002678
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[47/50] learning_rate=2.121e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[48/50] learning_rate=0.001479
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[49/50] learning_rate=0.0007477
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[50/50] learning_rate=0.0001812
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2392, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 267, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[WARN] fmin ended with: 
+
+=================================================================
+  DONE  |  FEARec x retail_rocket
+  Best MRR@20 = 0.000000  |  0/50 trials OK
+  Best HR@10  = 0.000000
+  Test MRR@20 = 0.000000  (best-valid checkpoint)
+  Test HR@10  = 0.000000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.000000 best_valid_hr10=0.000000 test_mrr20=0.000000 test_hr10=0.000000
+  Total time: 0.5 min
+  Best params:
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline/retail_rocket_FEARec_p23_sh_c08_mfearec_xfer_foursquare_fad_h1_r1_c2_wdhi_v2a_s1_20260412_113425_352399_pid132054.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline/normal/stageh_targetedrecovery_anchor2_core5/P23/retail_rocket/FEARec/retail_rocket_FEARec_p23_sh_c08_mfearec_xfer_foursquare_fad_h1_r1_c2_wdhi_v2a_s1_20260412_113425_352399_pid132054.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=132054 start=2026-04-12T11:34:25 end=2026-04-12T11:34:54

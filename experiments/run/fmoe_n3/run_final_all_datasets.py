@@ -419,6 +419,33 @@ def _parse_outlier_map(text: str) -> Dict[str, str]:
     return out
 
 
+def _parse_dataset_int_map(text: str) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    if not str(text or "").strip():
+        return out
+    for chunk in str(text).split(","):
+        chunk = chunk.strip()
+        if not chunk or ":" not in chunk:
+            continue
+        ds, raw_val = chunk.split(":", 1)
+        ds = ds.strip()
+        raw_val = raw_val.strip()
+        if not ds or not raw_val:
+            continue
+        try:
+            out[ds] = int(raw_val)
+        except ValueError:
+            continue
+    return out
+
+
+def _effective_dataset_int(args: argparse.Namespace, dataset: str, attr_name: str, default: int) -> int:
+    raw = getattr(args, attr_name, "")
+    mapped = _parse_dataset_int_map(raw)
+    value = int(mapped.get(dataset, default))
+    return max(value, 1)
+
+
 def _selected_hparams_for_dataset(dataset: str, args: argparse.Namespace) -> list[str]:
     common = [h.upper() for h in _parse_csv_strings(args.common_hparams)]
     if common == ["AUTO12"]:
@@ -514,6 +541,12 @@ def _build_rows(dataset: str, args: argparse.Namespace, arch_id: str) -> list[Di
 
 def _build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) -> list[str]:
     h = dict(HPARAM_BANK[str(row["hparam_id"])])
+    dataset = str(row["dataset"])
+    max_evals = _effective_dataset_int(args, dataset, "dataset_max_evals", int(args.max_evals))
+    tune_epochs = _effective_dataset_int(args, dataset, "dataset_tune_epochs", int(args.tune_epochs))
+    tune_patience = _effective_dataset_int(args, dataset, "dataset_tune_patience", int(args.tune_patience))
+    train_batch_size = _effective_dataset_int(args, dataset, "dataset_batch_sizes", int(args.batch_size))
+    eval_batch_size = _effective_dataset_int(args, dataset, "dataset_eval_batch_sizes", train_batch_size)
     python_bin = os.environ.get("RUN_PYTHON_BIN", "/venv/FMoE/bin/python")
     sched = _parse_csv_strings(args.search_lr_scheduler)
     if not sched:
@@ -524,11 +557,11 @@ def _build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) -
         "--config-name",
         "config",
         "--max-evals",
-        str(int(args.max_evals)),
+        str(int(max_evals)),
         "--tune-epochs",
-        str(int(args.tune_epochs)),
+        str(int(tune_epochs)),
         "--tune-patience",
-        str(int(args.tune_patience)),
+        str(int(tune_patience)),
         "--seed",
         str(int(row["runtime_seed"])),
         "--run-group",
@@ -538,7 +571,7 @@ def _build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) -
         "--run-phase",
         str(row["run_phase"]),
         "model=featured_moe_n3_tune",
-        f"dataset={row['dataset']}",
+        f"dataset={dataset}",
         "eval_mode=session_fixed",
         "feature_mode=full_v3",
         f"gpu_id={gpu_id}",
@@ -556,8 +589,8 @@ def _build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) -
         f"++fmoe_hparam_id={hydra_literal(row['hparam_id'])}",
         f"++fmoe_phase={hydra_literal(PHASE_ID)}",
         f"MAX_ITEM_LIST_LENGTH={int(args.max_item_list_length)}",
-        f"train_batch_size={int(args.batch_size)}",
-        f"eval_batch_size={int(args.batch_size)}",
+        f"train_batch_size={int(train_batch_size)}",
+        f"eval_batch_size={int(eval_batch_size)}",
         f"embedding_size={int(h['embedding_size'])}",
         f"num_heads={int(args.num_heads)}",
         f"attn_dropout_prob={hydra_literal(float(args.attn_dropout_prob))}",
@@ -786,6 +819,31 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--max-item-list-length", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=4096)
+    parser.add_argument(
+        "--dataset-batch-sizes",
+        default="",
+        help="CSV map: dataset:int,dataset2:int to override train_batch_size per dataset",
+    )
+    parser.add_argument(
+        "--dataset-eval-batch-sizes",
+        default="",
+        help="CSV map: dataset:int,dataset2:int to override eval_batch_size per dataset",
+    )
+    parser.add_argument(
+        "--dataset-max-evals",
+        default="",
+        help="CSV map: dataset:int,dataset2:int to override max_evals per dataset",
+    )
+    parser.add_argument(
+        "--dataset-tune-epochs",
+        default="",
+        help="CSV map: dataset:int,dataset2:int to override tune_epochs per dataset",
+    )
+    parser.add_argument(
+        "--dataset-tune-patience",
+        default="",
+        help="CSV map: dataset:int,dataset2:int to override tune_patience per dataset",
+    )
     parser.add_argument("--num-heads", type=int, default=4)
     parser.add_argument("--attn-dropout-prob", type=float, default=0.1)
     parser.add_argument("--d-feat-emb", type=int, default=16)

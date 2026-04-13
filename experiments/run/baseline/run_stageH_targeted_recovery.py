@@ -13,13 +13,17 @@ import argparse
 import csv
 import os
 import subprocess
+import sys
 import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Set
 
+sys.path.append(str(Path(__file__).resolve().parents[1] / "common"))
+
 import run_stageG_cross6x9 as sg
+from slack_progress import SlackProgressNotifier
 
 base = sg.base
 
@@ -74,6 +78,7 @@ OVERALL_BASELINE_AXES = [
 
 CURRENT_DYNAMIC_TIER_BY_COMBO: Dict[Tuple[str, str], str] = {}
 CURRENT_DYNAMIC_TARGETS: Set[Tuple[str, str]] = set()
+CURRENT_ULTRA_LOW_TARGETS: Set[Tuple[str, str]] = set()
 
 PRIOR_BEST_TABLE_PATH = (
     base.REPO_ROOT / "experiments/run/baseline/docs/stageH_AtoG_plus_fmoeA6_best_table_20260409.csv"
@@ -894,6 +899,34 @@ def _compute_underperform_targets(*, weak_ratio: float, strong_ratio: float) -> 
     return out
 
 
+def _compute_lowperform2_targets(
+    *,
+    low_ratio: float,
+    ultra_ratio: float,
+) -> Tuple[Dict[Tuple[str, str], str], Set[Tuple[str, str]]]:
+    best = _overall_baseline_best_by_combo()
+    by_ds: Dict[str, float] = {}
+    for (ds, _model), rec in best.items():
+        cur = by_ds.get(ds)
+        val = float(rec["valid"])
+        by_ds[ds] = val if cur is None else max(float(cur), val)
+
+    out: Dict[Tuple[str, str], str] = {}
+    ultra: Set[Tuple[str, str]] = set()
+    for combo, rec in best.items():
+        ds = combo[0]
+        ds_max = float(by_ds.get(ds, 0.0) or 0.0)
+        if ds_max <= 0.0:
+            continue
+        ratio = float(rec["valid"]) / ds_max
+        if ratio <= float(ultra_ratio):
+            out[combo] = "hard"
+            ultra.add(combo)
+        elif ratio <= float(low_ratio):
+            out[combo] = "medium"
+    return out, ultra
+
+
 def _candidate_goal(dataset: str, model_option: str, *, args: argparse.Namespace) -> int:
     combo = (str(dataset), str(model_option).lower())
     tier = _effective_tier(dataset, model_option)
@@ -901,6 +934,14 @@ def _candidate_goal(dataset: str, model_option: str, *, args: argparse.Namespace
         return int(FOLLOWUP_FULL_CANDIDATE_COUNT.get(combo, 4 if tier == "hard" else 3))
     if args.followup_rescue:
         return int(FOLLOWUP_RESCUE_CANDIDATE_COUNT.get(combo, 24 if tier == "hard" else 16 if tier == "medium" else 12))
+    if args.lowperform2_screen:
+        if combo in CURRENT_ULTRA_LOW_TARGETS:
+            return 28
+        if tier == "hard":
+            return 22
+        if tier == "medium":
+            return 18
+        return 14
     if args.underperform_screen:
         if combo in TIER_BY_COMBO:
             return 20 if tier == "hard" else 14
@@ -954,6 +995,7 @@ def _speedify_candidate_config(
     model_option: str,
     cfg: Dict[str, Any],
     fast_screen: bool,
+    lowperform2_screen: bool = False,
 ) -> Dict[str, Any]:
     out = sg._normalize_cfg(model_option, dict(cfg))
     tier = _effective_tier(str(dataset), str(model_option).lower())
@@ -980,14 +1022,14 @@ def _speedify_candidate_config(
             head_cap = 2 if fast_screen else 4
         heads = min(int(out.get("heads", 2)), int(head_cap))
         out["heads"] = heads
-        if fast_screen:
+        if fast_screen and not lowperform2_screen:
             hs_cap = 160 if tier == "hard" else 144 if tier == "medium" else 128
             inner_cap = 320 if tier == "hard" else 288 if tier == "medium" else 256
             out["hidden_size"] = min(int(out.get("hidden_size", 128)), hs_cap)
             out["embedding_size"] = min(int(out.get("embedding_size", out["hidden_size"])), int(out["hidden_size"]))
             out["inner_size"] = min(int(out.get("inner_size", max(256, out["hidden_size"] * 2))), inner_cap)
 
-    if model_option in {"sasrec", "bsarec", "difsr", "tisasrec"} and fast_screen:
+    if model_option in {"sasrec", "bsarec", "difsr", "tisasrec"} and fast_screen and not lowperform2_screen:
         hs_cap = 160 if tier == "hard" else 144
         inner_cap = 320 if tier == "hard" else 288
         out["hidden_size"] = min(int(out.get("hidden_size", 128)), hs_cap)
@@ -997,20 +1039,35 @@ def _speedify_candidate_config(
     return sg._normalize_cfg(model_option, out)
 
 
+def _lr_floor(*, lowperform2_screen: bool) -> float:
+    return 1e-5 if lowperform2_screen else 8e-5
+
+
 def _speedify_lr_band(
     *,
     model_option: str,
     lr_lo: float,
     lr_hi: float,
     fast_screen: bool,
+    lowperform2_screen: bool = False,
 ) -> Tuple[float, float]:
     model_key = str(model_option).lower()
-    lo_mult = 1.10 if fast_screen else 1.05
-    hi_mult = 1.18 if fast_screen else 1.12
+    lr_floor = _lr_floor(lowperform2_screen=lowperform2_screen)
+    if lowperform2_screen:
+        # For lowperform2 we want genuinely wide exploration, not just
+        # local refinement around the transferred/manual band.
+        if model_key in {"gru4rec", "fame"}:
+            return 1e-5, 1e-2
+        if model_key in {"tisasrec", "sasrec", "bsarec", "difsr", "sigma"}:
+            return 2e-5, 1e-2
+        return 2e-5, 8e-3
+    else:
+        lo_mult = 1.10 if fast_screen else 1.05
+        hi_mult = 1.18 if fast_screen else 1.12
     if model_key in {"gru4rec", "fame"}:
         lo_mult += 0.05
         hi_mult += 0.07
-    new_lo = max(8e-5, min(1e-2, float(lr_lo) * lo_mult))
+    new_lo = max(lr_floor, min(1e-2, float(lr_lo) * lo_mult))
     new_hi = max(new_lo * 1.05, min(1e-2, float(lr_hi) * hi_mult))
     return new_lo, new_hi
 
@@ -1023,11 +1080,13 @@ def _screen_variant_candidates(
     desired: int,
     followup_rescue: bool = False,
     pass3_expand: bool = False,
+    lowperform2_screen: bool = False,
 ) -> List[Dict[str, Any]]:
     if desired <= 0:
         return []
 
     variants: List[Dict[str, Any]] = []
+    lr_floor = _lr_floor(lowperform2_screen=lowperform2_screen)
     aggressive = (dataset, model_option) in AGGRESSIVE_LOW_PERF_COMBOS
     medium = (dataset, model_option) in MEDIUM_LOW_PERF_COMBOS
     for cand in source_candidates:
@@ -1060,14 +1119,14 @@ def _screen_variant_candidates(
                 rec_cfg = dict(cfg)
                 rec_cfg["dropout"] = min(0.22, float(rec_cfg.get("dropout", 0.08)) + 0.05)
                 rec_cfg["weight_decay"] = min(6e-4, float(rec_cfg.get("weight_decay", 5e-5)) * 2.2)
-                recipes.append(("SHIFTDN", rec_cfg, max(8e-5, base_lo * 0.45), max(8e-5, center * 0.75)))
+                recipes.append(("SHIFTDN", rec_cfg, max(lr_floor, base_lo * 0.45), max(lr_floor, center * 0.75)))
             if aggressive or medium:
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = max(96, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.7 / 8) * 8))
                 rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
                 rec_cfg["layers"] = 1 if aggressive else max(1, int(rec_cfg.get("layers", 2)) - 1)
                 rec_cfg["num_layers"] = rec_cfg["layers"]
-                recipes.append(("STRUCTS", rec_cfg, max(8e-5, base_lo * 0.75), min(1e-2, center * 1.20)))
+                recipes.append(("STRUCTS", rec_cfg, max(lr_floor, base_lo * 0.75), min(1e-2, center * 1.20)))
 
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = min(320, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.25 / 8) * 8)))
@@ -1078,7 +1137,7 @@ def _screen_variant_candidates(
                     rec_cfg["num_experts"] = min(8, int(rec_cfg.get("num_experts", 3)) + 1)
                     rec_cfg["heads"] = min(8, max(4, int(rec_cfg.get("heads", 4))))
                     rec_cfg["inner_size"] = min(384, max(int(rec_cfg["hidden_size"] * 2), int(rec_cfg.get("inner_size", 256))))
-                recipes.append(("STRUCTL", rec_cfg, max(8e-5, center * 0.92), min(1e-2, base_hi * 1.35)))
+                recipes.append(("STRUCTL", rec_cfg, max(lr_floor, center * 0.92), min(1e-2, base_hi * 1.35)))
         elif model_option in {"duorec", "fearec"}:
             rec_cfg = dict(cfg)
             rec_cfg["dropout"] = max(0.05, float(rec_cfg.get("dropout", 0.10)) - 0.02)
@@ -1101,7 +1160,7 @@ def _screen_variant_candidates(
                 rec_cfg["heads"] = 2
                 rec_cfg["layers"] = max(1, int(rec_cfg.get("layers", 2)) - 1)
                 rec_cfg["num_layers"] = rec_cfg["layers"]
-                recipes.append(("STRUCTS", rec_cfg, max(8e-5, base_lo * 0.80), min(1e-2, center * 1.10)))
+                recipes.append(("STRUCTS", rec_cfg, max(lr_floor, base_lo * 0.80), min(1e-2, center * 1.10)))
 
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = min(192, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.20 / 8) * 8)))
@@ -1112,7 +1171,7 @@ def _screen_variant_candidates(
                 rec_cfg["num_layers"] = rec_cfg["layers"]
                 if model_option == "fearec":
                     rec_cfg["global_ratio"] = min(0.9, float(rec_cfg.get("global_ratio", 0.7)) + 0.1)
-                recipes.append(("STRUCTL", rec_cfg, max(8e-5, center * 0.90), min(1e-2, base_hi * 1.25)))
+                recipes.append(("STRUCTL", rec_cfg, max(lr_floor, center * 0.90), min(1e-2, base_hi * 1.25)))
         elif model_option in {"sasrec", "bsarec", "tisasrec", "difsr"}:
             rec_cfg = dict(cfg)
             rec_cfg["dropout"] = max(0.06, float(rec_cfg.get("dropout", 0.10)) - 0.02)
@@ -1140,7 +1199,7 @@ def _screen_variant_candidates(
                 rec_cfg["weight_decay"] = min(8e-4, float(rec_cfg.get("weight_decay", 1e-4)) * 2.5)
                 if model_option == "tisasrec":
                     rec_cfg["time_span"] = max(48, int(rec_cfg.get("time_span", 128)) // 2)
-                recipes.append(("WIDE", rec_cfg, max(8e-5, base_lo * 0.40), max(8e-5, center * 0.72)))
+                recipes.append(("WIDE", rec_cfg, max(lr_floor, base_lo * 0.40), max(lr_floor, center * 0.72)))
             if aggressive or medium:
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = max(96, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.75 / 8) * 8))
@@ -1151,7 +1210,7 @@ def _screen_variant_candidates(
                 rec_cfg["heads"] = 2 if model_option != "difsr" else max(1, min(2, int(rec_cfg.get("heads", 2))))
                 if model_option == "tisasrec":
                     rec_cfg["time_span"] = min(int(rec_cfg.get("time_span", 128)), 96)
-                recipes.append(("STRUCTS", rec_cfg, max(8e-5, base_lo * 0.78), min(1e-2, center * 1.12)))
+                recipes.append(("STRUCTS", rec_cfg, max(lr_floor, base_lo * 0.78), min(1e-2, center * 1.12)))
 
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = min(192, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.20 / 8) * 8)))
@@ -1164,7 +1223,7 @@ def _screen_variant_candidates(
                     rec_cfg["time_span"] = min(384, max(128, int(rec_cfg.get("time_span", 128)) * 2))
                 if model_option == "difsr":
                     rec_cfg["lambda_attr"] = min(0.2, float(rec_cfg.get("lambda_attr", 0.1)) + 0.04)
-                recipes.append(("STRUCTL", rec_cfg, max(8e-5, center * 0.90), min(1e-2, base_hi * 1.22)))
+                recipes.append(("STRUCTL", rec_cfg, max(lr_floor, center * 0.90), min(1e-2, base_hi * 1.22)))
         elif model_option == "sigma":
             rec_cfg = dict(cfg)
             rec_cfg["hidden_size"] = max(96, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.75 / 8) * 8))
@@ -1172,7 +1231,7 @@ def _screen_variant_candidates(
             rec_cfg["state_size"] = max(8, int(float(rec_cfg.get("sigma_state", rec_cfg.get("state_size", 16))) * 0.75))
             rec_cfg["conv_kernel"] = max(3, int(rec_cfg.get("sigma_kernel", rec_cfg.get("conv_kernel", 6))) - 2)
             rec_cfg["remaining_ratio"] = max(0.35, float(rec_cfg.get("sigma_remaining_ratio", rec_cfg.get("remaining_ratio", 0.6))) - 0.10)
-            recipes.append(("STRUCTS", rec_cfg, max(8e-5, base_lo * 0.82), min(1e-2, center * 1.10)))
+            recipes.append(("STRUCTS", rec_cfg, max(lr_floor, base_lo * 0.82), min(1e-2, center * 1.10)))
 
             rec_cfg = dict(cfg)
             rec_cfg["hidden_size"] = min(192, max(128, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.20 / 8) * 8)))
@@ -1180,12 +1239,12 @@ def _screen_variant_candidates(
             rec_cfg["state_size"] = min(48, max(16, int(float(rec_cfg.get("sigma_state", rec_cfg.get("state_size", 16))) * 1.5)))
             rec_cfg["conv_kernel"] = min(12, int(rec_cfg.get("sigma_kernel", rec_cfg.get("conv_kernel", 6))) + 2)
             rec_cfg["remaining_ratio"] = min(0.9, float(rec_cfg.get("sigma_remaining_ratio", rec_cfg.get("remaining_ratio", 0.6))) + 0.10)
-            recipes.append(("STRUCTL", rec_cfg, max(8e-5, center * 0.90), min(1e-2, base_hi * 1.22)))
+            recipes.append(("STRUCTL", rec_cfg, max(lr_floor, center * 0.90), min(1e-2, base_hi * 1.22)))
         else:
             rec_cfg = dict(cfg)
             recipes.append(("LRMID", rec_cfg, max(8e-5, base_lo * 0.93), min(1e-2, base_hi * 1.08)))
 
-        if followup_rescue:
+        if followup_rescue or lowperform2_screen:
             if model_option in {"gru4rec", "fame"}:
                 rec_cfg = dict(cfg)
                 rec_cfg["dropout"] = max(0.02, float(rec_cfg.get("dropout", 0.08)) - 0.05)
@@ -1198,7 +1257,7 @@ def _screen_variant_candidates(
                 rec_cfg = dict(cfg)
                 rec_cfg["dropout"] = min(0.28, float(rec_cfg.get("dropout", 0.08)) + 0.08)
                 rec_cfg["weight_decay"] = min(1e-3, float(rec_cfg.get("weight_decay", 5e-5)) * 3.2)
-                recipes.append(("PASS2_XLRLO", rec_cfg, max(8e-5, base_lo * 0.28), max(8e-5, center * 0.62)))
+                recipes.append(("PASS2_XLRLO", rec_cfg, max(lr_floor, base_lo * 0.20), max(lr_floor, center * 0.55)))
             elif model_option in {"sasrec", "bsarec", "tisasrec", "difsr", "sigma"}:
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = max(80, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.62 / 8) * 8))
@@ -1209,7 +1268,7 @@ def _screen_variant_candidates(
                 if model_option == "tisasrec":
                     rec_cfg["time_span"] = 48
                     rec_cfg["heads"] = 2
-                recipes.append(("PASS2_TINY", rec_cfg, max(8e-5, base_lo * 0.55), min(1e-2, center * 1.05)))
+                recipes.append(("PASS2_TINY", rec_cfg, max(lr_floor, base_lo * 0.45), min(1e-2, center * 1.05)))
 
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = min(224, max(144, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.35 / 8) * 8)))
@@ -1218,21 +1277,21 @@ def _screen_variant_candidates(
                 rec_cfg["layers"] = min(3, int(rec_cfg.get("layers", 2)) + 1)
                 rec_cfg["num_layers"] = rec_cfg["layers"]
                 rec_cfg["dropout"] = max(0.04, float(rec_cfg.get("dropout", 0.10)) - 0.03)
-                recipes.append(("PASS2_DEEPL", rec_cfg, max(8e-5, center * 0.82), min(1e-2, base_hi * 1.45)))
+                recipes.append(("PASS2_DEEPL", rec_cfg, max(lr_floor, center * 0.82), min(1e-2, base_hi * 1.45)))
             elif model_option in {"duorec", "fearec"}:
                 rec_cfg = dict(cfg)
                 rec_cfg["tau"] = max(0.08, float(rec_cfg.get("tau", 0.20)) - 0.07)
                 rec_cfg["lmd"] = max(0.006, float(rec_cfg.get("lmd", 0.02)) * 0.55)
                 rec_cfg["dropout"] = max(0.04, float(rec_cfg.get("dropout", 0.10)) - 0.03)
-                recipes.append(("PASS2_CONTRASTLITE", rec_cfg, max(8e-5, base_lo * 0.70), min(1e-2, base_hi * 1.30)))
+                recipes.append(("PASS2_CONTRASTLITE", rec_cfg, max(lr_floor, base_lo * 0.60), min(1e-2, base_hi * 1.30)))
 
                 rec_cfg = dict(cfg)
                 rec_cfg["tau"] = min(0.32, float(rec_cfg.get("tau", 0.20)) + 0.08)
                 rec_cfg["lmd"] = min(0.05, float(rec_cfg.get("lmd", 0.02)) * 1.5)
                 rec_cfg["weight_decay"] = min(5e-4, float(rec_cfg.get("weight_decay", 1e-4)) * 2.2)
-                recipes.append(("PASS2_CONTRASTREG", rec_cfg, max(8e-5, base_lo * 0.60), min(1e-2, center * 1.15)))
+                recipes.append(("PASS2_CONTRASTREG", rec_cfg, max(lr_floor, base_lo * 0.50), min(1e-2, center * 1.15)))
 
-        if pass3_expand:
+        if pass3_expand or lowperform2_screen:
             if model_option in {"gru4rec", "fame"}:
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = max(80, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.55 / 8) * 8))
@@ -1240,7 +1299,7 @@ def _screen_variant_candidates(
                 rec_cfg["layers"] = 1
                 rec_cfg["num_layers"] = 1
                 rec_cfg["dropout"] = min(0.30, float(rec_cfg.get("dropout", 0.08)) + 0.10)
-                recipes.append(("PASS3_ULTRATINY", rec_cfg, max(8e-5, base_lo * 0.35), max(8e-5, center * 0.70)))
+                recipes.append(("PASS3_ULTRATINY", rec_cfg, max(lr_floor, base_lo * 0.22), max(lr_floor, center * 0.55)))
 
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = min(448, max(160, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.65 / 8) * 8)))
@@ -1260,7 +1319,7 @@ def _screen_variant_candidates(
                 if model_option == "tisasrec":
                     rec_cfg["time_span"] = 32
                     rec_cfg["heads"] = 2
-                recipes.append(("PASS3_MINI", rec_cfg, max(8e-5, base_lo * 0.45), min(1e-2, center * 0.95)))
+                recipes.append(("PASS3_MINI", rec_cfg, max(lr_floor, base_lo * 0.30), min(1e-2, center * 0.95)))
 
                 rec_cfg = dict(cfg)
                 rec_cfg["hidden_size"] = min(256, max(160, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.55 / 8) * 8)))
@@ -1274,6 +1333,156 @@ def _screen_variant_candidates(
                     rec_cfg["heads"] = 4
                 recipes.append(("PASS3_MAXI", rec_cfg, max(8e-5, center * 0.78), min(1e-2, base_hi * 1.65)))
 
+        if lowperform2_screen:
+            if model_option in {"gru4rec", "fame"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(64, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.45 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                rec_cfg["dropout"] = min(0.32, float(rec_cfg.get("dropout", 0.08)) + 0.12)
+                rec_cfg["max_len"] = min(int(rec_cfg.get("max_len", 10)), 6)
+                recipes.append(("PASS4_EDGELO", rec_cfg, max(lr_floor, base_lo * 0.10), max(lr_floor, center * 0.45)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(512, max(192, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.85 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 3
+                rec_cfg["num_layers"] = 3
+                rec_cfg["dropout"] = max(0.02, float(rec_cfg.get("dropout", 0.08)) - 0.06)
+                recipes.append(("PASS4_EDGEHI", rec_cfg, min(1e-2, center * 1.75), min(1e-2, base_hi * 2.45)))
+            elif model_option in {"sasrec", "bsarec", "tisasrec", "difsr", "sigma"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(64, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.45 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                rec_cfg["inner_size"] = max(128, int(rec_cfg["hidden_size"] * 2))
+                rec_cfg["max_len"] = min(int(rec_cfg.get("max_len", 10)), 6)
+                rec_cfg["dropout"] = max(0.02, float(rec_cfg.get("dropout", 0.10)) - 0.05)
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = 24
+                    rec_cfg["heads"] = 2
+                recipes.append(("PASS4_EDGELO", rec_cfg, max(8e-5, base_lo * 0.24), max(8e-5, center * 0.60)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(288, max(192, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.75 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["layers"] = 3
+                rec_cfg["num_layers"] = 3
+                rec_cfg["inner_size"] = min(640, max(384, int(rec_cfg["hidden_size"] * 2.75)))
+                rec_cfg["dropout"] = min(0.30, float(rec_cfg.get("dropout", 0.10)) + 0.03)
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = min(640, max(256, int(rec_cfg.get("time_span", 128)) * 4))
+                    rec_cfg["heads"] = 4
+                if model_option == "difsr":
+                    rec_cfg["lambda_attr"] = min(0.25, float(rec_cfg.get("lambda_attr", 0.1)) + 0.06)
+                recipes.append(("PASS4_EDGEHI", rec_cfg, max(lr_floor, center * 0.70), min(1e-2, base_hi * 1.90)))
+            elif model_option in {"duorec", "fearec"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = max(80, int(round(float(rec_cfg.get("hidden_size", 128)) * 0.55 / 8) * 8))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["inner_size"] = max(160, int(rec_cfg["hidden_size"] * 2))
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                rec_cfg["tau"] = max(0.07, float(rec_cfg.get("tau", 0.20)) - 0.08)
+                rec_cfg["lmd"] = max(0.004, float(rec_cfg.get("lmd", 0.02)) * 0.45)
+                recipes.append(("PASS4_EDGELO", rec_cfg, max(lr_floor, base_lo * 0.12), max(lr_floor, center * 0.50)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = min(224, max(160, int(round(float(rec_cfg.get("hidden_size", 128)) * 1.45 / 8) * 8)))
+                rec_cfg["embedding_size"] = rec_cfg["hidden_size"]
+                rec_cfg["inner_size"] = min(448, max(320, int(rec_cfg["hidden_size"] * 2.8)))
+                rec_cfg["layers"] = 3
+                rec_cfg["num_layers"] = 3
+                rec_cfg["tau"] = min(0.36, float(rec_cfg.get("tau", 0.20)) + 0.10)
+                rec_cfg["lmd"] = min(0.06, float(rec_cfg.get("lmd", 0.02)) * 1.8)
+                recipes.append(("PASS4_EDGEHI", rec_cfg, max(lr_floor, center * 0.74), min(1e-2, base_hi * 1.75)))
+
+        if lowperform2_screen and (dataset, model_option) in CURRENT_ULTRA_LOW_TARGETS:
+            if model_option in {"gru4rec", "fame"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 64
+                rec_cfg["embedding_size"] = 64
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                rec_cfg["dropout"] = min(0.35, float(rec_cfg.get("dropout", 0.08)) + 0.12)
+                recipes.append(("PASS5_DIM64_XLO", rec_cfg, 1e-5, min(1e-2, center * 0.35)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 512
+                rec_cfg["embedding_size"] = 512
+                rec_cfg["layers"] = 3
+                rec_cfg["num_layers"] = 3
+                rec_cfg["dropout"] = max(0.02, float(rec_cfg.get("dropout", 0.08)) - 0.05)
+                recipes.append(("PASS5_DIM512_XHI", rec_cfg, max(1e-4, center * 0.90), 1e-2))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 192
+                rec_cfg["embedding_size"] = 192
+                rec_cfg["layers"] = 2
+                rec_cfg["num_layers"] = 2
+                recipes.append(("PASS5_LRWIDE_MID", rec_cfg, 1e-5, 1e-2))
+            elif model_option in {"sasrec", "bsarec", "tisasrec", "difsr", "sigma"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 64
+                rec_cfg["embedding_size"] = 64
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                rec_cfg["inner_size"] = 128
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = 16
+                    rec_cfg["heads"] = 2
+                recipes.append(("PASS5_DIM64_XLO", rec_cfg, 1e-5, min(1e-2, center * 0.35)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 320
+                rec_cfg["embedding_size"] = 320
+                rec_cfg["layers"] = 3
+                rec_cfg["num_layers"] = 3
+                rec_cfg["inner_size"] = 640
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = 640
+                    rec_cfg["heads"] = 4
+                if model_option == "difsr":
+                    rec_cfg["lambda_attr"] = min(0.30, float(rec_cfg.get("lambda_attr", 0.1)) + 0.08)
+                recipes.append(("PASS5_DIM320_XHI", rec_cfg, max(1e-4, center * 0.90), 1e-2))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 160
+                rec_cfg["embedding_size"] = 160
+                rec_cfg["layers"] = 2
+                rec_cfg["num_layers"] = 2
+                rec_cfg["inner_size"] = 320
+                if model_option == "tisasrec":
+                    rec_cfg["time_span"] = 128
+                    rec_cfg["heads"] = 2
+                recipes.append(("PASS5_LRWIDE_MID", rec_cfg, 1e-5, 1e-2))
+            elif model_option in {"duorec", "fearec"}:
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 80
+                rec_cfg["embedding_size"] = 80
+                rec_cfg["inner_size"] = 160
+                rec_cfg["layers"] = 1
+                rec_cfg["num_layers"] = 1
+                recipes.append(("PASS5_DIM80_XLO", rec_cfg, 1e-5, min(1e-2, center * 0.40)))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 256
+                rec_cfg["embedding_size"] = 256
+                rec_cfg["inner_size"] = 640
+                rec_cfg["layers"] = 3
+                rec_cfg["num_layers"] = 3
+                recipes.append(("PASS5_DIM256_XHI", rec_cfg, max(1e-4, center * 0.92), 1e-2))
+
+                rec_cfg = dict(cfg)
+                rec_cfg["hidden_size"] = 128
+                rec_cfg["embedding_size"] = 128
+                rec_cfg["inner_size"] = 256
+                rec_cfg["layers"] = 2
+                rec_cfg["num_layers"] = 2
+                recipes.append(("PASS5_LRWIDE_MID", rec_cfg, 1e-5, 8e-3))
+
         for suffix, rec_cfg, lr_lo, lr_hi in recipes:
             if len(variants) >= desired:
                 break
@@ -1284,8 +1493,8 @@ def _screen_variant_candidates(
                     "source_stage": f"{cand.get('source_stage', 'stageh_screen')}_variant",
                     "transfer_from_dataset": cand.get("transfer_from_dataset", dataset),
                     "config": sg._normalize_cfg(model_option, rec_cfg),
-                    "lr_lo": max(8e-5, min(1e-2, float(lr_lo))),
-                    "lr_hi": max(max(8e-5, min(1e-2, float(lr_lo))) * 1.05, min(1e-2, float(lr_hi))),
+                    "lr_lo": max(lr_floor, min(1e-2, float(lr_lo))),
+                    "lr_hi": max(max(lr_floor, min(1e-2, float(lr_lo))) * 1.05, min(1e-2, float(lr_hi))),
                 }
             )
     return variants[:desired]
@@ -1348,6 +1557,7 @@ def _target_budget(
     fast_screen: bool,
     followup_rescue: bool = False,
     followup_full: bool = False,
+    lowperform2_screen: bool = False,
     dataset: str | None = None,
 ) -> Tuple[int, int, int]:
     m = str(model_option).lower()
@@ -1357,6 +1567,20 @@ def _target_budget(
         if m in {"duorec", "fearec", "tisasrec"}:
             return 6, 38, 5
         return 6, 36, 5
+    if lowperform2_screen:
+        combo = (str(dataset), m)
+        ultra = combo in CURRENT_ULTRA_LOW_TARGETS
+        if ultra:
+            if m in {"gru4rec", "fame"}:
+                return 18, 18, 3
+            if m in {"duorec", "fearec", "tisasrec"}:
+                return 16, 18, 3
+            return 16, 18, 3
+        if m in {"gru4rec", "fame"}:
+            return 14, 16, 3
+        if m in {"duorec", "fearec", "tisasrec"}:
+            return 12, 16, 3
+        return 12, 16, 3
     if followup_rescue:
         tier = _effective_tier(str(dataset), m)
         if tier == "hard":
@@ -1390,10 +1614,21 @@ def _target_budget(
     return 5, 34, 5
 
 
+def _is_lowperform2_wide_lr_candidate(candidate_id: str, lr_lo: float, lr_hi: float) -> bool:
+    cid = str(candidate_id).upper()
+    if "LRWIDE" in cid or "XLO" in cid or "XHI" in cid:
+        return True
+    if float(lr_lo) <= 2e-5 and float(lr_hi) >= 8e-3:
+        return True
+    return (float(lr_hi) / max(float(lr_lo), 1e-12)) >= 200.0
+
+
 def _selected_combos(args: argparse.Namespace) -> List[Tuple[str, str]]:
     datasets = set(base._parse_csv_strings(args.datasets))
     models = set(m.lower() for m in base._parse_csv_strings(args.models))
-    combo_source = CURRENT_DYNAMIC_TARGETS if args.underperform_screen and CURRENT_DYNAMIC_TARGETS else set(TARGET_COMBOS)
+    combo_source = set(TARGET_COMBOS)
+    if (args.underperform_screen or args.lowperform2_screen) and CURRENT_DYNAMIC_TARGETS:
+        combo_source = CURRENT_DYNAMIC_TARGETS
     selected = [(ds, m) for ds, m in combo_source if ds in datasets and m in models]
     promoted = set()
     if args.followup_full and args.promote_from_latest_rescue:
@@ -1422,6 +1657,7 @@ def _select_stageh_candidates(
     followup_rescue: bool,
     followup_full: bool,
     underperform_screen: bool,
+    lowperform2_screen: bool,
 ) -> List[Dict[str, Any]]:
     tier = _effective_tier(dataset, model_option)
     dummy_args = argparse.Namespace(
@@ -1429,6 +1665,7 @@ def _select_stageh_candidates(
         followup_full=followup_full,
         followup_rescue=followup_rescue,
         underperform_screen=underperform_screen,
+        lowperform2_screen=lowperform2_screen,
     )
     goal = _candidate_goal(dataset, model_option, args=dummy_args)
     base_cands = sg._select_candidates_for_combo(
@@ -1445,10 +1682,10 @@ def _select_stageh_candidates(
     if followup_full:
         chosen.extend(dict(c) for c in manual_cands[:2])
         chosen.extend(dict(c) for c in base_cands[:2])
-    elif fast_screen or followup_rescue:
-        base_take = 6 if tier == "hard" else 4 if tier == "medium" else 3
-        manual_take = 6 if tier == "hard" else 4 if tier == "medium" else 3
-        if followup_rescue:
+    elif fast_screen or followup_rescue or lowperform2_screen:
+        base_take = 8 if lowperform2_screen and (dataset, model_option) in CURRENT_ULTRA_LOW_TARGETS else 6 if tier == "hard" else 4 if tier == "medium" else 3
+        manual_take = 8 if lowperform2_screen and (dataset, model_option) in CURRENT_ULTRA_LOW_TARGETS else 6 if tier == "hard" else 4 if tier == "medium" else 3
+        if followup_rescue or lowperform2_screen:
             base_take += 1
             manual_take += 1
         chosen.extend(dict(c) for c in base_cands[: min(base_take, len(base_cands))])
@@ -1475,19 +1712,21 @@ def _select_stageh_candidates(
         chosen.append(dict(cand))
 
     chosen = sg._dedup_candidates(chosen)
-    if (fast_screen or followup_rescue) and len(chosen) < goal:
+    if (fast_screen or followup_rescue or lowperform2_screen) and len(chosen) < goal:
         variant_source = list(chosen)
-        if len(variant_source) < 4:
-            variant_source.extend(dict(c) for c in base_cands[:4])
-            variant_source.extend(dict(c) for c in manual_cands[:4])
+        source_take = 6 if lowperform2_screen else 4
+        if len(variant_source) < source_take:
+            variant_source.extend(dict(c) for c in base_cands[:source_take])
+            variant_source.extend(dict(c) for c in manual_cands[:source_take])
         chosen.extend(
             _screen_variant_candidates(
                 dataset=dataset,
                 model_option=model_option,
                 source_candidates=sg._dedup_candidates(variant_source),
                 desired=max(0, goal - len(chosen)),
-                followup_rescue=bool(followup_rescue),
-                pass3_expand=bool(underperform_screen and (dataset, model_option) in TIER_BY_COMBO),
+                followup_rescue=bool(followup_rescue or lowperform2_screen),
+                pass3_expand=bool(lowperform2_screen or (underperform_screen and (dataset, model_option) in TIER_BY_COMBO)),
+                lowperform2_screen=bool(lowperform2_screen),
             )
         )
         chosen = sg._dedup_candidates(chosen)
@@ -1509,6 +1748,7 @@ def _build_rows(args: argparse.Namespace) -> List[Dict[str, Any]]:
 
     rows: List[Dict[str, Any]] = []
     run_cursor = 0
+    candidate_tag = str(getattr(args, "candidate_tag", "") or "").strip()
 
     for combo_idx, (dataset, model_option) in enumerate(combos, start=1):
         model_label = sg.OPTION_TO_LABEL[model_option]
@@ -1519,17 +1759,22 @@ def _build_rows(args: argparse.Namespace) -> List[Dict[str, Any]]:
             final_cache_by_dataset=final_cache_by_dataset,
             global_cache_by_model=global_cache_by_model,
             stage_best_cache=stage_best_cache,
-            fast_screen=bool(args.fast_screen or args.underperform_screen),
+            fast_screen=bool(args.fast_screen or args.underperform_screen or args.lowperform2_screen),
             followup_rescue=bool(args.followup_rescue),
             followup_full=bool(args.followup_full),
             underperform_screen=bool(args.underperform_screen),
+            lowperform2_screen=bool(args.lowperform2_screen),
         )
         for cand_idx, cand in enumerate(candidates, start=1):
+            candidate_id = str(cand["candidate_id"])
+            if candidate_tag:
+                candidate_id = f"{candidate_id}_{candidate_tag}"
             max_evals, tune_epochs, tune_patience = _target_budget(
                 model_option,
                 fast_screen=bool(args.fast_screen),
                 followup_rescue=bool(args.followup_rescue),
                 followup_full=bool(args.followup_full),
+                lowperform2_screen=bool(args.lowperform2_screen),
                 dataset=dataset,
             )
             if args.smoke_test:
@@ -1538,14 +1783,21 @@ def _build_rows(args: argparse.Namespace) -> List[Dict[str, Any]]:
                 dataset=dataset,
                 model_option=model_option,
                 cfg=dict(cand["config"]),
-                fast_screen=bool(args.fast_screen),
+                fast_screen=bool(args.fast_screen or args.lowperform2_screen),
+                lowperform2_screen=bool(args.lowperform2_screen),
             )
             lr_lo, lr_hi = _speedify_lr_band(
                 model_option=model_option,
                 lr_lo=float(cand["lr_lo"]),
                 lr_hi=float(cand["lr_hi"]),
                 fast_screen=bool(args.fast_screen),
+                lowperform2_screen=bool(args.lowperform2_screen),
             )
+            if args.lowperform2_screen:
+                if _is_lowperform2_wide_lr_candidate(str(cand["candidate_id"]), float(lr_lo), float(lr_hi)):
+                    max_evals = int(args.lowperform2_wide_max_evals)
+                else:
+                    max_evals = int(args.lowperform2_regular_max_evals)
 
             for seed_id in seeds:
                 run_cursor += 1
@@ -1554,24 +1806,24 @@ def _build_rows(args: argparse.Namespace) -> List[Dict[str, Any]]:
                     "phase_id": base.PHASE_ID,
                     "axis_id": "SH",
                     "axis_desc": base.AXIS_DESC,
-                    "setting_id": f"STAGEH_{base._sanitize_token(model_label, upper=True)}_{base._sanitize_token(str(cand['candidate_id']), upper=True)}_S{seed_id}",
+                    "setting_id": f"STAGEH_{base._sanitize_token(model_label, upper=True)}_{base._sanitize_token(candidate_id, upper=True)}_S{seed_id}",
                     "setting_key": "STAGEH_TARGETED_RECOVERY",
-                    "setting_desc": f"STAGEH_TARGETED_RECOVERY_{base._sanitize_token(model_label, upper=True)}_{base._sanitize_token(str(cand['candidate_id']), upper=True)}_S{seed_id}",
-                    "hparam_id": base._sanitize_token(str(cand["candidate_id"]), upper=True)[:40],
+                    "setting_desc": f"STAGEH_TARGETED_RECOVERY_{base._sanitize_token(model_label, upper=True)}_{base._sanitize_token(candidate_id, upper=True)}_S{seed_id}",
+                    "hparam_id": base._sanitize_token(candidate_id, upper=True)[:40],
                     "seed_id": int(seed_id),
                     "run_phase": (
                         f"{base.PHASE_ID}_SH_C{combo_idx:02d}_M{base._sanitize_token(model_label, upper=True)}_"
-                        f"{base._sanitize_token(str(cand['candidate_id']), upper=True)}_S{int(seed_id)}"
+                        f"{base._sanitize_token(candidate_id, upper=True)}_S{int(seed_id)}"
                     ),
                     "run_id": (
                         f"SH_{base._sanitize_token(dataset, upper=True)}_{base._sanitize_token(model_label, upper=True)}_"
-                        f"{base._sanitize_token(str(cand['candidate_id']), upper=True)}_S{int(seed_id)}"
+                        f"{base._sanitize_token(candidate_id, upper=True)}_S{int(seed_id)}"
                     ),
                     "runtime_seed": int(args.seed_base) + int(run_cursor - 1),
                     "stage": "stageh",
                     "model_option": model_option,
                     "model_label": model_label,
-                    "candidate_id": str(cand["candidate_id"]),
+                    "candidate_id": candidate_id,
                     "candidate_source": str(cand["source"]),
                     "source_stage": str(cand["source_stage"]),
                     "transfer_from_dataset": str(cand["transfer_from_dataset"]),
@@ -1581,7 +1833,7 @@ def _build_rows(args: argparse.Namespace) -> List[Dict[str, Any]]:
                     "max_evals": int(max_evals),
                     "tune_epochs": int(tune_epochs),
                     "tune_patience": int(tune_patience),
-                    "fast_screen": bool(args.fast_screen),
+                    "fast_screen": bool(args.fast_screen or args.lowperform2_screen),
                 }
                 row["estimated_cost"] = sg._stageg_estimated_cost(row)
                 rows.append(row)
@@ -1728,8 +1980,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--followup-rescue", action="store_true")
     parser.add_argument("--followup-full", action="store_true")
     parser.add_argument("--underperform-screen", action="store_true")
+    parser.add_argument("--lowperform2-screen", action="store_true")
     parser.add_argument("--weak-ratio", type=float, default=0.90)
     parser.add_argument("--strong-ratio", type=float, default=0.75)
+    parser.add_argument("--lowperform2-ratio", type=float, default=0.80)
+    parser.add_argument("--lowperform2-ultra-ratio", type=float, default=0.50)
+    parser.add_argument("--lowperform2-regular-max-evals", type=int, default=15)
+    parser.add_argument("--lowperform2-wide-max-evals", type=int, default=50)
+    parser.add_argument("--candidate-tag", default="")
     parser.add_argument("--promote-from-latest-rescue", action="store_true")
     parser.add_argument("--promote-topk", type=int, default=4)
     parser.add_argument("--promote-min-ratio", type=float, default=0.95)
@@ -1754,6 +2012,10 @@ def _apply_underperform_mode(args: argparse.Namespace) -> None:
     args.seeds = "1"
 
 
+def _apply_lowperform2_mode(args: argparse.Namespace) -> None:
+    args.seeds = "1"
+
+
 def _run(args: argparse.Namespace) -> int:
     gpus = list(dict.fromkeys(base._parse_csv_strings(args.gpus)))
     rows = _build_rows(args)
@@ -1768,6 +2030,55 @@ def _run(args: argparse.Namespace) -> int:
         dataset: list(base._load_summary_bests(path))
         for dataset, path in summary_paths.items()
     }
+    completed_keys_by_dataset: Dict[str, Set[Tuple[str, str, str]]] = {}
+    for dataset, path in summary_paths.items():
+        done_keys: Set[Tuple[str, str, str]] = set()
+        try:
+            with path.open("r", encoding="utf-8", newline="") as fh:
+                for rec in csv.DictReader(fh):
+                    if str(rec.get("status", "")).strip().lower() != "run_complete":
+                        continue
+                    model = str(rec.get("model", "")).strip()
+                    candidate_id = str(rec.get("candidate_id", "")).strip()
+                    seed_id = str(rec.get("seed_id", "")).strip()
+                    if model and candidate_id and seed_id:
+                        done_keys.add((model, candidate_id, seed_id))
+        except Exception:
+            pass
+        completed_keys_by_dataset[dataset] = done_keys
+
+    skipped_rows: List[Dict[str, Any]] = []
+    runnable: List[Dict[str, Any]] = []
+    result_indexes: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for row in rows:
+        dataset = str(row["dataset"])
+        resume_key = (
+            str(row.get("model_label", "")).strip(),
+            str(row.get("candidate_id", "")).strip(),
+            str(row.get("seed_id", "")).strip(),
+        )
+        if resume_key in completed_keys_by_dataset.get(dataset, set()):
+            skipped_rows.append(row)
+            continue
+        completed = base._is_completed_any_log(row, use_resume=bool(args.resume_from_logs))
+        if not completed:
+            runnable.append(row)
+            continue
+        if not args.verify_logging:
+            skipped_rows.append(row)
+            continue
+        if dataset not in result_indexes:
+            result_indexes[dataset] = base._scan_result_index(dataset)
+        rec = result_indexes[dataset].get(str(row["run_phase"]))
+        if not rec:
+            runnable.append(row)
+            continue
+        ok, detail = base._verify_special_from_result(str(rec.get("path", "")))
+        if ok:
+            skipped_rows.append(row)
+            continue
+        print(f"[resume-check] run={row['run_phase']} special_check_failed -> rerun ({detail})")
+        runnable.append(row)
 
     for row in rows:
         row["log_path"] = str(base._build_log_path(row))
@@ -1777,9 +2088,11 @@ def _run(args: argparse.Namespace) -> int:
     base._summary_fieldnames = sg._summary_fieldnames
     sg._write_manifest(dataset_labels.replace(",", "_"), args, rows)
 
-    runnable = rows
     runnable.sort(key=lambda r: float(r.get("estimated_cost", 1.0)), reverse=True)
-    print(f"[{base.PHASE_ID}] combos={len(TARGET_COMBOS)} selected_runs={len(runnable)} gpus={','.join(gpus)}")
+    print(
+        f"[{base.PHASE_ID}] combos={len(_selected_combos(args))} planned_runs={len(rows)} "
+        f"runnable_runs={len(runnable)} skipped_runs={len(skipped_rows)} gpus={','.join(gpus)}"
+    )
 
     if args.dry_run:
         gpu_bins = base._plan_gpu_bins(runnable, gpus)
@@ -1792,6 +2105,9 @@ def _run(args: argparse.Namespace) -> int:
                 )
                 print("          " + " ".join(cmd))
         return 0
+
+    notifier = SlackProgressNotifier(phase_label="baseline StageH", rows=rows)
+    notifier.notify_plan(precompleted_rows=skipped_rows)
 
     active: Dict[str, Dict[str, Any]] = {}
     shared_queue: deque = deque(runnable)
@@ -1882,6 +2198,7 @@ def _run(args: argparse.Namespace) -> int:
                     "timestamp_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 }
                 base._append_summary_row(summary_paths[row["dataset"]], summary_row)
+                notifier.mark_complete(row)
                 if int(rc) != 0:
                     raise RuntimeError(f"run failed: dataset={row['dataset']} run_phase={row['run_phase']} rc={rc}")
 
@@ -1897,25 +2214,35 @@ def _run(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    global CURRENT_DYNAMIC_TIER_BY_COMBO, CURRENT_DYNAMIC_TARGETS
+    global CURRENT_DYNAMIC_TIER_BY_COMBO, CURRENT_DYNAMIC_TARGETS, CURRENT_ULTRA_LOW_TARGETS
     args = parse_args()
     if args.smoke_test:
         _apply_smoke_mode(args)
+    elif args.lowperform2_screen:
+        _apply_lowperform2_mode(args)
     elif args.underperform_screen:
         _apply_underperform_mode(args)
     elif args.followup_rescue or args.followup_full:
         _apply_followup_modes(args)
     elif args.fast_screen:
         _apply_fast_screen_mode(args)
-    if args.underperform_screen:
+    if args.lowperform2_screen:
+        CURRENT_DYNAMIC_TIER_BY_COMBO, CURRENT_ULTRA_LOW_TARGETS = _compute_lowperform2_targets(
+            low_ratio=float(args.lowperform2_ratio),
+            ultra_ratio=float(args.lowperform2_ultra_ratio),
+        )
+        CURRENT_DYNAMIC_TARGETS = set(CURRENT_DYNAMIC_TIER_BY_COMBO.keys())
+    elif args.underperform_screen:
         CURRENT_DYNAMIC_TIER_BY_COMBO = _compute_underperform_targets(
             weak_ratio=float(args.weak_ratio),
             strong_ratio=float(args.strong_ratio),
         )
         CURRENT_DYNAMIC_TARGETS = set(CURRENT_DYNAMIC_TIER_BY_COMBO.keys())
+        CURRENT_ULTRA_LOW_TARGETS = set()
     else:
         CURRENT_DYNAMIC_TIER_BY_COMBO = {}
         CURRENT_DYNAMIC_TARGETS = set()
+        CURRENT_ULTRA_LOW_TARGETS = set()
     runtime_models = sorted(dict.fromkeys(m.lower() for _, m in (_selected_combos(args) or TARGET_COMBOS)))
     sg._check_runtime_models(runtime_models)
     _print_stageh_plan(args)

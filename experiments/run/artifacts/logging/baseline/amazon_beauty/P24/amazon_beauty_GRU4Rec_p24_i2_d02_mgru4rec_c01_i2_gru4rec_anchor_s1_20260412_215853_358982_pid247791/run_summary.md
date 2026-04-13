@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: GRU4Rec
+- dataset: amazon_beauty
+- run_group: baseline
+- run_axis: stagei_progressiverecovery_anchor2_core5
+- run_phase: P24_I2_D02_MGRU4REC_C01_I2_GRU4REC_ANCHOR_S1
+- best_mrr@20: 0.0044
+- test_mrr@20: 0.0004
+- test_hr@10: 0.0
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/baseline/amazon_beauty/P24/amazon_beauty_GRU4Rec_p24_i2_d02_mgru4rec_c01_i2_gru4rec_anchor_s1_20260412_215853_358982_pid247791/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: 
+- diag_raw_best_valid: 
+- diag_raw_test: 
+- diag_raw_epoch_trace: 
+- feature_ablation: 

@@ -16,7 +16,7 @@ COMMON_HPARAMS="AUTO4"
 DEFAULT_OUTLIER_HPARAM="H4"
 DATASET_OUTLIER_HPARAMS=""
 
-MAX_EVALS="20"
+MAX_EVALS="12"
 TUNE_EPOCHS="100"
 TUNE_PATIENCE="10"
 
@@ -50,7 +50,7 @@ SMOKE_MAX_RUNS="4"
 usage() {
   cat <<USAGE
 Usage: $0 [--datasets ...] [--gpus 0,1,2,3] [--seeds 1,2]
-          [--max-evals 20] [--tune-epochs 100] [--tune-patience 10]
+          [--max-evals 12] [--tune-epochs 100] [--tune-patience 10]
           [--family-dropout-prob 0.10] [--attn-dropout-prob 0.10]
           [--dry-run] [--smoke-test] [--smoke-max-runs 4]
 USAGE
@@ -87,13 +87,40 @@ PYTHON_BIN="${RUN_PYTHON_BIN:-$(run_python_bin)}"
 
 IFS=',' read -r -a DATASET_ARRAY <<< "${DATASETS}"
 
+csv_count() {
+  local raw="$1"
+  local -a items=()
+  IFS=',' read -r -a items <<< "${raw}"
+  echo "${#items[@]}"
+}
+
+dataset_hparam_count() {
+  case "$1" in
+    retail_rocket) echo "4" ;;
+    KuaiRecLargeStrictPosV2_0.2|lastfm0.03|amazon_beauty|foursquare|movielens1m) echo "4" ;;
+    *) echo "4" ;;
+  esac
+}
+
+dataset_total_runs() {
+  local dataset="$1"
+  local arch_count seed_count total
+  arch_count="$(csv_count "${ARCHITECTURES}")"
+  seed_count="$(csv_count "${SEEDS}")"
+  total=$(( $(dataset_hparam_count "${dataset}") * arch_count * seed_count ))
+  if [ "${SMOKE_TEST}" = "true" ] && [ "${SMOKE_MAX_RUNS}" -lt "${total}" ]; then
+    total="${SMOKE_MAX_RUNS}"
+  fi
+  echo "${total}"
+}
+
 dataset_lr_min() {
   case "$1" in
     KuaiRecLargeStrictPosV2_0.2) echo "2.5e-4" ;;
     lastfm0.03) echo "2.0e-4" ;;
     amazon_beauty) echo "4.5e-4" ;;
     foursquare) echo "1.5e-3" ;;
-    movielens1m) echo "1.2e-3" ;;
+    movielens1m) echo "9.0e-4" ;;
     retail_rocket) echo "7.0e-4" ;;
     *) echo "3.0e-4" ;;
   esac
@@ -105,15 +132,29 @@ dataset_lr_max() {
     lastfm0.03) echo "1.2e-3" ;;
     amazon_beauty) echo "2.2e-3" ;;
     foursquare) echo "6.0e-3" ;;
-    movielens1m) echo "4.5e-3" ;;
+    movielens1m) echo "6.0e-3" ;;
     retail_rocket) echo "3.0e-3" ;;
     *) echo "2.0e-3" ;;
   esac
 }
 
+TOTAL_RUNS="0"
 for DATASET in "${DATASET_ARRAY[@]}"; do
+  TOTAL_RUNS=$(( TOTAL_RUNS + $(dataset_total_runs "${DATASET}") ))
+done
+
+COMPLETED_BASE="0"
+DATASET_COUNT="${#DATASET_ARRAY[@]}"
+
+for DATASET_INDEX in "${!DATASET_ARRAY[@]}"; do
+  DATASET="${DATASET_ARRAY[${DATASET_INDEX}]}"
   SEARCH_LR_MIN="$(dataset_lr_min "${DATASET}")"
   SEARCH_LR_MAX="$(dataset_lr_max "${DATASET}")"
+  DATASET_RUNS="$(dataset_total_runs "${DATASET}")"
+
+  export SLACK_NOTIFY_TOTAL_RUNS="${TOTAL_RUNS}"
+  export SLACK_NOTIFY_GLOBAL_DONE_BASE="${COMPLETED_BASE}"
+  export SLACK_NOTIFY_SCOPE_LABEL="dataset $((DATASET_INDEX + 1))/${DATASET_COUNT} ${DATASET}"
 
   CMD=(
     "${PYTHON_BIN}"
@@ -178,6 +219,7 @@ for DATASET in "${DATASET_ARRAY[@]}"; do
 echo "[A8/A10-A12 wrapper sweep] dataset=${DATASET} lr=[${SEARCH_LR_MIN},${SEARCH_LR_MAX}] hparams=${COMMON_HPARAMS}"
   run_echo_cmd "${CMD[@]}"
   "${CMD[@]}"
+  COMPLETED_BASE=$(( COMPLETED_BASE + DATASET_RUNS ))
 done
 
 echo "[All Done] Final_all_datasets A8/A10~A12 wrapper sweep completed: ${DATASETS}"
