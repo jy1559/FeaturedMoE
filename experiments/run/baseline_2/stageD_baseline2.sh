@@ -13,7 +13,7 @@ cd "${REPO_ROOT}"
   --axis ABCD_v1 \
   --budget-profile balanced \
   --models sasrec,tisasrec,gru4rec \
-  --datasets "KuaiRecLargeStrictPosV2_0.2,lastfm0.03,amazon_beauty,foursquare,movielens1m,retail_rocket" \
+  --datasets "KuaiRecLargeStrictPosV2_0.2,beauty,lastfm0.03,amazon_beauty,foursquare,movielens1m,retail_rocket" \
   --gpus "${GPU_LIST:-0}" \
   --runtime-seed "${RUNTIME_SEED:-1}" \
   --final-seeds "${FINAL_SEEDS:-1,2,3}" \

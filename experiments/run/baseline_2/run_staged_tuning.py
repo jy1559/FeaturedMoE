@@ -2,8 +2,8 @@
 """Baseline_2 / FMoE_N4 staged tuning runner.
 
 Stages:
-- A: 30 structural candidates x LR grid, quick run, promote top-10
-- B: hyperopt on top-10, promote top-4
+- A: 30 structural candidates x LR grid, quick run, promote top-12
+- B: hyperopt on top-12, promote top-4
 - C: mutate top-4 -> 12, re-evaluate, promote top-2
 - D: mutate top-2 -> 6, deep tuning, select final top-1
 """
@@ -36,6 +36,7 @@ DEFAULT_DATASETS = [
     "KuaiRecLargeStrictPosV2_0.2",
     "lastfm0.03",
     "amazon_beauty",
+    "beauty",
     "foursquare",
     "movielens1m",
     "retail_rocket",
@@ -45,6 +46,7 @@ DATASET_CONFIG_MAP = {
     "kuaireclargestrictposv2_0.2": "tune_kuai_strict_small",
     "lastfm0.03": "tune_lfm_small",
     "amazon_beauty": "tune_ab",
+    "beauty": "tune_ab",
     "foursquare": "tune_fs",
     "movielens1m": "tune_ml",
     "retail_rocket": "tune_rr",
@@ -64,11 +66,12 @@ STAGE_A_STRUCT_COUNT_DEFAULT = 30
 
 DATASET_SPEED_RANK = {
     "amazon_beauty": 1,
-    "foursquare": 2,
-    "retail_rocket": 3,
-    "kuaireclargestrictposv2_0.2": 4,
-    "lastfm0.03": 5,
-    "movielens1m": 6,
+    "beauty": 2,
+    "foursquare": 3,
+    "retail_rocket": 4,
+    "kuaireclargestrictposv2_0.2": 5,
+    "lastfm0.03": 6,
+    "movielens1m": 7,
 }
 
 MODEL_SPEED_RANK = {
@@ -109,7 +112,8 @@ SUMMARY_FIELDS = [
     "params_json",
 ]
 
-STAGE_A_LR_GRID = [1e-4, 4e-4, 6e-4, 8e-4, 2e-3, 6e-3]
+STAGE_A_LR_GRID = [8e-5, 2e-4, 4e-4, 6e-4, 8e-4, 3e-3]
+RUN_STATUS_END_NORMAL_RE = re.compile(r"\[RUN_STATUS\]\s*END\s+status=normal\b", re.IGNORECASE)
 
 
 def _format_lr_token(lr: float) -> str:
@@ -374,7 +378,7 @@ def _model_priors(model: str) -> Dict[str, List[Any]]:
             "hidden_size": [96, 128, 160, 192],
             "dropout": [0.10, 0.15, 0.20, 0.25],
             "weight_decay": [1e-6, 1e-5, 1e-4, 5e-4],
-            "learning_rate": [2e-4, 4e-4, 8e-4, 1.2e-3],
+            "learning_rate": [8e-5, 2e-4, 4e-4, 8e-4, 1.2e-3],
         }
     if m == "tisasrec":
         return {
@@ -385,7 +389,7 @@ def _model_priors(model: str) -> Dict[str, List[Any]]:
             "time_span": [64, 256, 1024, 4096],
             "dropout": [0.10, 0.15, 0.20, 0.25],
             "weight_decay": [1e-6, 1e-5, 1e-4, 5e-4],
-            "learning_rate": [2e-4, 4e-4, 8e-4, 1.2e-3],
+            "learning_rate": [8e-5, 2e-4, 4e-4, 8e-4, 1.2e-3],
         }
     if m == "gru4rec":
         return {
@@ -394,7 +398,7 @@ def _model_priors(model: str) -> Dict[str, List[Any]]:
             "hidden_size": [96, 128, 160, 192, 256],
             "dropout": [0.10, 0.20, 0.30],
             "weight_decay": [1e-6, 1e-5, 1e-4, 5e-4],
-            "learning_rate": [2e-4, 4e-4, 8e-4, 1.2e-3],
+            "learning_rate": [8e-5, 2e-4, 4e-4, 8e-4, 1.2e-3],
         }
     if m == "fdsa":
         return {
@@ -404,7 +408,7 @@ def _model_priors(model: str) -> Dict[str, List[Any]]:
             "hidden_size": [96, 128, 160, 192],
             "dropout": [0.10, 0.15, 0.20, 0.25],
             "weight_decay": [1e-6, 1e-5, 1e-4, 5e-4],
-            "learning_rate": [2e-4, 4e-4, 8e-4, 1.2e-3],
+            "learning_rate": [8e-5, 2e-4, 4e-4, 8e-4, 1.2e-3],
         }
     if m == "featured_moe_n3":
         return {
@@ -415,7 +419,7 @@ def _model_priors(model: str) -> Dict[str, List[Any]]:
             "d_router_hidden": [48, 64, 80, 96],
             "dropout": [0.10, 0.15, 0.20],
             "weight_decay": [5e-7, 1e-6, 2e-6, 4e-6],
-            "learning_rate": [1e-4, 2e-4, 4e-4, 8e-4],
+            "learning_rate": [8e-5, 1e-4, 2e-4, 4e-4, 8e-4],
         }
     raise KeyError(f"Unsupported model for staged runner: {model}")
 
@@ -684,6 +688,91 @@ def parse_result_path_from_log(log_path: Path) -> Path | None:
     return None
 
 
+def has_run_status_end_normal(log_path: Path) -> bool:
+    if not log_path.exists():
+        return False
+    try:
+        lines = log_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return False
+    for line in reversed(lines):
+        token = str(line).strip()
+        if not token:
+            continue
+        return bool(RUN_STATUS_END_NORMAL_RE.search(token))
+    return False
+
+
+def build_run_tokens(*, axis: str, stage: str, dataset: str, model: str, candidate_id: str, run_seed: int) -> tuple[str, str]:
+    ds_tag = sanitize(dataset).upper()
+    m_tag = sanitize(model).upper()
+    run_phase = f"{axis}_{stage}_D{ds_tag}_M{m_tag}_{candidate_id}_S{int(run_seed)}"
+    run_id = f"{stage}_{ds_tag}_{m_tag}_{candidate_id}_S{int(run_seed)}"
+    return run_phase, run_id
+
+
+def resolve_log_path(*, axis_root: Path, stage: str, candidate: Candidate, run_phase: str) -> Path:
+    model_stage_root = axis_root / candidate.dataset / candidate.model / f"stage{stage}"
+    if str(stage).upper() == "A" and str(candidate.params.get("lr_group", "")).strip():
+        log_dir = model_stage_root / "lr_groups" / str(candidate.params.get("lr_group")) / "logs"
+    else:
+        log_dir = model_stage_root / "logs"
+    return log_dir / f"{run_phase}.log"
+
+
+def build_resumed_row_from_log(
+    *,
+    stage: str,
+    candidate: Candidate,
+    run_seed: int,
+    gpu_id: str,
+    axis: str,
+    axis_root: Path,
+) -> Dict[str, Any] | None:
+    run_phase, run_id = build_run_tokens(
+        axis=axis,
+        stage=stage,
+        dataset=candidate.dataset,
+        model=candidate.model,
+        candidate_id=candidate.candidate_id,
+        run_seed=run_seed,
+    )
+    log_path = resolve_log_path(axis_root=axis_root, stage=stage, candidate=candidate, run_phase=run_phase)
+    if not has_run_status_end_normal(log_path):
+        return None
+
+    result_path = parse_result_path_from_log(log_path)
+    metrics = parse_result_metrics(result_path) if result_path is not None else {}
+    return {
+        "stage": stage,
+        "dataset": candidate.dataset,
+        "model": candidate.model,
+        "model_label": MODEL_LABELS.get(candidate.model, candidate.model),
+        "candidate_id": candidate.candidate_id,
+        "parent_candidate_id": candidate.parent_candidate_id,
+        "run_phase": run_phase,
+        "run_id": run_id,
+        "runtime_seed": int(run_seed),
+        "gpu_id": str(gpu_id),
+        "status": "ok",
+        "best_valid_mrr20": metrics.get("best_valid_mrr20", 0.0),
+        "test_mrr20": metrics.get("test_mrr20", 0.0),
+        "valid_unseen_mrr20": metrics.get("valid_unseen_mrr20", 0.0),
+        "valid_unseen_hit20": metrics.get("valid_unseen_hit20", 0.0),
+        "test_unseen_mrr20": metrics.get("test_unseen_mrr20", 0.0),
+        "test_unseen_hit20": metrics.get("test_unseen_hit20", 0.0),
+        "valid_main_seen_count": metrics.get("valid_main_seen_count", 0),
+        "valid_main_unseen_count": metrics.get("valid_main_unseen_count", 0),
+        "test_main_seen_count": metrics.get("test_main_seen_count", 0),
+        "test_main_unseen_count": metrics.get("test_main_unseen_count", 0),
+        "result_path": "" if result_path is None else str(result_path),
+        "log_path": str(log_path),
+        "timestamp_utc": now_utc(),
+        "params_json": json.dumps(candidate.params, ensure_ascii=False, sort_keys=True),
+        "elapsed_sec": 0.0,
+    }
+
+
 def _base_runtime_overrides(model: str, params: Dict[str, Any]) -> List[str]:
     m = str(model).lower()
     o = [
@@ -819,7 +908,10 @@ def _search_space_entries(stage: str, model: str, params: Dict[str, Any]) -> Tup
             types["attn_dropout_prob"] = "choice"
         elif m == "gru4rec":
             search["dropout_prob"] = [dr]
+            # Keep Stage A as true single-run screening by pinning this as well.
+            search["hidden_dropout_prob"] = [dr]
             types["dropout_prob"] = "choice"
+            types["hidden_dropout_prob"] = "choice"
     else:
         lr_lo = max(1e-6, lr * (0.25 if stage in {"B", "C"} else 0.5))
         lr_hi = min(5e-2, lr * (4.0 if stage in {"B", "C"} else 2.0))
@@ -918,17 +1010,16 @@ def run_one(
     axis: str,
     axis_root: Path,
 ) -> Dict[str, Any]:
-    ds_tag = sanitize(candidate.dataset).upper()
-    m_tag = sanitize(candidate.model).upper()
-    run_phase = f"{axis}_{stage}_D{ds_tag}_M{m_tag}_{candidate.candidate_id}_S{int(run_seed)}"
-    run_id = f"{stage}_{ds_tag}_{m_tag}_{candidate.candidate_id}_S{int(run_seed)}"
-    model_stage_root = axis_root / candidate.dataset / candidate.model / f"stage{stage}"
-    if str(stage).upper() == "A" and str(candidate.params.get("lr_group", "")).strip():
-        log_dir = model_stage_root / "lr_groups" / str(candidate.params.get("lr_group")) / "logs"
-    else:
-        log_dir = model_stage_root / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"{run_phase}.log"
+    run_phase, run_id = build_run_tokens(
+        axis=axis,
+        stage=stage,
+        dataset=candidate.dataset,
+        model=candidate.model,
+        candidate_id=candidate.candidate_id,
+        run_seed=run_seed,
+    )
+    log_path = resolve_log_path(axis_root=axis_root, stage=stage, candidate=candidate, run_phase=run_phase)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = build_command(
         stage=stage,
@@ -999,8 +1090,8 @@ def build_stage_candidates(
     if s == "A":
         return generate_stage_a_candidates(dataset, model, n=STAGE_A_STRUCT_COUNT_DEFAULT)
     if s == "B":
-        # A -> B: top-10 promoted (runtime optimization)
-        return prev_promoted[:10]
+        # A -> B: top-12 promoted (runtime optimization)
+        return prev_promoted[:12]
     if s == "C":
         # B top-4 -> C mutated 12 candidates
         return mutate_candidates(prev_promoted[:4], stage="C", per_parent=3)
@@ -1106,7 +1197,7 @@ def update_dataset_rollup(axis_root: Path, rows: List[Dict[str, Any]], stage: st
 def _promote_n_for_stage(stage: str) -> int:
     s = str(stage).upper()
     if s == "A":
-        return 10
+        return 12
     if s == "B":
         return 4
     if s == "C":
@@ -1212,7 +1303,7 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
                 prev_promoted=prev_promoted,
             )
             if stage == "B":
-                candidates = candidates[:10]
+                candidates = candidates[:12]
             elif stage == "C":
                 candidates = candidates[:12]
             elif stage == "D":
@@ -1228,11 +1319,34 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
                 for seed in seeds:
                     run_idx += 1
                     gpu_id = gpus[(run_idx - 1) % len(gpus)]
-                    run_phase_key = f"{args.axis}_{stage}_D{sanitize(ds).upper()}_M{sanitize(model).upper()}_{cand.candidate_id}_S{seed}"
+                    run_phase_key, _ = build_run_tokens(
+                        axis=args.axis,
+                        stage=stage,
+                        dataset=ds,
+                        model=model,
+                        candidate_id=cand.candidate_id,
+                        run_seed=seed,
+                    )
                     if args.resume_from_logs and run_phase_key in existing and str(existing[run_phase_key].get("status", "")) == "ok":
                         row = dict(existing[run_phase_key])
                         all_rows.append(row)
                         continue
+                    if args.resume_from_logs:
+                        resumed = build_resumed_row_from_log(
+                            stage=stage,
+                            candidate=cand,
+                            run_seed=int(seed),
+                            gpu_id=str(gpu_id),
+                            axis=args.axis,
+                            axis_root=axis_root,
+                        )
+                        if resumed is not None:
+                            print(
+                                f"[resume-skip] stage={stage} dataset={ds} model={model} "
+                                f"candidate={cand.candidate_id} seed={int(seed)}"
+                            )
+                            all_rows.append(resumed)
+                            continue
                     pending_jobs.append(
                         {
                             "stage": stage,

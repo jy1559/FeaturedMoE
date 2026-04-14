@@ -2764,6 +2764,9 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
     trainer_cls = get_trainer(config["MODEL_TYPE"], config["model"])
     trainer = trainer_cls(config, model)
     setattr(trainer, "_disable_patch_logging", True)
+    # Keep train-based seen/unseen reference stable across valid/test evaluation.
+    trainer._fmoe_special_item_counts_train = _build_item_counts_from_loader(train_data)
+    trainer._main_eval_unseen_filter_stats = {}
     special_logging_enabled = bool(_config_get(config, "special_logging", cfg.get("special_logging", False)))
     diag_logging_enabled = False
     eval_logging_timing = "per_eval"

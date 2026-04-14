@@ -95,7 +95,7 @@ done
 
 cd "${REPO_ROOT}"
 
-datasets_default="KuaiRecLargeStrictPosV2_0.2,lastfm0.03,amazon_beauty,foursquare,movielens1m,retail_rocket"
+datasets_default="KuaiRecLargeStrictPosV2_0.2,beauty,lastfm0.03,amazon_beauty,foursquare,movielens1m,retail_rocket"
 models_default="sasrec,tisasrec,gru4rec"
 gpus_default="${GPU_LIST:-0}"
 runtime_seed_default="${RUNTIME_SEED:-1}"
