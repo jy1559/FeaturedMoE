@@ -5,9 +5,9 @@
 - run_group: fmoe_n3
 - run_axis: transfer_learning_stagea_v1
 - run_phase: P15A_TGT_foursquare_to_movielens_A12_encoder_all_init_H3_H5_S1
-- best_mrr@20: 0.0748
-- test_mrr@20: 0.0702
-- test_hr@10: 0.1647
+- best_mrr@20: 0.077
+- test_mrr@20: 0.0679
+- test_hr@10: 0.1717
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_encoder_all_init_h3_h5_s1_20260414_005203_853593_pid851855/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_encoder_all_init_h3_h5_s1_20260414_005203_853593_pid851855/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_encoder_all_init_h3_h5_s1_20260414_005203_853593_pid851855/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_encoder_all_init_h3_h5_s1_20260414_005203_853593_pid851855/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_encoder_all_init_h3_h5_s1_20260414_005203_853593_pid851855/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_encoder_all_init_h3_h5_s1_20260414_005203_853593_pid851855/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_encoder_all_init_h3_h5_s1_20260414_005203_853593_pid851855/diag/raw/epoch_trace.csv
 - feature_ablation: 

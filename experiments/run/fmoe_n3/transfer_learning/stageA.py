@@ -61,6 +61,25 @@ PAIR_SPECS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# StageA execution policy:
+# 1) Keep lightweight targets first and force kuairec_to_lastfm as the last pair.
+# 2) Within target_sweep, run each (source_h,target_h) block in this fixed order.
+PAIR_PRIORITY: Dict[str, int] = {
+    "foursquare_to_movielens": 10,
+    "amazon_to_retail": 20,
+    "lastfm_to_kuairec": 30,
+    "kuairec_to_lastfm": 999,
+}
+
+TRANSFER_MODE_SEQUENCE: tuple[str, ...] = (
+    "macro_group_router",
+    "macro_full_router",
+    "all_stage_group_router",
+    "full_model",
+    "all_stage_full_router",
+    "all_stage_feature_encoder",
+)
+
 SOURCE_LR_BANDS: Dict[str, list[float]] = {
     "KuaiRecLargeStrictPosV2_0.2": [2.5e-4, 5.5e-4],
     "lastfm0.03": [4.0e-4, 6.5e-4],
@@ -125,6 +144,8 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--resume-from-logs", action="store_true", default=True)
     parser.add_argument("--no-resume-from-logs", dest="resume_from_logs", action="store_false")
+    parser.add_argument("--resume-from-results", action="store_true", default=True)
+    parser.add_argument("--no-resume-from-results", dest="resume_from_results", action="store_false")
     parser.add_argument("--verify-logging", action="store_true", default=True)
     parser.add_argument("--no-verify-logging", dest="verify_logging", action="store_false")
     parser.add_argument("--dry-run", action="store_true")
@@ -155,7 +176,7 @@ def _selected_pairs(args: argparse.Namespace) -> list[str]:
             selected.append(pair_id)
     if not selected:
         raise RuntimeError("No pair selected")
-    return selected
+    return sorted(selected, key=lambda pair_id: (int(PAIR_PRIORITY.get(pair_id, 500)), pair_id))
 
 
 def _pair_log_dir(pair_id: str) -> Path:
@@ -314,11 +335,13 @@ def _make_target_row(
         row_index=row_index,
     )
     mode_label = {
-        "none": "native",
-        "macro_feature_encoder": "feature_init",
+        # Keep legacy labels for resume compatibility with already-finished logs.
         "macro_group_router": "group_init",
-        "macro_encoder_all": "encoder_all_init",
+        "macro_full_router": "group_init_all_routers",
+        "all_stage_group_router": "all_stage_group_router",
         "full_model": "full_arch_init",
+        "all_stage_full_router": "all_stage_full_router",
+        "all_stage_feature_encoder": "all_stage_feature_encoder",
     }[transfer_mode]
     row["phase_kind"] = "target_sweep"
     row["transfer_mode"] = str(transfer_mode)
@@ -357,6 +380,9 @@ def _load_result_index_compatible(dataset: str) -> Dict[str, Dict[str, Any]]:
     return merged
 
 
+_RESULT_INDEX_CACHE: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+
 def _lookup_result_row(result_index: Dict[str, Dict[str, Any]], run_phase: str) -> Dict[str, Any]:
     direct = dict(result_index.get(run_phase, {}) or {})
     if direct:
@@ -366,6 +392,47 @@ def _lookup_result_row(result_index: Dict[str, Dict[str, Any]], run_phase: str) 
         if str(key).casefold() == phase_key:
             return dict(value or {})
     return {}
+
+
+def _has_completed_result(row: Dict[str, Any]) -> bool:
+    dataset = str(row.get("dataset", "") or "").strip()
+    run_phase = str(row.get("run_phase", "") or "").strip()
+    if not dataset or not run_phase:
+        return False
+
+    result_index = _RESULT_INDEX_CACHE.get(dataset)
+    if result_index is None:
+        result_index = _load_result_index_compatible(dataset)
+        _RESULT_INDEX_CACHE[dataset] = result_index
+
+    rec = _lookup_result_row(result_index, run_phase)
+    path_text = str(rec.get("path", "") or "").strip()
+    if not path_text:
+        return False
+    p = Path(path_text)
+    if not p.is_file():
+        return False
+    try:
+        payload = _load_json(p)
+    except Exception:
+        return False
+    test_result = dict(payload.get("test_result", {}) or {})
+    return "mrr@20" in test_result
+
+
+def _filter_rows_by_result_resume(rows: list[Dict[str, Any]], *, enabled: bool, phase_id: str) -> list[Dict[str, Any]]:
+    if not enabled:
+        return list(rows)
+    kept: list[Dict[str, Any]] = []
+    skipped = 0
+    for row in rows:
+        if _has_completed_result(row):
+            skipped += 1
+            continue
+        kept.append(row)
+    if skipped > 0:
+        print(f"[{phase_id}] resume_from_results=on: skipped {skipped} runs with existing completed result.json.")
+    return kept
 
 
 def _build_source_record_from_result(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -454,32 +521,13 @@ def _build_target_rows(
 
     rows: list[Dict[str, Any]] = []
     row_index = 10_000
-    for target_h in _native_target_hparams(pair_spec):
-        for seed_id in seeds:
-            row_index += 1
-            rows.append(
-                _make_target_row(
-                    args=args,
-                    pair_id=pair_id,
-                    pair_spec=pair_spec,
-                    arch_id=arch_id,
-                    transfer_mode="none",
-                    source_h="",
-                    target_h=target_h,
-                    seed_id=seed_id,
-                    row_index=row_index,
-                    source_checkpoint="",
-                    source_run_phase="",
-                )
-            )
-
     for source_h in list(pair_spec["source_hparams"]):
         for target_h in list((pair_spec.get("target_map") or {}).get(source_h, []) or []):
             for seed_id in seeds:
                 source_record = dict(source_lookup[(str(source_h), int(seed_id))])
                 source_checkpoint = str(source_record.get("checkpoint_path", "") or "")
                 source_run_phase = str(source_record.get("run_phase", "") or "")
-                for transfer_mode in ("macro_feature_encoder", "macro_group_router", "macro_encoder_all"):
+                for transfer_mode in TRANSFER_MODE_SEQUENCE:
                     row_index += 1
                     rows.append(
                         _make_target_row(
@@ -488,23 +536,6 @@ def _build_target_rows(
                             pair_spec=pair_spec,
                             arch_id=arch_id,
                             transfer_mode=transfer_mode,
-                            source_h=source_h,
-                            target_h=target_h,
-                            seed_id=seed_id,
-                            row_index=row_index,
-                            source_checkpoint=source_checkpoint,
-                            source_run_phase=source_run_phase,
-                        )
-                    )
-                if str(target_h) == str(source_h):
-                    row_index += 1
-                    rows.append(
-                        _make_target_row(
-                            args=args,
-                            pair_id=pair_id,
-                            pair_spec=pair_spec,
-                            arch_id=arch_id,
-                            transfer_mode="full_model",
                             source_h=source_h,
                             target_h=target_h,
                             seed_id=seed_id,
@@ -621,7 +652,8 @@ def _build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) -
             cmd.append("++transfer.enable=false")
             cmd.append("++transfer.mode=none")
         else:
-            strict_shape = str(row["transfer_mode"]) == "full_model"
+            # Keep id/item embedding mismatch tolerant for transfer learning across datasets.
+            strict_shape = False
             cmd.append("++transfer.enable=true")
             cmd.append(f"++transfer.mode={hydra_literal(row['transfer_mode'])}")
             cmd.append(f"++transfer.source_checkpoint={hydra_literal(row['source_checkpoint'])}")
@@ -751,6 +783,11 @@ def main() -> int:
     source_rows_by_key = _source_rows_by_pair_arch(source_rows)
 
     if not args.target_only:
+        source_rows = _filter_rows_by_result_resume(
+            source_rows,
+            enabled=bool(args.resume_from_results),
+            phase_id=PHASE_ID,
+        )
         _print_phase_counts("source_pretrain", source_rows)
         rc = launch_wide_rows(
             rows=source_rows,
@@ -784,6 +821,11 @@ def main() -> int:
         args,
         source_rows_by_key,
         allow_missing_checkpoints=bool(args.dry_run),
+    )
+    target_rows = _filter_rows_by_result_resume(
+        target_rows,
+        enabled=bool(args.resume_from_results),
+        phase_id=PHASE_ID,
     )
     _print_phase_counts("target_sweep", target_rows)
     rc = launch_wide_rows(

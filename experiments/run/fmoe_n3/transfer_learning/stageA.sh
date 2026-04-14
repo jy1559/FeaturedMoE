@@ -44,11 +44,11 @@ csv_count() {
 ARCH_COUNT="$(csv_count "${ARCHITECTURES}")"
 PAIR_COUNT="$(csv_count "${PAIRS}")"
 
-PER_PAIR_RUNS=18
+PER_PAIR_RUNS=26
 if [ "${SOURCE_ONLY}" = "true" ]; then
   PER_PAIR_RUNS=2
 elif [ "${TARGET_ONLY}" = "true" ]; then
-  PER_PAIR_RUNS=16
+  PER_PAIR_RUNS=24
 fi
 
 TOTAL_RUNS="$(( ARCH_COUNT * PAIR_COUNT * PER_PAIR_RUNS ))"

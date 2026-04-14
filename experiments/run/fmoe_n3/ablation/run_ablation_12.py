@@ -223,9 +223,13 @@ def _build_settings(args: argparse.Namespace) -> list[Dict[str, Any]]:
             idx=2,
             key="LAYOUT_NO_MACRO",
             group="layout",
-            detail="Remove macro_ffn block",
+            detail="Replace macro_ffn with dense_plain FFN (no skip)",
             base=base,
-            extra_overrides={"layer_layout": ["attn", "mid_ffn", "attn", "micro_ffn"]},
+            extra_overrides={
+                "layer_layout": ["attn", "macro", "mid_ffn", "attn", "micro_ffn"],
+                "stage_compute_mode": {"macro": "dense_plain", "mid": "moe", "micro": "moe"},
+                "stage_router_mode": {"macro": "none", "mid": "learned", "micro": "learned"},
+            },
         )
     )
     settings.append(
@@ -233,9 +237,13 @@ def _build_settings(args: argparse.Namespace) -> list[Dict[str, Any]]:
             idx=3,
             key="LAYOUT_NO_MID",
             group="layout",
-            detail="Remove mid_ffn block",
+            detail="Replace mid_ffn with dense_plain FFN (no skip)",
             base=base,
-            extra_overrides={"layer_layout": ["attn", "macro_ffn", "attn", "micro_ffn"]},
+            extra_overrides={
+                "layer_layout": ["attn", "macro_ffn", "mid", "attn", "micro_ffn"],
+                "stage_compute_mode": {"macro": "moe", "mid": "dense_plain", "micro": "moe"},
+                "stage_router_mode": {"macro": "learned", "mid": "none", "micro": "learned"},
+            },
         )
     )
     settings.append(
@@ -243,9 +251,13 @@ def _build_settings(args: argparse.Namespace) -> list[Dict[str, Any]]:
             idx=4,
             key="LAYOUT_NO_MICRO",
             group="layout",
-            detail="Remove micro_ffn block",
+            detail="Replace micro_ffn with dense_plain FFN (no skip)",
             base=base,
-            extra_overrides={"layer_layout": ["attn", "macro_ffn", "mid_ffn"]},
+            extra_overrides={
+                "layer_layout": ["attn", "macro_ffn", "mid_ffn", "attn", "micro"],
+                "stage_compute_mode": {"macro": "moe", "mid": "moe", "micro": "dense_plain"},
+                "stage_router_mode": {"macro": "learned", "mid": "learned", "micro": "none"},
+            },
         )
     )
     settings.append(

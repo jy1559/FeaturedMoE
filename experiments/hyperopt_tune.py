@@ -2281,13 +2281,43 @@ def _transfer_group_router_name(source_architecture: str) -> str:
 
 
 def _transfer_prefixes(*, mode: str, source_architecture: str) -> list[str]:
-    macro_prefix = "stage_executor.stage_blocks.macro."
+    def _stage_prefix(stage: str) -> str:
+        return f"stage_executor.stage_blocks.{stage}."
+
+    def _all_router_prefixes(stage: str) -> list[str]:
+        base = _stage_prefix(stage)
+        return [
+            base + "router_a.",
+            base + "router_b.",
+            base + "router_c.",
+            base + "router_d.",
+            base + "router_e.",
+        ]
+
+    macro_prefix = _stage_prefix("macro")
+    group_router = _transfer_group_router_name(source_architecture)
+
     if mode == "macro_feature_encoder":
         return [macro_prefix + "feature_encoder."]
     if mode == "macro_group_router":
-        return [macro_prefix + _transfer_group_router_name(source_architecture) + "."]
+        return [macro_prefix + group_router + "."]
+    if mode in {"macro_group_router_all", "macro_full_router"}:
+        return _all_router_prefixes("macro")
+    if mode == "all_stage_group_router":
+        return [
+            _stage_prefix("macro") + group_router + ".",
+            _stage_prefix("mid") + group_router + ".",
+            _stage_prefix("micro") + group_router + ".",
+        ]
+    if mode == "all_stage_full_router":
+        return _all_router_prefixes("macro") + _all_router_prefixes("mid") + _all_router_prefixes("micro")
+    if mode == "all_stage_feature_encoder":
+        return [
+            _stage_prefix("macro") + "feature_encoder.",
+            _stage_prefix("mid") + "feature_encoder.",
+            _stage_prefix("micro") + "feature_encoder.",
+        ]
     if mode == "macro_encoder_all":
-        group_router = _transfer_group_router_name(source_architecture)
         return [
             macro_prefix + "feature_encoder.",
             macro_prefix + group_router + ".",
@@ -2365,7 +2395,9 @@ def _apply_transfer_initialization(model, cfg_dict: dict) -> dict:
     if not prefixes:
         raise RuntimeError(
             f"Unsupported transfer.mode={mode!r}. "
-            "Expected one of: none, macro_feature_encoder, macro_group_router, macro_encoder_all, full_model."
+            "Expected one of: none, macro_feature_encoder, macro_group_router, macro_group_router_all, "
+            "macro_full_router, all_stage_group_router, all_stage_full_router, all_stage_feature_encoder, "
+            "macro_encoder_all, full_model."
         )
 
     matched: dict[str, torch.Tensor] = {}
