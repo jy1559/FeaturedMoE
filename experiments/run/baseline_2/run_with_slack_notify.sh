@@ -140,7 +140,12 @@ on_interrupt() {
   fi
 
   if [[ -n "${child_pid}" ]]; then
+    # Kill entire child process-group first so grandchildren (python/train workers) also terminate.
+    kill -s "${sig}" -- "-${child_pid}" 2>/dev/null || true
     kill -s "${sig}" "${child_pid}" 2>/dev/null || true
+    if kill -0 "${child_pid}" 2>/dev/null; then
+      kill -s KILL -- "-${child_pid}" 2>/dev/null || true
+    fi
     wait "${child_pid}" 2>/dev/null || true
   fi
 
@@ -161,8 +166,13 @@ started_kst=${start_kst}
 cmd=$(printf "%q " "${cmd[@]}")"
 fi
 
-"${cmd[@]}" &
-child_pid=$!
+if command -v setsid >/dev/null 2>&1; then
+  setsid "${cmd[@]}" &
+  child_pid=$!
+else
+  "${cmd[@]}" &
+  child_pid=$!
+fi
 wait "${child_pid}"
 exit_code=$?
 

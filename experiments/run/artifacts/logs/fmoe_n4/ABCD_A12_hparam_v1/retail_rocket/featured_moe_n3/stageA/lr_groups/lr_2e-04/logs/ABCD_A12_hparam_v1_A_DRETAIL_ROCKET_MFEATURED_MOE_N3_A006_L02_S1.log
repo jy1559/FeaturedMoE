@@ -1,0 +1,109 @@
+# stage=A dataset=retail_rocket model=featured_moe_n3 candidate=A006_L02
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --max-evals 1 --tune-epochs 24 --tune-patience 5 --search-algo random --seed 1 --run-group fmoe_n4 --run-axis ABCD_A12_hparam_v1 --run-phase ABCD_A12_hparam_v1_A_DRETAIL_ROCKET_MFEATURED_MOE_N3_A006_L02_S1 model=featured_moe_n3_tune dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 gpu_id=0 log_wandb=false show_progress=false ++MAX_ITEM_LIST_LENGTH=30 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true ++embedding_size=128 ++hidden_size=128 ++num_heads=4 ++d_ff=192 ++d_expert_hidden=128 ++d_router_hidden=80 ++d_feat_emb=12 ++expert_scale=3 ++fixed_hidden_dropout_prob=0.12 ++fixed_weight_decay=5e-07 ++stage_family_dropout_prob={macro:0.06,mid:0.06,micro:0.06} ++stage_feature_dropout_prob={macro:0.05,mid:0.05,micro:0.05} ++stage_router_wrapper={macro:'w5_exd',mid:'w5_exd',micro:'w5_exd'} ++layer_layout=['attn','macro_ffn','mid_ffn','attn','micro_ffn'] ++stage_router_granularity={macro:'session',mid:'session',micro:'token'} ++stage_feature_dropout_scope={macro:'token',mid:'token',micro:'token'} ++bias_mode=none ++rule_bias_scale=0.0 ++feature_group_bias_lambda=0.0 ++seed=1 ++search.MAX_ITEM_LIST_LENGTH=[30] ++search.weight_decay=[5e-07] ++search.embedding_size=[128] ++search.hidden_size=[128] ++search.num_heads=[4] ++search.d_ff=[192] ++search.d_expert_hidden=[128] ++search.d_router_hidden=[80] ++search.d_feat_emb=[12] ++search.expert_scale=[3] ++search.fixed_weight_decay=[5e-07] ++search.fixed_hidden_dropout_prob=[0.12] ++search.stage_family_dropout_prob=[{macro:0.06,mid:0.06,micro:0.06}] ++search.stage_feature_dropout_prob=[{macro:0.05,mid:0.05,micro:0.05}] ++search.learning_rate=[0.00016] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search_space_type_overrides.weight_decay=choice ++search_space_type_overrides.embedding_size=choice ++search_space_type_overrides.hidden_size=choice ++search_space_type_overrides.num_heads=choice ++search_space_type_overrides.d_ff=choice ++search_space_type_overrides.d_expert_hidden=choice ++search_space_type_overrides.d_router_hidden=choice ++search_space_type_overrides.d_feat_emb=choice ++search_space_type_overrides.expert_scale=choice ++search_space_type_overrides.fixed_weight_decay=choice ++search_space_type_overrides.fixed_hidden_dropout_prob=choice ++search_space_type_overrides.stage_family_dropout_prob=choice ++search_space_type_overrides.stage_feature_dropout_prob=choice ++search_space_type_overrides.learning_rate=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1104037 ts=2026-04-14T16:14:50
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x retail_rocket
+  max_evals=1  epochs=24  patience=5  wandb=off
+  search_algo=random
+  batch_size(train/valid/test)=4096/8192/8192
+  track=fmoe_n4  axis=abcd_a12_hparam_v1  phase=ABCD_A12_hparam_v1_A_DRETAIL_ROCKET_MFEATURED_MOE_N3_A006_L02_S1
+=================================================================
+Changed knobs: hidden_dropout_prob
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    hidden_dropout_prob             [0.0, 0.1, 0.2, 0.3]                      -> uniform
+Fixed params(singleton/non-list): 15
+Fixed groups: 15
+  [optimization]
+    learning_rate                   0.00016                                 
+    weight_decay                    5e-07                                   
+  [model_core]
+    d_expert_hidden                 128                                     
+    d_feat_emb                      12                                      
+    d_ff                            192                                     
+    d_router_hidden                 80                                      
+    embedding_size                  128                                     
+    expert_scale                    3                                       
+    fixed_hidden_dropout_prob       0.12                                    
+    hidden_size                     128                                     
+    num_heads                       4                                       
+    stage_family_dropout_prob       {'macro': 0.06, 'mid': 0.06, 'micro': 0.06}
+    stage_feature_dropout_prob      {'macro': 0.05, 'mid': 0.05, 'micro': 0.05}
+  [other]
+    MAX_ITEM_LIST_LENGTH            30                                      
+    fixed_weight_decay              5e-07                                   
+
+[Wandb] disabled for this hyperopt run
+
+[1/1] hidden_dropout_prob=0.153
+  -> FAILED: CUDA out of memory. Tried to allocate 60.00 MiB. GPU 0 has a total capacity of 23.52 GiB of which 54.75 MiB is free. Process 1103138 has 19.52 GiB memory in use. Including non-PyTorch memory, this process has 3.91 GiB memory in use. Of the allocated memory 3.43 GiB is allocated by PyTorch, and 36.72 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1221, in calculate_loss
+    seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/featured_moe_n3.py", line 1194, in forward
+    tokens, gate_weights, gate_logits, router_aux, dense_aux, stage_merge_weights, stage_merge_logits = self.stage_executor(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_executor.py", line 526, in forward
+    next_hidden, weights, logits, stage_router_aux, stage_dense_aux = self.stage_blocks[op["stage"]](
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 1135, in forward
+    delta, expert_outputs = self._expert_delta(hidden_in, gate_weights)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 1041, in _expert_delta
+    expert_outputs = torch.stack([expert(hidden) for expert in self.experts], dim=-2)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 1041, in <listcomp>
+    expert_outputs = torch.stack([expert(hidden) for expert in self.experts], dim=-2)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/workspace/FeaturedMoE/experiments/models/FeaturedMoE_N3/stage_modules.py", line 305, in forward
+    return self.out(self.backbone(hidden_states))
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 734, in forward
+    return F.gelu(input, approximate=self.approximate)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 60.00 MiB. GPU 0 has a total capacity of 23.52 GiB of which 54.75 MiB is free. Process 1103138 has 19.52 GiB memory in use. Including non-PyTorch memory, this process has 3.91 GiB memory in use. Of the allocated memory 3.43 GiB is allocated by PyTorch, and 36.72 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[WARN] fmin ended with: 
+
+=================================================================
+  DONE  |  FeaturedMoE_N3 x retail_rocket
+  Best MRR@20 = 0.000000  |  0/1 trials OK
+  Best HR@10  = 0.000000
+  Test MRR@20 = 0.000000  (best-valid checkpoint)
+  Test HR@10  = 0.000000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.000000 best_valid_hr10=0.000000 test_mrr20=0.000000 test_hr10=0.000000
+  Total time: 0.1 min
+  Best params:
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n4/retail_rocket_FeaturedMoE_N3_abcd_a12_hparam_v1_a_dretail_rocket_mfeatured_moe_n3_a006_l02_s1_20260414_161451_097813_pid1104037.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n4/normal/abcd_a12_hparam_v1/ABCD/retail_rocket/FMoEN3/retail_rocket_FeaturedMoE_N3_abcd_a12_hparam_v1_a_dretail_rocket_mfeatured_moe_n3_a006_l02_s1_20260414_161451_097813_pid1104037.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1104037 start=2026-04-14T16:14:50 end=2026-04-14T16:14:58

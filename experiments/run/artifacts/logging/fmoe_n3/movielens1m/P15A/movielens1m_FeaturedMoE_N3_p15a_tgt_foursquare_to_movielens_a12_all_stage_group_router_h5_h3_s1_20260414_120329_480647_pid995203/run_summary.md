@@ -5,9 +5,9 @@
 - run_group: fmoe_n3
 - run_axis: transfer_learning_stagea_v1
 - run_phase: P15A_TGT_foursquare_to_movielens_A12_all_stage_group_router_H5_H3_S1
-- best_mrr@20: 0.0721
-- test_mrr@20: 0.0682
-- test_hr@10: 0.1624
+- best_mrr@20: 0.0742
+- test_mrr@20: 0.0716
+- test_hr@10: 0.1735
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_all_stage_group_router_h5_h3_s1_20260414_120329_480647_pid995203/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_all_stage_group_router_h5_h3_s1_20260414_120329_480647_pid995203/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_all_stage_group_router_h5_h3_s1_20260414_120329_480647_pid995203/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_all_stage_group_router_h5_h3_s1_20260414_120329_480647_pid995203/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_all_stage_group_router_h5_h3_s1_20260414_120329_480647_pid995203/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_all_stage_group_router_h5_h3_s1_20260414_120329_480647_pid995203/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n3/movielens1m/P15A/movielens1m_FeaturedMoE_N3_p15a_tgt_foursquare_to_movielens_a12_all_stage_group_router_h5_h3_s1_20260414_120329_480647_pid995203/diag/raw/epoch_trace.csv
 - feature_ablation: 

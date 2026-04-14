@@ -115,6 +115,9 @@ SUMMARY_FIELDS = [
 STAGE_A_LR_GRID = [8e-5, 2e-4, 4e-4, 6e-4, 8e-4, 3e-3]
 RUN_STATUS_END_NORMAL_RE = re.compile(r"\[RUN_STATUS\]\s*END\s+status=normal\b", re.IGNORECASE)
 
+LIGHT_DATASETS = {"amazon_beauty", "beauty", "foursquare", "retail_rocket"}
+HEAVY_DATASETS = {"kuaireclargestrictposv2_0.2", "lastfm0.03", "movielens1m"}
+
 
 def _format_lr_token(lr: float) -> str:
     s = f"{float(lr):.0e}".lower().replace("+0", "").replace("+", "")
@@ -183,6 +186,8 @@ def hydra_literal(v: Any) -> str:
 def stage_budget(profile: str, stage: str) -> Dict[str, Any]:
     profile = str(profile).lower()
     stage = str(stage).upper()
+    if profile == "lean":
+        profile = "fast"
     if profile not in {"balanced", "fast", "deep"}:
         profile = "balanced"
     table = {
@@ -206,6 +211,39 @@ def stage_budget(profile: str, stage: str) -> Dict[str, Any]:
         },
     }
     return dict(table[profile][stage])
+
+
+def dataset_max_evals(policy: str, stage: str, dataset: str, base_max_evals: int) -> int:
+    p = str(policy).strip().lower()
+    s = str(stage).strip().upper()
+    d = str(dataset).strip().lower()
+    base = int(max(1, int(base_max_evals)))
+    if p != "abcd_v2":
+        return base
+
+    if d in LIGHT_DATASETS:
+        if s == "A":
+            return max(base, 2)
+        if s == "B":
+            return max(base, 40)
+        if s == "C":
+            return max(base, 12)
+        if s == "D":
+            return max(base, 8)
+        return base
+
+    if d in HEAVY_DATASETS:
+        if s == "A":
+            return max(1, min(base, 1))
+        if s == "B":
+            return max(1, min(base, 20))
+        if s == "C":
+            return max(1, min(base, 8))
+        if s == "D":
+            return max(1, min(base, 6))
+        return base
+
+    return base
 
 
 def dataset_config_name(dataset: str) -> str:
@@ -1495,6 +1533,14 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
     if not stage_a_lr_grid:
         stage_a_lr_grid = list(STAGE_A_LR_GRID)
     budget = stage_budget(args.budget_profile, stage)
+    budget_per_dataset: Dict[str, int] = {}
+    for ds in datasets:
+        budget_per_dataset[str(ds)] = dataset_max_evals(
+            str(args.dataset_max_eval_policy),
+            stage,
+            str(ds),
+            int(budget.get("max_evals", 1) or 1),
+        )
     paths = stage_output_paths(args.track, args.axis, stage)
     stage_root = paths["stage_root"]
     axis_root = paths["axis_root"]
@@ -1570,7 +1616,10 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
                             "candidate": cand,
                             "seed": int(seed),
                             "gpu_id": str(gpu_id),
-                            "budget": budget,
+                            "budget": {
+                                **budget,
+                                "max_evals": int(budget_per_dataset.get(str(ds), int(budget.get("max_evals", 1) or 1))),
+                            },
                             "track": args.track,
                             "axis": args.axis,
                             "axis_root": axis_root,
@@ -1667,6 +1716,8 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
         "stage": stage,
         "budget_profile": args.budget_profile,
         "budget": budget,
+        "dataset_max_eval_policy": str(args.dataset_max_eval_policy),
+        "budget_per_dataset": budget_per_dataset,
         "datasets": datasets,
         "models": models,
         "gpus": gpus,
@@ -1721,7 +1772,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gpus", type=str, default="0")
     p.add_argument("--runtime-seed", type=int, default=1)
     p.add_argument("--final-seeds", type=str, default="1,2,3")
-    p.add_argument("--budget-profile", type=str, default="balanced", choices=["balanced", "fast", "deep"])
+    p.add_argument("--budget-profile", type=str, default="balanced", choices=["balanced", "fast", "deep", "lean"])
+    p.add_argument("--dataset-max-eval-policy", type=str, default="off", choices=["off", "abcd_v2"])
     p.add_argument("--stage-a-struct-count", type=int, default=STAGE_A_STRUCT_COUNT_DEFAULT)
     p.add_argument("--stage-a-lr-grid", type=str, default="")
     p.add_argument("--promote-a-to-b", type=int, default=12)
