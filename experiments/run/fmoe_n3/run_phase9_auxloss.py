@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-REPO_ROOT = Path("/workspace/jy1559/FMoE")
+REPO_ROOT = Path(__file__).resolve().parents[3]
 EXP_DIR = REPO_ROOT / "experiments"
 RUN_DIR = EXP_DIR / "run"
 ARTIFACT_ROOT = RUN_DIR / "artifacts"
