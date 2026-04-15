@@ -63,6 +63,12 @@ MODEL_LABELS = {
 DEFAULT_BASELINE_MODELS = ["sasrec", "tisasrec", "gru4rec"]
 DEFAULT_FMOE_MODELS = ["featured_moe_n3"]
 STAGE_A_STRUCT_COUNT_DEFAULT = 30
+STAGE_A_LR_GRID_DEFAULT = [8e-5, 2e-4, 4e-4, 6e-4, 8e-4, 3e-3]
+PROMOTE_A_TO_B_DEFAULT = 12
+PROMOTE_B_TO_C_DEFAULT = 4
+PROMOTE_C_TO_D_DEFAULT = 2
+STAGE_C_PER_PARENT_DEFAULT = 3
+STAGE_D_PER_PARENT_DEFAULT = 3
 
 DATASET_SPEED_RANK = {
     "amazon_beauty": 1,
@@ -112,11 +118,47 @@ SUMMARY_FIELDS = [
     "params_json",
 ]
 
-STAGE_A_LR_GRID = [8e-5, 2e-4, 4e-4, 6e-4, 8e-4, 3e-3]
 RUN_STATUS_END_NORMAL_RE = re.compile(r"\[RUN_STATUS\]\s*END\s+status=normal\b", re.IGNORECASE)
+RUN_STATUS_END_ANY_RE = re.compile(r"\[RUN_STATUS\]\s*END\s+status=([a-z_]+)\b", re.IGNORECASE)
 
-LIGHT_DATASETS = {"amazon_beauty", "beauty", "foursquare", "retail_rocket"}
-HEAVY_DATASETS = {"kuaireclargestrictposv2_0.2", "lastfm0.03", "movielens1m"}
+ABCD_V2_DATASET_MAX_EVALS = {
+    "A": {
+        "amazon_beauty": 2,
+        "beauty": 2,
+        "foursquare": 2,
+        "retail_rocket": 2,
+        "kuaireclargestrictposv2_0.2": 1,
+        "lastfm0.03": 1,
+        "movielens1m": 1,
+    },
+    "B": {
+        "amazon_beauty": 36,
+        "beauty": 40,
+        "foursquare": 34,
+        "retail_rocket": 30,
+        "kuaireclargestrictposv2_0.2": 24,
+        "lastfm0.03": 20,
+        "movielens1m": 20,
+    },
+    "C": {
+        "amazon_beauty": 26,
+        "beauty": 28,
+        "foursquare": 24,
+        "retail_rocket": 22,
+        "kuaireclargestrictposv2_0.2": 16,
+        "lastfm0.03": 14,
+        "movielens1m": 14,
+    },
+    "D": {
+        "amazon_beauty": 18,
+        "beauty": 18,
+        "foursquare": 16,
+        "retail_rocket": 14,
+        "kuaireclargestrictposv2_0.2": 12,
+        "lastfm0.03": 10,
+        "movielens1m": 10,
+    },
+}
 
 
 def _format_lr_token(lr: float) -> str:
@@ -154,13 +196,13 @@ def parse_csv_list(raw: str) -> List[str]:
     return [x.strip() for x in str(raw).split(",") if x.strip()]
 
 
-def parse_csv_floats(raw: str) -> List[float]:
+def parse_float_csv_list(raw: str) -> List[float]:
     out: List[float] = []
     for token in parse_csv_list(raw):
         try:
             out.append(float(token))
-        except Exception:
-            continue
+        except Exception as e:
+            raise ValueError(f"Invalid float token in CSV list: {token}") from e
     return out
 
 
@@ -186,9 +228,7 @@ def hydra_literal(v: Any) -> str:
 def stage_budget(profile: str, stage: str) -> Dict[str, Any]:
     profile = str(profile).lower()
     stage = str(stage).upper()
-    if profile == "lean":
-        profile = "fast"
-    if profile not in {"balanced", "fast", "deep"}:
+    if profile not in {"balanced", "fast", "deep", "lean"}:
         profile = "balanced"
     table = {
         "balanced": {
@@ -196,6 +236,12 @@ def stage_budget(profile: str, stage: str) -> Dict[str, Any]:
             "B": {"max_evals": 30, "epochs": 50, "patience": 5, "algo": "tpe"},
             "C": {"max_evals": 20, "epochs": 80, "patience": 8, "algo": "tpe"},
             "D": {"max_evals": 12, "epochs": 100, "patience": 10, "algo": "tpe"},
+        },
+        "lean": {
+            "A": {"max_evals": 1, "epochs": 14, "patience": 3, "algo": "random"},
+            "B": {"max_evals": 12, "epochs": 32, "patience": 4, "algo": "tpe"},
+            "C": {"max_evals": 8, "epochs": 48, "patience": 6, "algo": "tpe"},
+            "D": {"max_evals": 6, "epochs": 64, "patience": 8, "algo": "tpe"},
         },
         "fast": {
             "A": {"max_evals": 1, "epochs": 12, "patience": 3, "algo": "random"},
@@ -211,39 +257,6 @@ def stage_budget(profile: str, stage: str) -> Dict[str, Any]:
         },
     }
     return dict(table[profile][stage])
-
-
-def dataset_max_evals(policy: str, stage: str, dataset: str, base_max_evals: int) -> int:
-    p = str(policy).strip().lower()
-    s = str(stage).strip().upper()
-    d = str(dataset).strip().lower()
-    base = int(max(1, int(base_max_evals)))
-    if p != "abcd_v2":
-        return base
-
-    if d in LIGHT_DATASETS:
-        if s == "A":
-            return max(base, 2)
-        if s == "B":
-            return max(base, 40)
-        if s == "C":
-            return max(base, 12)
-        if s == "D":
-            return max(base, 8)
-        return base
-
-    if d in HEAVY_DATASETS:
-        if s == "A":
-            return max(1, min(base, 1))
-        if s == "B":
-            return max(1, min(base, 20))
-        if s == "C":
-            return max(1, min(base, 8))
-        if s == "D":
-            return max(1, min(base, 6))
-        return base
-
-    return base
 
 
 def dataset_config_name(dataset: str) -> str:
@@ -416,9 +429,8 @@ class Candidate:
     params: Dict[str, Any]
 
 
-def _model_priors(model: str, *, track: str = "") -> Dict[str, List[Any]]:
+def _model_priors(model: str) -> Dict[str, List[Any]]:
     m = str(model).lower()
-    tr = str(track).lower()
     if m == "sasrec":
         return {
             "max_len": [20, 50, 100, 200],
@@ -460,22 +472,6 @@ def _model_priors(model: str, *, track: str = "") -> Dict[str, List[Any]]:
             "learning_rate": [8e-5, 2e-4, 4e-4, 8e-4, 1.2e-3],
         }
     if m == "featured_moe_n3":
-        if tr == "fmoe_n4":
-            return {
-                "max_len": [20, 30, 40, 50],
-                "embedding_size": [96, 128, 160, 192, 256],
-                "d_ff": [192, 256, 320, 384, 512],
-                "d_expert_hidden": [96, 128, 160, 192, 256],
-                "d_router_hidden": [48, 64, 80, 96, 128],
-                "d_feat_emb": [8, 12, 16, 24],
-                "expert_scale": [2, 3, 4],
-                "num_heads": [2, 4],
-                "dropout": [0.08, 0.12, 0.16, 0.20],
-                "feature_dropout": [0.00, 0.02, 0.05],
-                "family_dropout": [0.00, 0.03, 0.06],
-                "weight_decay": [5e-7, 1e-6, 2e-6, 4e-6, 8e-6],
-                "learning_rate": [8e-5, 1.6e-4, 3e-4, 5e-4, 8e-4, 1.2e-3],
-            }
         return {
             "max_len": [20, 30, 40, 50],
             "embedding_size": [96, 128, 160, 192],
@@ -510,28 +506,19 @@ def _core_distance(model: str, p: Dict[str, Any]) -> float:
     d += abs(int(p["max_len"]) - 30) / 20.0
     d += abs(int(p["embedding_size"]) - 128) / 64.0
     d += abs(int(p["d_expert_hidden"]) - 128) / 64.0
-    if "d_feat_emb" in p:
-        d += abs(int(p["d_feat_emb"]) - 12) / 12.0
-    if "expert_scale" in p:
-        d += abs(int(p["expert_scale"]) - 3) * 0.3
     return d
 
 
 def generate_stage_a_candidates(
     dataset: str,
     model: str,
-    *,
     n: int = STAGE_A_STRUCT_COUNT_DEFAULT,
-    track: str = "",
-    stage_a_lr_grid: List[float] | None = None,
+    lr_grid: List[float] | None = None,
 ) -> List[Candidate]:
-    pri = _model_priors(model, track=track)
-    lr_grid = list(stage_a_lr_grid) if stage_a_lr_grid else list(STAGE_A_LR_GRID)
-    if not lr_grid:
-        lr_grid = list(STAGE_A_LR_GRID)
+    pri = _model_priors(model)
     candidates: List[Dict[str, Any]] = []
     m = str(model).lower()
-    tr = str(track).lower()
+    lr_values = list(lr_grid) if lr_grid else list(STAGE_A_LR_GRID_DEFAULT)
 
     if m == "sasrec":
         for max_len in pri["max_len"]:
@@ -596,39 +583,20 @@ def generate_stage_a_candidates(
                             }
                         )
     else:
-        for max_len in pri.get("max_len", [30]):
-            for emb in pri.get("embedding_size", [128]):
-                for dff in pri.get("d_ff", [int(emb) * 2]):
-                    if int(dff) < int(emb) or int(dff) > int(emb) * 3:
-                        continue
-                    for dex in pri.get("d_expert_hidden", [int(emb)]):
-                        if int(dex) < max(64, int(emb) // 2) or int(dex) > int(emb) * 2:
-                            continue
-                        for dr in pri.get("d_router_hidden", [max(int(emb) // 2, 32)]):
-                            if int(dr) < 32 or int(dr) > int(emb):
-                                continue
-                            d_feat_space = pri.get("d_feat_emb", [16])
-                            expert_scale_space = pri.get("expert_scale", [1])
-                            heads_space = pri.get("num_heads", [4])
-                            for d_feat in d_feat_space:
-                                for ex_scale in expert_scale_space:
-                                    for heads in heads_space:
-                                        if int(emb) % max(int(heads), 1) != 0:
-                                            continue
-                                        if tr == "fmoe_n4" and int(ex_scale) >= 4 and int(emb) <= 96:
-                                            continue
-                                        candidates.append(
-                                            {
-                                                "max_len": int(max_len),
-                                                "embedding_size": int(emb),
-                                                "d_ff": int(dff),
-                                                "d_expert_hidden": int(dex),
-                                                "d_router_hidden": int(dr),
-                                                "d_feat_emb": int(d_feat),
-                                                "expert_scale": int(ex_scale),
-                                                "num_heads": int(heads),
-                                            }
-                                        )
+        for max_len in pri["max_len"]:
+            for emb in pri["embedding_size"]:
+                for dff in pri["d_ff"]:
+                    for dex in pri["d_expert_hidden"]:
+                        for dr in pri["d_router_hidden"]:
+                            candidates.append(
+                                {
+                                    "max_len": int(max_len),
+                                    "embedding_size": int(emb),
+                                    "d_ff": int(dff),
+                                    "d_expert_hidden": int(dex),
+                                    "d_router_hidden": int(dr),
+                                }
+                            )
 
     candidates = sorted(candidates, key=lambda p: _core_distance(model, p))
     selected = candidates[: max(n, 1)]
@@ -638,12 +606,8 @@ def generate_stage_a_candidates(
         base = dict(p)
         base["dropout"] = float(pri["dropout"][(idx - 1) % len(pri["dropout"])])
         base["weight_decay"] = float(pri["weight_decay"][(idx - 1) % len(pri["weight_decay"])])
-        if "family_dropout" in pri:
-            base["family_dropout"] = float(pri["family_dropout"][(idx - 1) % len(pri["family_dropout"])])
-        if "feature_dropout" in pri:
-            base["feature_dropout"] = float(pri["feature_dropout"][(idx - 1) % len(pri["feature_dropout"])])
         # Stage A: keep structural candidates, but evaluate each with LR grid.
-        for lidx, lr in enumerate(lr_grid, start=1):
+        for lidx, lr in enumerate(lr_values, start=1):
             q = dict(base)
             q["learning_rate"] = float(lr)
             lr_token = _format_lr_token(float(lr))
@@ -670,8 +634,8 @@ def _neighbor(value: int, ladder: List[int], step: int) -> int:
     return int(ladder[j])
 
 
-def _mutate_candidate(parent: Candidate, *, stage: str, variant_idx: int, track: str = "") -> Candidate:
-    pri = _model_priors(parent.model, track=track)
+def _mutate_candidate(parent: Candidate, *, stage: str, variant_idx: int) -> Candidate:
+    pri = _model_priors(parent.model)
     p = dict(parent.params)
     m = str(parent.model).lower()
     stage = str(stage).upper()
@@ -732,33 +696,6 @@ def _mutate_candidate(parent: Candidate, *, stage: str, variant_idx: int, track:
             [int(x) for x in pri["d_router_hidden"]],
             step=(-direction if mode % 3 == 0 else direction),
         )
-        if "d_feat_emb" in pri:
-            p["d_feat_emb"] = _neighbor(
-                int(p.get("d_feat_emb", 16)),
-                [int(x) for x in pri["d_feat_emb"]],
-                step=(direction if mode % 2 == 0 else -direction),
-            )
-        if "expert_scale" in pri:
-            p["expert_scale"] = _neighbor(
-                int(p.get("expert_scale", 3)),
-                [int(x) for x in pri["expert_scale"]],
-                step=(-direction if mode % 3 == 1 else direction),
-            )
-        if "num_heads" in pri:
-            heads = _neighbor(
-                int(p.get("num_heads", 4)),
-                [int(x) for x in pri["num_heads"]],
-                step=(direction if mode % 3 != 2 else -direction),
-            )
-            emb = int(p.get("embedding_size", 128))
-            valid_heads = [int(h) for h in pri["num_heads"] if emb % max(int(h), 1) == 0]
-            if valid_heads and heads not in valid_heads:
-                heads = min(valid_heads, key=lambda x: abs(int(x) - int(heads)))
-            p["num_heads"] = int(heads)
-        if "family_dropout" in p:
-            p["family_dropout"] = float(max(0.0, min(0.2, float(p.get("family_dropout", 0.03)) + (0.015 if direction > 0 else -0.015))))
-        if "feature_dropout" in p:
-            p["feature_dropout"] = float(max(0.0, min(0.2, float(p.get("feature_dropout", 0.02)) + (0.01 if direction > 0 else -0.01))))
 
     return Candidate(
         candidate_id="",
@@ -769,13 +706,13 @@ def _mutate_candidate(parent: Candidate, *, stage: str, variant_idx: int, track:
     )
 
 
-def mutate_candidates(parents: List[Candidate], *, stage: str, per_parent: int, track: str = "") -> List[Candidate]:
+def mutate_candidates(parents: List[Candidate], *, stage: str, per_parent: int) -> List[Candidate]:
     out: List[Candidate] = []
     cursor = 0
     for parent in parents:
         for k in range(per_parent):
             cursor += 1
-            c = _mutate_candidate(parent, stage=stage, variant_idx=k, track=track)
+            c = _mutate_candidate(parent, stage=stage, variant_idx=k)
             c.candidate_id = f"{stage}{cursor:03d}"
             out.append(c)
     return out
@@ -829,8 +766,34 @@ def has_run_status_end_normal(log_path: Path) -> bool:
         token = str(line).strip()
         if not token:
             continue
-        return bool(RUN_STATUS_END_NORMAL_RE.search(token))
+        m = RUN_STATUS_END_ANY_RE.search(token)
+        if m:
+            return str(m.group(1)).strip().lower() == "normal"
     return False
+
+
+def resolve_dataset_budget(
+    base_budget: Dict[str, Any],
+    *,
+    stage: str,
+    dataset: str,
+    axis: str,
+    policy: str,
+) -> Dict[str, Any]:
+    out = dict(base_budget)
+    if str(policy).lower() != "abcd_v2":
+        return out
+    if not str(axis).strip().lower().startswith("abcd_v2"):
+        return out
+
+    stage_u = str(stage).upper()
+    ds_key = str(dataset).strip().lower()
+    stage_map = ABCD_V2_DATASET_MAX_EVALS.get(stage_u, {})
+    max_eval = stage_map.get(ds_key)
+    if max_eval is None:
+        return out
+    out["max_evals"] = max(1, int(max_eval))
+    return out
 
 
 def build_run_tokens(*, axis: str, stage: str, dataset: str, model: str, candidate_id: str, run_seed: int) -> tuple[str, str]:
@@ -850,6 +813,21 @@ def resolve_log_path(*, axis_root: Path, stage: str, candidate: Candidate, run_p
     return log_dir / f"{run_phase}.log"
 
 
+def resolve_existing_log_path(*, axis_root: Path, stage: str, candidate: Candidate, run_phase: str) -> Path:
+    """Locate an existing log for resume-skip, with Stage A fallback across lr_groups."""
+    preferred = resolve_log_path(axis_root=axis_root, stage=stage, candidate=candidate, run_phase=run_phase)
+    if preferred.exists():
+        return preferred
+
+    if str(stage).upper() == "A":
+        model_stage_root = axis_root / candidate.dataset / candidate.model / "stageA"
+        # Stage A lr_grid can change between runs; scan all lr_group folders by run_phase.
+        matches = sorted((model_stage_root / "lr_groups").glob(f"*/logs/{run_phase}.log"))
+        if matches:
+            return matches[0]
+    return preferred
+
+
 def build_resumed_row_from_log(
     *,
     stage: str,
@@ -867,7 +845,7 @@ def build_resumed_row_from_log(
         candidate_id=candidate.candidate_id,
         run_seed=run_seed,
     )
-    log_path = resolve_log_path(axis_root=axis_root, stage=stage, candidate=candidate, run_phase=run_phase)
+    log_path = resolve_existing_log_path(axis_root=axis_root, stage=stage, candidate=candidate, run_phase=run_phase)
     if not has_run_status_end_normal(log_path):
         return None
 
@@ -903,9 +881,8 @@ def build_resumed_row_from_log(
     }
 
 
-def _base_runtime_overrides(track: str, model: str, params: Dict[str, Any]) -> List[str]:
+def _base_runtime_overrides(model: str, params: Dict[str, Any]) -> List[str]:
     m = str(model).lower()
-    tr = str(track).lower()
     o = [
         f"++MAX_ITEM_LIST_LENGTH={int(params.get('max_len', 50))}",
         "++eval_sampling.mode=full",
@@ -956,61 +933,23 @@ def _base_runtime_overrides(track: str, model: str, params: Dict[str, Any]) -> L
         )
     elif m == "featured_moe_n3":
         emb = int(params.get("embedding_size", 128))
-        family_drop = float(params.get("family_dropout", 0.0))
-        feature_drop = float(params.get("feature_dropout", 0.0))
         o.extend(
             [
                 f"++embedding_size={emb}",
                 f"++hidden_size={emb}",
-                f"++num_heads={int(params.get('num_heads', 4))}",
                 f"++d_ff={int(params.get('d_ff', emb * 2))}",
                 f"++d_expert_hidden={int(params.get('d_expert_hidden', emb))}",
                 f"++d_router_hidden={int(params.get('d_router_hidden', max(emb // 2, 32)))}",
-                f"++d_feat_emb={int(params.get('d_feat_emb', 16))}",
-                f"++expert_scale={int(params.get('expert_scale', 3))}",
                 f"++fixed_hidden_dropout_prob={float(params.get('dropout', 0.15))}",
                 f"++fixed_weight_decay={float(params.get('weight_decay', 1e-6))}",
-                f"++stage_family_dropout_prob={hydra_literal({'macro': family_drop, 'mid': family_drop, 'micro': family_drop})}",
-                f"++stage_feature_dropout_prob={hydra_literal({'macro': feature_drop, 'mid': feature_drop, 'micro': feature_drop})}",
             ]
         )
-        if tr == "fmoe_n4":
-            o.extend(
-                [
-                    f"++stage_router_wrapper={hydra_literal({'macro': 'w5_exd', 'mid': 'w5_exd', 'micro': 'w5_exd'})}",
-                    f"++layer_layout={hydra_literal(['attn', 'macro_ffn', 'mid_ffn', 'attn', 'micro_ffn'])}",
-                    f"++stage_router_granularity={hydra_literal({'macro': 'session', 'mid': 'session', 'micro': 'token'})}",
-                    f"++stage_feature_dropout_scope={hydra_literal({'macro': 'token', 'mid': 'token', 'micro': 'token'})}",
-                    "++bias_mode=none",
-                    "++rule_bias_scale=0.0",
-                    "++feature_group_bias_lambda=0.0",
-                ]
-            )
     return o
 
 
-def _choice_window(value: Any, ladder: List[Any], radius: int) -> List[Any]:
-    dedup = []
-    for raw in ladder:
-        if raw not in dedup:
-            dedup.append(raw)
-    if not dedup:
-        return [value]
-    try:
-        idx = dedup.index(value)
-    except ValueError:
-        dedup.append(value)
-        idx = len(dedup) - 1
-    lo = max(0, idx - int(max(radius, 0)))
-    hi = min(len(dedup) - 1, idx + int(max(radius, 0)))
-    return [dedup[i] for i in range(lo, hi + 1)]
-
-
-def _search_space_entries(stage: str, track: str, model: str, params: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, str]]:
+def _search_space_entries(stage: str, model: str, params: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, str]]:
     stage = str(stage).upper()
     m = str(model).lower()
-    tr = str(track).lower()
-    pri = _model_priors(model, track=track)
     search: Dict[str, Any] = {}
     types: Dict[str, str] = {}
 
@@ -1049,25 +988,13 @@ def _search_space_entries(stage: str, track: str, model: str, params: Dict[str, 
             {
                 "embedding_size": [int(params.get("embedding_size", 128))],
                 "hidden_size": [int(params.get("embedding_size", 128))],
-                "num_heads": [int(params.get("num_heads", 4))],
                 "d_ff": [int(params.get("d_ff", 256))],
                 "d_expert_hidden": [int(params.get("d_expert_hidden", 128))],
                 "d_router_hidden": [int(params.get("d_router_hidden", 64))],
-                "d_feat_emb": [int(params.get("d_feat_emb", 16))],
-                "expert_scale": [int(params.get("expert_scale", 3))],
                 "fixed_weight_decay": [float(params.get("weight_decay", 1e-6))],
                 "fixed_hidden_dropout_prob": [float(params.get("dropout", 0.15))],
             }
         )
-        if tr == "fmoe_n4":
-            family_drop = float(params.get("family_dropout", 0.0))
-            feature_drop = float(params.get("feature_dropout", 0.0))
-            fixed["stage_family_dropout_prob"] = [
-                {"macro": family_drop, "mid": family_drop, "micro": family_drop}
-            ]
-            fixed["stage_feature_dropout_prob"] = [
-                {"macro": feature_drop, "mid": feature_drop, "micro": feature_drop}
-            ]
 
     for k, v in fixed.items():
         search[k] = v
@@ -1121,59 +1048,6 @@ def _search_space_entries(stage: str, track: str, model: str, params: Dict[str, 
             search["fixed_weight_decay"] = [wd_lo, wd_hi]
             types["fixed_weight_decay"] = "loguniform"
 
-            # Stage-wise discrete capacity tuning window around each candidate.
-            if stage == "B":
-                search["d_feat_emb"] = _choice_window(int(params.get("d_feat_emb", 16)), [int(x) for x in pri.get("d_feat_emb", [16])], 1)
-                search["expert_scale"] = _choice_window(int(params.get("expert_scale", 3)), [int(x) for x in pri.get("expert_scale", [3])], 1)
-                search["d_router_hidden"] = _choice_window(int(params.get("d_router_hidden", 64)), [int(x) for x in pri.get("d_router_hidden", [64])], 1)
-            elif stage == "C":
-                search["MAX_ITEM_LIST_LENGTH"] = _choice_window(int(params.get("max_len", 30)), [int(x) for x in pri.get("max_len", [30])], 1)
-                search["embedding_size"] = _choice_window(int(params.get("embedding_size", 128)), [int(x) for x in pri.get("embedding_size", [128])], 1)
-                search["hidden_size"] = list(search["embedding_size"])
-                search["d_ff"] = _choice_window(int(params.get("d_ff", 256)), [int(x) for x in pri.get("d_ff", [256])], 1)
-                search["d_expert_hidden"] = _choice_window(int(params.get("d_expert_hidden", 128)), [int(x) for x in pri.get("d_expert_hidden", [128])], 1)
-                search["d_router_hidden"] = _choice_window(int(params.get("d_router_hidden", 64)), [int(x) for x in pri.get("d_router_hidden", [64])], 1)
-                search["d_feat_emb"] = _choice_window(int(params.get("d_feat_emb", 16)), [int(x) for x in pri.get("d_feat_emb", [16])], 1)
-                search["expert_scale"] = _choice_window(int(params.get("expert_scale", 3)), [int(x) for x in pri.get("expert_scale", [3])], 1)
-            elif stage == "D":
-                search["MAX_ITEM_LIST_LENGTH"] = _choice_window(int(params.get("max_len", 30)), [int(x) for x in pri.get("max_len", [30])], 1)
-                search["d_feat_emb"] = _choice_window(int(params.get("d_feat_emb", 16)), [int(x) for x in pri.get("d_feat_emb", [16])], 1)
-                search["expert_scale"] = _choice_window(int(params.get("expert_scale", 3)), [int(x) for x in pri.get("expert_scale", [3])], 1)
-                search["d_router_hidden"] = _choice_window(int(params.get("d_router_hidden", 64)), [int(x) for x in pri.get("d_router_hidden", [64])], 1)
-
-            for key in [
-                "MAX_ITEM_LIST_LENGTH",
-                "embedding_size",
-                "hidden_size",
-                "d_ff",
-                "d_expert_hidden",
-                "d_router_hidden",
-                "d_feat_emb",
-                "expert_scale",
-            ]:
-                if key in search:
-                    types[key] = "choice"
-
-            if tr == "fmoe_n4":
-                family = float(params.get("family_dropout", 0.0))
-                feat = float(params.get("feature_dropout", 0.0))
-                f_lo = max(0.0, family - 0.03)
-                f_hi = min(0.2, family + 0.03)
-                x_lo = max(0.0, feat - 0.03)
-                x_hi = min(0.2, feat + 0.03)
-                search["stage_family_dropout_prob"] = [
-                    {"macro": f_lo, "mid": f_lo, "micro": f_lo},
-                    {"macro": family, "mid": family, "micro": family},
-                    {"macro": f_hi, "mid": f_hi, "micro": f_hi},
-                ]
-                search["stage_feature_dropout_prob"] = [
-                    {"macro": x_lo, "mid": x_lo, "micro": x_lo},
-                    {"macro": feat, "mid": feat, "micro": feat},
-                    {"macro": x_hi, "mid": x_hi, "micro": x_hi},
-                ]
-                types["stage_family_dropout_prob"] = "choice"
-                types["stage_feature_dropout_prob"] = "choice"
-
     return search, types
 
 
@@ -1192,10 +1066,7 @@ def build_command(
     dataset = str(candidate.dataset)
     config_name = dataset_config_name(dataset)
     python_bin = os.environ.get("RUN_PYTHON_BIN", "/venv/FMoE/bin/python")
-    search, types = _search_space_entries(stage, track, model, candidate.params)
-    resolved_model = model
-    if str(track).lower() == "fmoe_n4" and model == "featured_moe_n3":
-        resolved_model = "featured_moe_n3_tune"
+    search, types = _search_space_entries(stage, model, candidate.params)
 
     cmd = [
         python_bin,
@@ -1218,7 +1089,7 @@ def build_command(
         str(axis),
         "--run-phase",
         str(run_phase),
-        f"model={resolved_model}",
+        f"model={model}",
         f"dataset={dataset}",
         "eval_mode=session_fixed",
         "feature_mode=full_v4",
@@ -1226,7 +1097,7 @@ def build_command(
         "log_wandb=false",
         "show_progress=false",
     ]
-    cmd.extend(_base_runtime_overrides(track, model, candidate.params))
+    cmd.extend(_base_runtime_overrides(model, candidate.params))
     cmd.append(f"++seed={int(run_seed)}")
 
     for k, v in search.items():
@@ -1322,7 +1193,6 @@ def build_stage_candidates(
     dataset: str,
     model: str,
     prev_promoted: List[Candidate],
-    track: str,
     stage_a_struct_count: int,
     stage_a_lr_grid: List[float],
     promote_a_to_b: int,
@@ -1333,21 +1203,21 @@ def build_stage_candidates(
 ) -> List[Candidate]:
     s = str(stage).upper()
     if s == "A":
-        return generate_stage_a_candidates(
-            dataset,
-            model,
-            n=max(int(stage_a_struct_count), 1),
-            track=track,
-            stage_a_lr_grid=stage_a_lr_grid,
-        )
+        return generate_stage_a_candidates(dataset, model, n=max(1, int(stage_a_struct_count)), lr_grid=stage_a_lr_grid)
     if s == "B":
-        return prev_promoted[: max(int(promote_a_to_b), 1)]
+        return prev_promoted[: max(1, int(promote_a_to_b))]
     if s == "C":
-        parents = prev_promoted[: max(int(promote_b_to_c), 1)]
-        return mutate_candidates(parents, stage="C", per_parent=max(int(stage_c_per_parent), 1), track=track)
+        return mutate_candidates(
+            prev_promoted[: max(1, int(promote_b_to_c))],
+            stage="C",
+            per_parent=max(1, int(stage_c_per_parent)),
+        )
     if s == "D":
-        parents = prev_promoted[: max(int(promote_c_to_d), 1)]
-        return mutate_candidates(parents, stage="D", per_parent=max(int(stage_d_per_parent), 1), track=track)
+        return mutate_candidates(
+            prev_promoted[: max(1, int(promote_c_to_d))],
+            stage="D",
+            per_parent=max(1, int(stage_d_per_parent)),
+        )
     raise ValueError(f"Unknown stage: {stage}")
 
 
@@ -1447,13 +1317,13 @@ def update_dataset_rollup(axis_root: Path, rows: List[Dict[str, Any]], stage: st
 def _promote_n_for_stage(stage: str, args: argparse.Namespace) -> int:
     s = str(stage).upper()
     if s == "A":
-        return max(int(args.promote_a_to_b), 1)
+        return max(1, int(args.promote_a_to_b))
     if s == "B":
-        return max(int(args.promote_b_to_c), 1)
+        return max(1, int(args.promote_b_to_c))
     if s == "C":
-        return max(int(args.promote_c_to_d), 1)
+        return max(1, int(args.promote_c_to_d))
     if s == "D":
-        return max(int(args.promote_d_to_final), 1)
+        return 1
     return 1
 
 
@@ -1515,7 +1385,10 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
     stage = str(stage).upper()
     if stage not in {"A", "B", "C", "D"}:
         raise ValueError(f"Invalid stage: {stage}")
-    datasets = parse_csv_list(args.datasets) if str(args.datasets).strip() else list(DEFAULT_DATASETS)
+    datasets_arg_given = bool(str(args.datasets).strip())
+    datasets = parse_csv_list(args.datasets) if datasets_arg_given else list(DEFAULT_DATASETS)
+    if (not datasets_arg_given) and str(args.axis).strip().lower().startswith("abcd_v2"):
+        datasets = [d for d in datasets if str(d).strip().lower() != "amazon_beauty"]
     if args.track == "baseline_2":
         default_models = list(DEFAULT_BASELINE_MODELS)
     else:
@@ -1529,18 +1402,10 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
         datasets = sorted(datasets, key=lambda d: (DATASET_SPEED_RANK.get(str(d).lower(), 999), str(d).lower()))
         models = sorted(models, key=lambda m: (MODEL_SPEED_RANK.get(str(m).lower(), 999), str(m).lower()))
     gpus = parse_csv_list(args.gpus) if str(args.gpus).strip() else ["0"]
-    stage_a_lr_grid = parse_csv_floats(str(args.stage_a_lr_grid)) if str(args.stage_a_lr_grid).strip() else list(STAGE_A_LR_GRID)
+    stage_a_lr_grid = parse_float_csv_list(args.stage_a_lr_grid) if str(args.stage_a_lr_grid).strip() else list(STAGE_A_LR_GRID_DEFAULT)
     if not stage_a_lr_grid:
-        stage_a_lr_grid = list(STAGE_A_LR_GRID)
-    budget = stage_budget(args.budget_profile, stage)
-    budget_per_dataset: Dict[str, int] = {}
-    for ds in datasets:
-        budget_per_dataset[str(ds)] = dataset_max_evals(
-            str(args.dataset_max_eval_policy),
-            stage,
-            str(ds),
-            int(budget.get("max_evals", 1) or 1),
-        )
+        raise ValueError("stage_a_lr_grid is empty. Provide at least one LR value.")
+    base_budget = stage_budget(args.budget_profile, stage)
     paths = stage_output_paths(args.track, args.axis, stage)
     stage_root = paths["stage_root"]
     axis_root = paths["axis_root"]
@@ -1550,9 +1415,18 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
 
     all_rows: List[Dict[str, Any]] = []
     pending_jobs: List[Dict[str, Any]] = []
+    budget_per_dataset: Dict[str, int] = {}
     run_idx = 0
     for ds in datasets:
         for model in models:
+            budget = resolve_dataset_budget(
+                base_budget,
+                stage=stage,
+                dataset=ds,
+                axis=args.axis,
+                policy=args.dataset_max_eval_policy,
+            )
+            budget_per_dataset[ds] = int(budget["max_evals"])
             prev_promoted = resolve_stage_inputs(args.track, args.axis, stage, ds, model)
             if stage != "A" and not prev_promoted:
                 print(f"[skip] stage={stage} dataset={ds} model={model} (no previous promotions)")
@@ -1562,7 +1436,6 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
                 dataset=ds,
                 model=model,
                 prev_promoted=prev_promoted,
-                track=str(args.track),
                 stage_a_struct_count=int(args.stage_a_struct_count),
                 stage_a_lr_grid=stage_a_lr_grid,
                 promote_a_to_b=int(args.promote_a_to_b),
@@ -1616,10 +1489,7 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
                             "candidate": cand,
                             "seed": int(seed),
                             "gpu_id": str(gpu_id),
-                            "budget": {
-                                **budget,
-                                "max_evals": int(budget_per_dataset.get(str(ds), int(budget.get("max_evals", 1) or 1))),
-                            },
+                            "budget": dict(budget),
                             "track": args.track,
                             "axis": args.axis,
                             "axis_root": axis_root,
@@ -1627,6 +1497,10 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
                             "model": model,
                         }
                     )
+
+    if budget_per_dataset:
+        budget_tokens = [f"{k}:{int(v)}" for k, v in sorted(budget_per_dataset.items(), key=lambda x: str(x[0]).lower())]
+        print(f"[budget] stage={stage} profile={args.budget_profile} per_dataset_max_evals={','.join(budget_tokens)}")
 
     # Run pending jobs in parallel across GPUs.
     if pending_jobs:
@@ -1715,25 +1589,26 @@ def run_stage(args: argparse.Namespace, stage: str) -> Dict[str, Any]:
         "axis": args.axis,
         "stage": stage,
         "budget_profile": args.budget_profile,
-        "budget": budget,
-        "dataset_max_eval_policy": str(args.dataset_max_eval_policy),
+        "budget": base_budget,
+        "dataset_max_eval_policy": args.dataset_max_eval_policy,
         "budget_per_dataset": budget_per_dataset,
         "datasets": datasets,
         "models": models,
         "gpus": gpus,
         "runtime_seed": int(args.runtime_seed),
         "final_seeds": parse_csv_list(args.final_seeds),
-        "stage_a_struct_count": int(args.stage_a_struct_count),
-        "stage_a_lr_grid": [float(x) for x in stage_a_lr_grid],
-        "promote_a_to_b": int(args.promote_a_to_b),
-        "promote_b_to_c": int(args.promote_b_to_c),
-        "promote_c_to_d": int(args.promote_c_to_d),
-        "promote_d_to_final": int(args.promote_d_to_final),
-        "stage_c_per_parent": int(args.stage_c_per_parent),
-        "stage_d_per_parent": int(args.stage_d_per_parent),
         "n_rows": len(all_rows),
         "n_ok": sum(1 for r in all_rows if str(r.get("status", "")) == "ok"),
         "n_promoted": len(promoted),
+        "stage_policy": {
+            "stage_a_struct_count": int(args.stage_a_struct_count),
+            "stage_a_lr_grid": [float(x) for x in stage_a_lr_grid],
+            "promote_a_to_b": int(args.promote_a_to_b),
+            "promote_b_to_c": int(args.promote_b_to_c),
+            "promote_c_to_d": int(args.promote_c_to_d),
+            "stage_c_per_parent": int(args.stage_c_per_parent),
+            "stage_d_per_parent": int(args.stage_d_per_parent),
+        },
         "timestamp_utc": now_utc(),
     }
 
@@ -1772,16 +1647,25 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gpus", type=str, default="0")
     p.add_argument("--runtime-seed", type=int, default=1)
     p.add_argument("--final-seeds", type=str, default="1,2,3")
-    p.add_argument("--budget-profile", type=str, default="balanced", choices=["balanced", "fast", "deep", "lean"])
-    p.add_argument("--dataset-max-eval-policy", type=str, default="off", choices=["off", "abcd_v2"])
+    p.add_argument("--budget-profile", type=str, default="balanced", choices=["balanced", "lean", "fast", "deep"])
+    p.add_argument(
+        "--dataset-max-eval-policy",
+        type=str,
+        default="abcd_v2",
+        choices=["off", "abcd_v2"],
+        help="Per-dataset max_eval override policy. abcd_v2 applies only when axis starts with ABCD_v2.",
+    )
     p.add_argument("--stage-a-struct-count", type=int, default=STAGE_A_STRUCT_COUNT_DEFAULT)
-    p.add_argument("--stage-a-lr-grid", type=str, default="")
-    p.add_argument("--promote-a-to-b", type=int, default=12)
-    p.add_argument("--promote-b-to-c", type=int, default=4)
-    p.add_argument("--promote-c-to-d", type=int, default=2)
-    p.add_argument("--promote-d-to-final", type=int, default=1)
-    p.add_argument("--stage-c-per-parent", type=int, default=3)
-    p.add_argument("--stage-d-per-parent", type=int, default=3)
+    p.add_argument(
+        "--stage-a-lr-grid",
+        type=str,
+        default=",".join(f"{float(x):.12g}" for x in STAGE_A_LR_GRID_DEFAULT),
+    )
+    p.add_argument("--promote-a-to-b", type=int, default=PROMOTE_A_TO_B_DEFAULT)
+    p.add_argument("--promote-b-to-c", type=int, default=PROMOTE_B_TO_C_DEFAULT)
+    p.add_argument("--promote-c-to-d", type=int, default=PROMOTE_C_TO_D_DEFAULT)
+    p.add_argument("--stage-c-per-parent", type=int, default=STAGE_C_PER_PARENT_DEFAULT)
+    p.add_argument("--stage-d-per-parent", type=int, default=STAGE_D_PER_PARENT_DEFAULT)
     p.add_argument("--resume-from-logs", action="store_true")
     p.add_argument("--fast-first", dest="fast_first", action="store_true", default=True)
     p.add_argument("--no-fast-first", dest="fast_first", action="store_false")

@@ -173,7 +173,7 @@ MATRIX_FIELDS = [
 RUN_STATUS_END_NORMAL_RE = re.compile(r"\[RUN_STATUS\]\s*END\s+status=normal\b", re.IGNORECASE)
 
 STOP_EVENT = threading.Event()
-ACTIVE_PROCESS_GROUPS: set[int] = set()
+ACTIVE_PROCESSES: set[subprocess.Popen[Any]] = set()
 ACTIVE_PROCESS_LOCK = threading.Lock()
 
 
@@ -979,39 +979,42 @@ def has_run_status_end_normal(log_path: Path) -> bool:
     return False
 
 
-def _active_pgid_add(pgid: int) -> None:
+def _active_proc_add(proc: subprocess.Popen[Any]) -> None:
     with ACTIVE_PROCESS_LOCK:
-        ACTIVE_PROCESS_GROUPS.add(int(pgid))
+        ACTIVE_PROCESSES.add(proc)
 
 
-def _active_pgid_remove(pgid: int | None) -> None:
-    if pgid is None:
+def _active_proc_remove(proc: subprocess.Popen[Any] | None) -> None:
+    if proc is None:
         return
     with ACTIVE_PROCESS_LOCK:
-        ACTIVE_PROCESS_GROUPS.discard(int(pgid))
+        ACTIVE_PROCESSES.discard(proc)
 
 
-def _terminate_process_group(pgid: int, sig_num: int) -> None:
+def _terminate_process(proc: subprocess.Popen[Any], sig_num: int) -> None:
     try:
-        os.killpg(int(pgid), int(sig_num))
-    except ProcessLookupError:
-        return
+        if proc.poll() is not None:
+            return
+        if int(sig_num) == int(signal.SIGKILL):
+            proc.kill()
+        else:
+            proc.terminate()
     except Exception:
         return
 
 
 def terminate_active_children(*, grace_sec: float = 0.4) -> None:
     with ACTIVE_PROCESS_LOCK:
-        pgids = list(ACTIVE_PROCESS_GROUPS)
-    if not pgids:
+        procs = list(ACTIVE_PROCESSES)
+    if not procs:
         return
 
-    for pgid in pgids:
-        _terminate_process_group(pgid, signal.SIGTERM)
+    for proc in procs:
+        _terminate_process(proc, signal.SIGTERM)
     if grace_sec > 0:
         time.sleep(float(grace_sec))
-    for pgid in pgids:
-        _terminate_process_group(pgid, signal.SIGKILL)
+    for proc in procs:
+        _terminate_process(proc, signal.SIGKILL)
 
 
 def install_signal_handlers() -> None:
@@ -1369,8 +1372,7 @@ def run_one(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace, axis_roo
 
     start = time.time()
     rc = 1
-    proc: subprocess.Popen[str] | None = None
-    pgid: int | None = None
+    proc: subprocess.Popen[Any] | None = None
     with log_path.open("w", encoding="utf-8") as fh:
         fh.write(
             f"# pair={row['pair_id']} dataset={row['dataset']} model={row['model_option']} "
@@ -1385,40 +1387,23 @@ def run_one(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace, axis_roo
             stdout=fh,
             stderr=subprocess.STDOUT,
             text=True,
-            preexec_fn=os.setsid,
         )
-        try:
-            pgid = os.getpgid(proc.pid)
-            _active_pgid_add(int(pgid))
-        except Exception:
-            pgid = None
+        _active_proc_add(proc)
 
         try:
             while True:
                 if STOP_EVENT.is_set() and proc.poll() is None:
-                    if pgid is not None:
-                        _terminate_process_group(int(pgid), signal.SIGTERM)
-                    else:
-                        try:
-                            proc.terminate()
-                        except Exception:
-                            pass
+                    _terminate_process(proc, signal.SIGTERM)
                     time.sleep(0.3)
                     if proc.poll() is None:
-                        if pgid is not None:
-                            _terminate_process_group(int(pgid), signal.SIGKILL)
-                        else:
-                            try:
-                                proc.kill()
-                            except Exception:
-                                pass
+                        _terminate_process(proc, signal.SIGKILL)
                 polled = proc.poll()
                 if polled is not None:
                     rc = int(polled)
                     break
                 time.sleep(0.2)
         finally:
-            _active_pgid_remove(pgid)
+            _active_proc_remove(proc)
     elapsed = time.time() - start
 
     result_path_obj = parse_result_path_from_log(log_path)

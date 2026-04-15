@@ -131,6 +131,20 @@ start_epoch="$(date +%s)"
 start_kst="$(TZ=Asia/Seoul date +"%Y-%m-%d %H:%M:%S KST")"
 child_pid=""
 
+kill_tree() {
+  local sig="$1"
+  local pid="$2"
+  local children=""
+  children="$(pgrep -P "${pid}" 2>/dev/null || true)"
+  if [[ -n "${children}" ]]; then
+    local c
+    for c in ${children}; do
+      kill_tree "${sig}" "${c}"
+    done
+  fi
+  kill -s "${sig}" "${pid}" 2>/dev/null || true
+}
+
 on_interrupt() {
   local sig="$1"
   trap - INT TERM
@@ -140,11 +154,9 @@ on_interrupt() {
   fi
 
   if [[ -n "${child_pid}" ]]; then
-    # Kill entire child process-group first so grandchildren (python/train workers) also terminate.
-    kill -s "${sig}" -- "-${child_pid}" 2>/dev/null || true
-    kill -s "${sig}" "${child_pid}" 2>/dev/null || true
+    kill_tree "${sig}" "${child_pid}"
     if kill -0 "${child_pid}" 2>/dev/null; then
-      kill -s KILL -- "-${child_pid}" 2>/dev/null || true
+      kill_tree KILL "${child_pid}"
     fi
     wait "${child_pid}" 2>/dev/null || true
   fi
@@ -166,13 +178,8 @@ started_kst=${start_kst}
 cmd=$(printf "%q " "${cmd[@]}")"
 fi
 
-if command -v setsid >/dev/null 2>&1; then
-  setsid "${cmd[@]}" &
-  child_pid=$!
-else
-  "${cmd[@]}" &
-  child_pid=$!
-fi
+"${cmd[@]}" &
+child_pid=$!
 wait "${child_pid}"
 exit_code=$?
 
