@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run 60-pair x 3-combo baseline_2 campaign on feature_added_v3 datasets."""
+"""Run 60-pair x 2-combo baseline_2 campaign on feature_added_v4 datasets."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ RUN_DIR = EXP_DIR / "run"
 ARTIFACT_ROOT = RUN_DIR / "artifacts"
 
 TRACK = "baseline_2"
-DEFAULT_AXIS = "PAIR60_V3_LR10"
+DEFAULT_AXIS = "PAIR60_V4"
 
 LOG_ROOT = ARTIFACT_ROOT / "logs" / TRACK
 RESULT_ROOT = ARTIFACT_ROOT / "results" / TRACK
@@ -38,12 +38,12 @@ FMOE_P14_LOG_ROOT = ARTIFACT_ROOT / "logs" / "fmoe_n3" / "Final_all_datasets"
 BASELINE2_STAGEA_SUMMARY = ARTIFACT_ROOT / "logs" / TRACK / "ABCD_v2_lean" / "stages" / "stageA" / "summary.csv"
 
 DEFAULT_DATASETS = [
-    "KuaiRecLargeStrictPosV2_0.2",
-    "lastfm0.03",
     "beauty",
+    "retail_rocket",
+    "KuaiRecLargeStrictPosV2_0.2",
     "foursquare",
     "movielens1m",
-    "retail_rocket",
+    "lastfm0.03",
 ]
 
 MODEL_SPECS: List[Dict[str, str]] = [
@@ -108,6 +108,14 @@ MODEL_LR_BAND_RATIO: Dict[str, float] = {
     "fdsa": 5.0,
     "fame": 4.0,
     "featured_moe_n3": 4.0,
+}
+
+FAST_BUDGET_OVERRIDES: Dict[str, Dict[str, int]] = {
+    "lastfm0.03": {
+        "max_evals": 4,
+        "tune_epochs": 60,
+        "tune_patience": 6,
+    },
 }
 
 TRANSFORMER_MODELS = {
@@ -236,6 +244,16 @@ def safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except Exception:
         return int(default)
+
+
+def effective_budget(dataset: str, args: argparse.Namespace) -> Dict[str, int]:
+    budget = {
+        "max_evals": safe_int(getattr(args, "max_evals", 0), 6),
+        "tune_epochs": safe_int(getattr(args, "tune_epochs", 0), 70),
+        "tune_patience": safe_int(getattr(args, "tune_patience", 0), 6),
+    }
+    budget.update(FAST_BUDGET_OVERRIDES.get(str(dataset), {}))
+    return budget
 
 
 def hydra_literal(value: Any) -> str:
@@ -713,7 +731,7 @@ def compute_lr_bounds(dataset: str, model_option: str, combo_rank: int, params: 
     base_lo, base_hi = DATASET_LR_BASE[str(dataset)]
     center = math.sqrt(base_lo * base_hi)
     center *= float(MODEL_LR_MULT.get(str(model_option), 1.0))
-    center *= {1: 1.0, 2: 0.88, 3: 1.12}.get(int(combo_rank), 1.0)
+    center *= {1: 1.0, 2: 0.9}.get(int(combo_rank), 1.0)
 
     max_len = safe_int(params.get("max_len", 20), 20)
     if max_len >= 50:
@@ -764,8 +782,6 @@ def build_pair_combos(
     while len(top2) < 2:
         top2.append(top2[0])
 
-    explore_params = build_exploration_params(dataset, model_option, top2[0].params, top2[1].params)
-
     combos = [
         {
             "combo_id": "C1",
@@ -782,14 +798,6 @@ def build_pair_combos(
             "hparam_id": top2[1].hparam_id,
             "architecture_id": top2[1].architecture_id,
             "params": dict(top2[1].params),
-        },
-        {
-            "combo_id": "C3",
-            "combo_rank": 3,
-            "combo_source": f"explore_from:{top2[0].source}",
-            "hparam_id": top2[0].hparam_id,
-            "architecture_id": top2[0].architecture_id,
-            "params": dict(explore_params),
         },
     ]
 
@@ -1269,6 +1277,7 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
     dataset = str(row["dataset"])
     model_option = str(row["model_option"])
     params = json.loads(str(row["params_json"]))
+    budget = effective_budget(dataset, args)
 
     python_bin = os.environ.get("RUN_PYTHON_BIN", "/venv/FMoE/bin/python")
     cmd = [
@@ -1277,11 +1286,11 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
         "--config-name",
         dataset_config_name(dataset),
         "--max-evals",
-        str(int(args.max_evals)),
+        str(int(budget["max_evals"])),
         "--tune-epochs",
-        str(int(args.tune_epochs)),
+        str(int(budget["tune_epochs"])),
         "--tune-patience",
-        str(int(args.tune_patience)),
+        str(int(budget["tune_patience"])),
         "--search-algo",
         str(args.search_algo),
         "--seed",
@@ -1295,7 +1304,7 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
         f"model={model_option}",
         f"dataset={dataset}",
         "eval_mode=session_fixed",
-        "feature_mode=full_v3",
+        "feature_mode=full_v4",
         f"gpu_id={gpu_id}",
         "log_wandb=false",
         "show_progress=false",
@@ -1503,10 +1512,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seeds", type=str, default="1")
     parser.add_argument("--runtime-seed-base", type=int, default=1)
 
-    parser.add_argument("--max-evals", type=int, default=10)
-    parser.add_argument("--tune-epochs", type=int, default=100)
-    parser.add_argument("--tune-patience", type=int, default=10)
-    parser.add_argument("--search-algo", type=str, default="tpe")
+    parser.add_argument("--max-evals", type=int, default=6)
+    parser.add_argument("--tune-epochs", type=int, default=70)
+    parser.add_argument("--tune-patience", type=int, default=6)
+    parser.add_argument("--search-algo", type=str, default="random")
 
     parser.add_argument("--resume-from-logs", action="store_true")
     parser.add_argument("--max-runs", type=int, default=0)

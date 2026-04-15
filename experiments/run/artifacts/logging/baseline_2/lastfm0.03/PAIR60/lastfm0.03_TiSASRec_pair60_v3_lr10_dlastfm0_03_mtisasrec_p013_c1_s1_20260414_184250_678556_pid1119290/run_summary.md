@@ -5,9 +5,9 @@
 - run_group: baseline_2
 - run_axis: pair60_v3_lr10
 - run_phase: PAIR60_V3_LR10_DLASTFM0_03_MTISASREC_P013_C1_S1
-- best_mrr@20: 0.3018
-- test_mrr@20: 0.2988
-- test_hr@10: 0.3654
+- best_mrr@20: 0.3019
+- test_mrr@20: 0.2986
+- test_hr@10: 0.3637
 
 ## Artifacts
 
