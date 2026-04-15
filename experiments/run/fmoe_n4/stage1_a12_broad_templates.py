@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""FMoE_N4: Stage1-only broad A12 tuning with 8/16 discrete templates.
+"""FMoE_N4: Stage1-only broad A12 tuning with 8/16 lightweight templates.
 
-Default dataset is KuaiRec; templates sweep diverse capacity anchors and
-search spaces (lr, dim, expert_scale, max_len, dropouts, scheduler), while
-keeping A12 structure and only the core aux terms:
+Default dataset is KuaiRec; templates prioritize fast lr-centric tuning while
+keeping A12 structure fixed. The template bank is biased toward v3 A12 results:
+most runs stay at len 20, keep lr in the 1e-4 to low-1e-3 band, and avoid the
+len 40/50 or 2.7e-3 regimes that were repeatedly unstable or OOM-prone.
+Only the core aux terms remain active:
 - route_consistency_lambda
 - z_loss_lambda
 """
@@ -68,7 +70,7 @@ def _dedupe_keep_order(values: Iterable[Any]) -> list[Any]:
 
 
 def _validate_session_fixed_files(dataset: str) -> None:
-    ds_dir = REPO_ROOT_REAL / "Datasets" / "processed" / "feature_added_v3" / dataset
+    ds_dir = REPO_ROOT_REAL / "Datasets" / "processed" / "feature_added_v4" / dataset
     required = [
         ds_dir / f"{dataset}.train.inter",
         ds_dir / f"{dataset}.valid.inter",
@@ -86,17 +88,53 @@ def _anchor_cfg(hid: str) -> Dict[str, Any]:
 def _hidden_choices(anchor: str, mode: str) -> list[float]:
     center = float(_anchor_cfg(anchor)["fixed_hidden_dropout_prob"])
     if mode == "low":
-        values = [max(0.05, center - 0.05), max(0.06, center - 0.02), center]
+        values = [max(0.06, center - 0.02), center]
     elif mode == "high":
-        values = [center, min(0.22, center + 0.03), min(0.26, center + 0.06)]
+        values = [center, min(0.22, center + 0.03)]
     else:
-        values = [max(0.05, center - 0.03), center, min(0.24, center + 0.03)]
+        values = [max(0.07, center - 0.02), center]
     return _dedupe_keep_order(round(float(v), 4) for v in values)
 
 
 def _weight_decay_choices(anchor: str, scales: list[float]) -> list[float]:
     base_wd = float(_anchor_cfg(anchor)["fixed_weight_decay"])
     return _dedupe_keep_order(round(base_wd * float(scale), 12) for scale in scales)
+
+
+def _choice_spec(values: Iterable[Any]) -> Dict[str, Any]:
+    return {"type": "choice", "values": list(values)}
+
+
+def _loguniform_spec(low: float, high: float) -> Dict[str, Any]:
+    return {"type": "loguniform", "values": [float(low), float(high)]}
+
+
+def _template_batches(template: Dict[str, Any], fixed_values: Dict[str, Any], args: argparse.Namespace) -> tuple[int, int, int]:
+    train_batch = int(args.batch_size)
+    eval_batch = int(args.eval_batch_size)
+    max_evals = int(args.max_evals)
+
+    max_len = int(template.get("len", fixed_values.get("MAX_ITEM_LIST_LENGTH", 20)))
+    d_feat = int(template.get("d_feat", fixed_values.get("d_feat_emb", 16)))
+    expert_scale = int(template.get("expert", fixed_values.get("expert_scale", 3)))
+
+    heavy_score = 0
+    if max_len >= 30:
+        heavy_score += 2
+    elif max_len <= 15:
+        heavy_score -= 1
+    if d_feat >= 20:
+        heavy_score += 1
+    if expert_scale >= 4:
+        heavy_score += 1
+
+    if heavy_score >= 3:
+        return 2560, 4096, min(max_evals, 8)
+    if heavy_score >= 1:
+        return 3072, 4096, min(max_evals, 9)
+    if heavy_score <= -1:
+        return 5120, 6144, max_evals
+    return train_batch, eval_batch, max_evals
 
 
 def _build_overrides(cons_lambda: float, z_lambda: float, family_drop: float, feature_drop: float) -> Dict[str, Any]:
@@ -143,25 +181,25 @@ def _build_overrides(cons_lambda: float, z_lambda: float, family_drop: float, fe
 
 
 def _template_bank_16() -> list[Dict[str, Any]]:
-    # Diverse absolute templates (not only anchor ratios):
-    # mix capacity anchor, lambda level, sequence length, dim/expert focus, and regularization shape.
+    # First 8: conservative follow-ups around the best v3 A12 regions.
+    # Last 8: exploratory variants that still stay under the obvious OOM zones.
     return [
-        {"id": "T01_balanced_h7", "anchor": "H7", "lambda": (8e-4, 2e-4), "lr": [2.5e-4, 5e-4, 9e-4], "len": [20, 30, 40], "d_feat": [12, 16], "expert": [3, 4], "fdrop": [0.02, 0.04], "xdrop": [0.0, 0.02], "heads": [4], "attn": [0.08, 0.10]},
-        {"id": "T02_capacity_h14", "anchor": "H14", "lambda": (8e-4, 2e-4), "lr": [1.5e-4, 3.5e-4, 7e-4], "len": [30, 40, 50], "d_feat": [16, 24], "expert": [4], "fdrop": [0.02, 0.04], "xdrop": [0.0, 0.02], "heads": [4], "attn": [0.08, 0.10]},
-        {"id": "T03_regularized_h2", "anchor": "H2", "lambda": (1.2e-3, 3e-4), "lr": [3.5e-4, 8e-4, 1.6e-3], "len": [20, 30], "d_feat": [8, 12], "expert": [2, 3], "fdrop": [0.04, 0.06], "xdrop": [0.02, 0.05], "heads": [2, 4], "attn": [0.10, 0.14]},
-        {"id": "T04_longctx_h10", "anchor": "H10", "lambda": (8e-4, 2e-4), "lr": [2.2e-4, 5e-4, 1.1e-3], "len": [40, 50], "d_feat": [12, 16], "expert": [3, 4], "fdrop": [0.02, 0.04], "xdrop": [0.0, 0.02], "heads": [4], "attn": [0.08, 0.10]},
-        {"id": "T05_lowaux_h1", "anchor": "H1", "lambda": (2e-4, 5e-5), "lr": [3.5e-4, 8e-4, 1.6e-3], "len": [20, 30, 40], "d_feat": [8, 12], "expert": [2, 3], "fdrop": [0.03, 0.05], "xdrop": [0.02, 0.05], "heads": [2, 4], "attn": [0.10, 0.15]},
-        {"id": "T06_midaux_h3", "anchor": "H3", "lambda": (5e-4, 1e-4), "lr": [2.5e-4, 5e-4, 9e-4], "len": [20, 30, 40], "d_feat": [12, 16], "expert": [3], "fdrop": [0.03, 0.05], "xdrop": [0.0, 0.02], "heads": [4], "attn": [0.08, 0.10]},
-        {"id": "T07_dimwide_h6", "anchor": "H6", "lambda": (8e-4, 2e-4), "lr": [2.2e-4, 5e-4, 1.1e-3], "len": [20, 30], "d_feat": [8, 12, 16], "expert": [2, 3, 4], "fdrop": [0.03, 0.05], "xdrop": [0.0, 0.02], "heads": [2, 4], "attn": [0.08, 0.12]},
-        {"id": "T08_highaux_h8", "anchor": "H8", "lambda": (1.8e-3, 5e-4), "lr": [1.8e-4, 4e-4, 8e-4], "len": [20, 30], "d_feat": [8, 12], "expert": [2, 3], "fdrop": [0.05, 0.07], "xdrop": [0.02, 0.05], "heads": [2, 4], "attn": [0.12, 0.16]},
-        {"id": "T09_bigdim_h14", "anchor": "H14", "lambda": (5e-4, 1e-4), "lr": [1.5e-4, 3.5e-4, 7e-4], "len": [30, 40], "d_feat": [24, 32], "expert": [4, 5], "fdrop": [0.02, 0.04], "xdrop": [0.0, 0.02], "heads": [4], "attn": [0.08, 0.10]},
-        {"id": "T10_smallsparse_h12", "anchor": "H12", "lambda": (8e-4, 2e-4), "lr": [3.5e-4, 8e-4, 1.6e-3], "len": [20, 30], "d_feat": [8, 12], "expert": [2, 3], "fdrop": [0.04, 0.06], "xdrop": [0.02, 0.05], "heads": [2, 4], "attn": [0.10, 0.14]},
-        {"id": "T11_steady_h5", "anchor": "H5", "lambda": (8e-4, 2e-4), "lr": [2.2e-4, 5e-4, 1.1e-3], "len": [20, 30, 40], "d_feat": [12, 16], "expert": [3, 4], "fdrop": [0.02, 0.04], "xdrop": [0.0, 0.02], "heads": [4], "attn": [0.08, 0.10]},
-        {"id": "T12_fastlr_h2", "anchor": "H2", "lambda": (5e-4, 1e-4), "lr": [5e-4, 1.2e-3, 2.2e-3], "len": [20, 30], "d_feat": [8, 12], "expert": [2, 3], "fdrop": [0.03, 0.05], "xdrop": [0.02, 0.05], "heads": [2, 4], "attn": [0.10, 0.14]},
-        {"id": "T13_lowlr_h10", "anchor": "H10", "lambda": (8e-4, 2e-4), "lr": [8e-5, 1.8e-4, 4e-4], "len": [30, 40, 50], "d_feat": [12, 16], "expert": [3, 4], "fdrop": [0.02, 0.04], "xdrop": [0.0, 0.02], "heads": [4], "attn": [0.08, 0.10]},
-        {"id": "T14_noisy_h9", "anchor": "H9", "lambda": (1.2e-3, 3e-4), "lr": [1.8e-4, 4e-4, 8e-4], "len": [20, 30], "d_feat": [8, 12], "expert": [2, 3], "fdrop": [0.06, 0.08], "xdrop": [0.03, 0.06], "heads": [2, 4], "attn": [0.12, 0.16]},
-        {"id": "T15_depthcap_h11", "anchor": "H11", "lambda": (8e-4, 2e-4), "lr": [1.5e-4, 3.5e-4, 7e-4], "len": [20, 30, 40], "d_feat": [16, 24], "expert": [4, 5], "fdrop": [0.02, 0.04], "xdrop": [0.0, 0.02], "heads": [4], "attn": [0.08, 0.10]},
-        {"id": "T16_widerexpert_h7", "anchor": "H7", "lambda": (5e-4, 1e-4), "lr": [2.5e-4, 5e-4, 9e-4], "len": [20, 30, 40], "d_feat": [12, 16], "expert": [3, 4, 5], "fdrop": [0.02, 0.04], "xdrop": [0.0, 0.02], "heads": [2, 4], "attn": [0.08, 0.12]},
+        {"id": "T01_lrlo_h7", "anchor": "H7", "lambda": (5e-4, 1e-4), "lr_bounds": (1.0e-4, 4.0e-4), "len": 20, "d_feat": 16, "expert": 3, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "balanced", "attn": [0.08, 0.10]},
+        {"id": "T02_lrmid_h7", "anchor": "H7", "lambda": (5e-4, 1e-4), "lr_bounds": (2.2e-4, 8.5e-4), "len": 20, "d_feat": 16, "expert": 3, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "balanced", "attn": [0.08, 0.10]},
+        {"id": "T03_lrhi_h7", "anchor": "H7", "lambda": (5e-4, 1e-4), "lr_bounds": (4.5e-4, 1.6e-3), "len": 20, "d_feat": 16, "expert": 3, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "balanced", "attn": [0.08, 0.10]},
+        {"id": "T04_lrwide_h7", "anchor": "H7", "lambda": (5e-4, 1e-4), "lr_bounds": (1.5e-4, 1.35e-3), "len": 20, "d_feat": 16, "expert": 3, "wd_scales": [1.0, 2.0], "hidden_mode": "balanced", "attn": [0.08, 0.10]},
+        {"id": "T05_capacity_h14_lo", "anchor": "H14", "lambda": (5e-4, 1e-4), "lr_bounds": (1.5e-4, 7.5e-4), "len": 20, "d_feat": 16, "expert": 3, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "low", "attn": [0.06, 0.08]},
+        {"id": "T06_capacity_h14_hi", "anchor": "H14", "lambda": (5e-4, 1e-4), "lr_bounds": (3.0e-4, 1.25e-3), "len": 20, "d_feat": 20, "expert": 4, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "low", "attn": [0.06, 0.08]},
+        {"id": "T07_reg_h2_lo", "anchor": "H2", "lambda": (8e-4, 2e-4), "lr_bounds": (1.5e-4, 8.0e-4), "len": 20, "d_feat": 16, "expert": 3, "wd_scales": [1.0, 2.0], "hidden_mode": "high", "attn": [0.10, 0.12]},
+        {"id": "T08_reg_h2_mid", "anchor": "H2", "lambda": (8e-4, 2e-4), "lr_bounds": (3.0e-4, 1.2e-3), "len": 20, "d_feat": 16, "expert": 3, "wd_scales": [1.0, 2.0], "hidden_mode": "high", "attn": [0.10, 0.12]},
+        {"id": "T09_feat24_h7", "anchor": "H7", "lambda": (5e-4, 1e-4), "lr_bounds": (2.5e-4, 1.1e-3), "len": 20, "d_feat": 24, "expert": 3, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "balanced", "attn": [0.08, 0.10]},
+        {"id": "T10_expert2_h6", "anchor": "H6", "lambda": (5e-4, 1e-4), "lr_bounds": (2.5e-4, 1.1e-3), "len": 20, "d_feat": 16, "expert": 2, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "balanced", "attn": [0.08, 0.10]},
+        {"id": "T11_expert4_h11", "anchor": "H11", "lambda": (8e-4, 2e-4), "lr_bounds": (3.5e-4, 1.35e-3), "len": 20, "d_feat": 20, "expert": 4, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "balanced", "attn": [0.08, 0.10]},
+        {"id": "T12_len30_h10", "anchor": "H10", "lambda": (5e-4, 1e-4), "lr_bounds": (2.0e-4, 9.0e-4), "len": 30, "d_feat": 16, "expert": 3, "wd_scales": [0.5, 1.0], "hidden_mode": "low", "attn": [0.06, 0.08]},
+        {"id": "T13_len25_h5", "anchor": "H5", "lambda": (5e-4, 1e-4), "lr_bounds": (1.8e-4, 7.0e-4), "len": 25, "d_feat": 16, "expert": 3, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "low", "attn": [0.06, 0.08]},
+        {"id": "T14_compact_h3", "anchor": "H3", "lambda": (8e-4, 2e-4), "lr_bounds": (2.2e-4, 1.0e-3), "len": 20, "d_feat": 12, "expert": 3, "wd_scales": [1.0, 2.0, 4.0], "hidden_mode": "high", "attn": [0.10, 0.12]},
+        {"id": "T15_small_h8", "anchor": "H8", "lambda": (8e-4, 2e-4), "lr_bounds": (1.8e-4, 8.0e-4), "len": 20, "d_feat": 16, "expert": 3, "wd_scales": [1.0, 2.0, 4.0], "hidden_mode": "high", "attn": [0.10, 0.12]},
+        {"id": "T16_fastwide_h11", "anchor": "H11", "lambda": (8e-4, 2e-4), "lr_bounds": (5.0e-4, 1.8e-3), "len": 20, "d_feat": 16, "expert": 2, "wd_scales": [0.5, 1.0, 2.0], "hidden_mode": "balanced", "attn": [0.08, 0.10]},
     ]
 
 
@@ -169,8 +207,8 @@ def _select_templates(n_templates: int) -> list[Dict[str, Any]]:
     bank = _template_bank_16()
     if int(n_templates) == 16:
         return bank
-    # 8-template subset covering capacity/regularization/lambda extremes.
-    keep = {"T01_balanced_h7", "T02_capacity_h14", "T03_regularized_h2", "T04_longctx_h10", "T05_lowaux_h1", "T08_highaux_h8", "T09_bigdim_h14", "T12_fastlr_h2"}
+    # 8-template subset: 4 conservative + 4 exploratory.
+    keep = {"T01_lrlo_h7", "T03_lrhi_h7", "T05_capacity_h14_lo", "T07_reg_h2_lo", "T09_feat24_h7", "T11_expert4_h11", "T12_len30_h10", "T15_small_h8"}
     out = [t for t in bank if str(t["id"]) in keep]
     if len(out) != 8:
         raise RuntimeError("template subset construction failed")
@@ -183,39 +221,39 @@ def _row(dataset: str, template: Dict[str, Any], seed_id: int, runtime_seed: int
     template_id = str(template["id"])
     cons_lambda, z_lambda = template["lambda"]
 
-    family_drop_default = float(template["fdrop"][0])
-    feature_drop_default = float(template["xdrop"][0])
+    family_drop_default = 0.02 if str(template.get("hidden_mode", "balanced")) != "high" else 0.04
+    feature_drop_default = 0.0
     overrides = _build_overrides(cons_lambda, z_lambda, family_drop_default, feature_drop_default)
 
-    hidden_mode = "balanced"
-    if max(float(v) for v in template["fdrop"]) >= 0.06:
-        hidden_mode = "high"
-    elif max(float(v) for v in template["fdrop"]) <= 0.04:
-        hidden_mode = "low"
+    hidden_mode = str(template.get("hidden_mode", "balanced"))
 
     run_id = f"S1_{sanitize_token(dataset, upper=True)}_{sanitize_token(template_id, upper=True)}_S{int(seed_id)}"
     run_phase = f"{PHASE_ID}_{run_id}"
+
+    max_item_list_length = int(template["len"]) if "len" in template else int(cfg.get("MAX_ITEM_LIST_LENGTH", 20))
+    d_feat_emb = int(template["d_feat"]) if "d_feat" in template else int(cfg.get("d_feat_emb", 16))
+    expert_scale = int(template["expert"]) if "expert" in template else int(cfg.get("expert_scale", 3))
 
     fixed_values: Dict[str, Any] = {
         "embedding_size": int(cfg["embedding_size"]),
         "d_ff": int(cfg["d_ff"]),
         "d_expert_hidden": int(cfg["d_expert_hidden"]),
         "d_router_hidden": int(cfg["d_router_hidden"]),
+        "MAX_ITEM_LIST_LENGTH": max_item_list_length,
+        "d_feat_emb": d_feat_emb,
+        "expert_scale": expert_scale,
         "lr_scheduler_type": "warmup_cosine",
         "num_heads": 4,
     }
 
-    search_space: Dict[str, list[Any]] = {
-        "learning_rate": [float(v) for v in template["lr"]],
-        "hidden_dropout_prob": _hidden_choices(anchor, hidden_mode),
-        "MAX_ITEM_LIST_LENGTH": [int(v) for v in template["len"]],
-        "d_feat_emb": [int(v) for v in template["d_feat"]],
-        "expert_scale": [int(v) for v in template["expert"]],
-        "stage_family_dropout_prob": [_all_stage_map(float(v)) for v in template["fdrop"]],
-        "stage_feature_dropout_prob": [_all_stage_map(float(v)) for v in template["xdrop"]],
-        "attn_dropout_prob": [float(v) for v in template["attn"]],
-        "num_heads": [int(v) for v in template["heads"]],
-        "weight_decay": _weight_decay_choices(anchor, [0.5, 1.0, 2.0]),
+    train_batch_size, eval_batch_size, max_evals = _template_batches(template, fixed_values, args)
+
+    lr_low, lr_high = template["lr_bounds"]
+    search_space: Dict[str, Any] = {
+        "learning_rate": _loguniform_spec(float(lr_low), float(lr_high)),
+        "hidden_dropout_prob": _choice_spec(_hidden_choices(anchor, hidden_mode)),
+        "attn_dropout_prob": _choice_spec(float(v) for v in template["attn"]),
+        "weight_decay": _choice_spec(_weight_decay_choices(anchor, list(template.get("wd_scales", [0.5, 1.0, 2.0])))),
     }
 
     return {
@@ -251,9 +289,9 @@ def _row(dataset: str, template: Dict[str, Any], seed_id: int, runtime_seed: int
         "fixed_values": fixed_values,
         "search_space": search_space,
         "overrides": overrides,
-        "train_batch_size": int(args.batch_size),
-        "eval_batch_size": int(args.eval_batch_size),
-        "max_evals": int(args.max_evals),
+        "train_batch_size": int(train_batch_size),
+        "eval_batch_size": int(eval_batch_size),
+        "max_evals": int(max_evals),
         "tune_epochs": int(args.tune_epochs),
         "tune_patience": int(args.tune_patience),
     }
@@ -403,7 +441,12 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
         "model=featured_moe_n3_tune",
         f"dataset={row['dataset']}",
         "eval_mode=session_fixed",
-        "feature_mode=full_v3",
+        "feature_mode=full_v4",
+        "++eval_sampling.mode=full",
+        "++eval_sampling.auto_full_threshold=999999999",
+        "++special_logging=true",
+        "++exclude_unseen_target_from_main_eval=true",
+        "++log_unseen_target_metrics=true",
         f"gpu_id={gpu_id}",
         "log_wandb=false",
         "enable_tf32=true",
@@ -420,7 +463,7 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
         f"++fmoe_phase={hydra_literal(PHASE_ID)}",
         f"train_batch_size={int(row['train_batch_size'])}",
         f"eval_batch_size={int(row['eval_batch_size'])}",
-        f"++phase_run_type={hydra_literal('stage1')}",
+        f"++phase_run_type={hydra_literal(str(row.get('tuning_stage', row.get('stage', 'stage1'))))}",
         f"++phase_axis_id={hydra_literal(AXIS_ID)}",
         f"++phase_axis_desc={hydra_literal(AXIS_DESC)}",
         f"++phase_setting_id={hydra_literal(str(row['family_id']))}",
@@ -434,25 +477,31 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
         cmd.append(f"++{key}={hydra_literal(value)}")
     for key, value in fixed_values.items():
         cmd.append(f"++{key}={hydra_literal(value)}")
-    for key, values in search_space.items():
-        cmd.append(f"++search.{key}={hydra_literal(list(values))}")
-        cmd.append(f"++search_space_type_overrides.{key}=choice")
+    for key, spec in search_space.items():
+        if isinstance(spec, dict):
+            values = list(spec.get("values", []))
+            search_type = str(spec.get("type", "choice"))
+        else:
+            values = list(spec)
+            search_type = "choice"
+        cmd.append(f"++search.{key}={hydra_literal(values)}")
+        cmd.append(f"++search_space_type_overrides.{key}={search_type}")
     return cmd
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="FMoE_N4 Stage1-only A12 broad template tuning")
     parser.add_argument("--datasets", default=",".join(DEFAULT_DATASETS), help="CSV datasets (default: KuaiRec)")
-    parser.add_argument("--template-count", type=int, choices=[8, 16], default=8)
-    parser.add_argument("--gpus", default="0,1,2,3")
+    parser.add_argument("--template-count", type=int, choices=[8, 16], default=16)
+    parser.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
     parser.add_argument("--seeds", default="1")
     parser.add_argument("--seed-base", type=int, default=260000)
     parser.add_argument("--batch-size", type=int, default=4096)
     parser.add_argument("--eval-batch-size", type=int, default=4096)
-    parser.add_argument("--search-algo", choices=["random", "tpe"], default="random")
-    parser.add_argument("--max-evals", type=int, default=8)
-    parser.add_argument("--tune-epochs", type=int, default=25)
-    parser.add_argument("--tune-patience", type=int, default=3)
+    parser.add_argument("--search-algo", choices=["random", "tpe"], default="tpe")
+    parser.add_argument("--max-evals", type=int, default=10)
+    parser.add_argument("--tune-epochs", type=int, default=50)
+    parser.add_argument("--tune-patience", type=int, default=5)
     parser.add_argument("--manifest-out", default="")
     parser.add_argument("--resume-from-logs", action="store_true", default=True)
     parser.add_argument("--no-resume-from-logs", dest="resume_from_logs", action="store_false")

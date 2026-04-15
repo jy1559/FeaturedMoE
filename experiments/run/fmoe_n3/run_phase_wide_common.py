@@ -637,6 +637,7 @@ def launch_wide_rows(
             )
             env = dict(os.environ)
             env["HYPEROPT_RESULTS_DIR"] = str(ARTIFACT_ROOT / "results")
+            env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
             with lp.open("a", encoding="utf-8") as fh:
                 proc = subprocess.Popen(cmd, cwd=EXP_DIR, env=env, stdout=fh, stderr=subprocess.STDOUT)
             start_offset = 0

@@ -4,82 +4,14 @@
   "stage": "stage1",
   "phase_id": "P4S1",
   "phase_name": "FMOE_N4_STAGE1_A12_BROAD",
-  "generated_at": "2026-04-15T01:04:02.621196Z",
+  "generated_at": "2026-04-15T06:52:06.420741Z",
   "run_count": 2,
   "datasets": [
     "KuaiRecLargeStrictPosV2_0.2"
   ],
   "rows": [
     {
-      "selection_score": "",
-      "search_space": {
-        "learning_rate": [
-          0.00025,
-          0.0005,
-          0.0009
-        ],
-        "hidden_dropout_prob": [
-          0.1,
-          0.13,
-          0.15
-        ],
-        "MAX_ITEM_LIST_LENGTH": [
-          20,
-          30,
-          40
-        ],
-        "d_feat_emb": [
-          12,
-          16
-        ],
-        "expert_scale": [
-          3,
-          4
-        ],
-        "stage_family_dropout_prob": [
-          {
-            "macro": 0.02,
-            "mid": 0.02,
-            "micro": 0.02
-          },
-          {
-            "macro": 0.04,
-            "mid": 0.04,
-            "micro": 0.04
-          }
-        ],
-        "stage_feature_dropout_prob": [
-          {
-            "macro": 0.0,
-            "mid": 0.0,
-            "micro": 0.0
-          },
-          {
-            "macro": 0.02,
-            "mid": 0.02,
-            "micro": 0.02
-          }
-        ],
-        "attn_dropout_prob": [
-          0.08,
-          0.1
-        ],
-        "num_heads": [
-          4
-        ],
-        "weight_decay": [
-          5e-07,
-          1e-06,
-          2e-06
-        ]
-      },
-      "seed_id": 1,
-      "runtime_seed": 260000,
-      "axis_id": "N4S1A12",
-      "architecture_key": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
-      "setting_key": "T01_balanced_h7",
-      "architecture_name": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
-      "family_group": "template",
+      "dataset": "KuaiRecLargeStrictPosV2_0.2",
       "overrides": {
         "layer_layout": [
           "attn",
@@ -111,10 +43,10 @@
         "topk_scope_mode": "global_flat",
         "moe_top_k": 0,
         "balance_loss_lambda": 0.0,
-        "z_loss_lambda": 0.0002,
+        "z_loss_lambda": 0.0001,
         "gate_entropy_lambda": 0.0,
         "route_smoothness_lambda": 0.0,
-        "route_consistency_lambda": 0.0008,
+        "route_consistency_lambda": 0.0005,
         "route_sharpness_lambda": 0.0,
         "route_monopoly_lambda": 0.0,
         "route_monopoly_tau": 0.25,
@@ -255,110 +187,84 @@
           "micro": "token"
         }
       },
-      "family_id": "T01_balanced_h7",
+      "tuning_stage": "stage1",
+      "stage_group": "stage1",
+      "exp_brief": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
+      "search_space": {
+        "learning_rate": {
+          "type": "loguniform",
+          "values": [
+            0.0001,
+            0.0004
+          ]
+        },
+        "hidden_dropout_prob": {
+          "type": "choice",
+          "values": [
+            0.13,
+            0.15
+          ]
+        },
+        "attn_dropout_prob": {
+          "type": "choice",
+          "values": [
+            0.08,
+            0.1
+          ]
+        },
+        "weight_decay": {
+          "type": "choice",
+          "values": [
+            5e-07,
+            1e-06,
+            2e-06
+          ]
+        }
+      },
+      "axis_id": "N4S1A12",
+      "template_count": 8,
+      "search_algo": "tpe",
+      "setting_key": "T01_lrlo_h7",
+      "selected_from_stage": "manual_template_bank",
+      "family_group": "template",
+      "aux_z_loss_lambda": 0.0001,
       "architecture_id": "A12",
+      "axis_desc": "stage1_a12_broad_templates",
+      "seed_id": 1,
+      "aux_route_consistency_lambda": 0.0005,
+      "stage": "stage1",
+      "setting_desc": "T01_lrlo_h7",
+      "train_batch_size": 4096,
+      "run_phase": "P4S1_S1_KUAIRECLARGESTRICTPOSV2_0_2_T01_LRLO_H7_S1",
+      "phase_id": "P4S1",
+      "max_evals": 10,
+      "variant_id": "broad",
+      "run_id": "S1_KUAIRECLARGESTRICTPOSV2_0_2_T01_LRLO_H7_S1",
+      "setting_id": "T01_lrlo_h7",
+      "family_id": "T01_lrlo_h7",
+      "tune_epochs": 50,
+      "eval_batch_size": 4096,
+      "selection_score": "",
+      "source_family_id": "T01_lrlo_h7",
+      "architecture_name": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
+      "runtime_seed": 260000,
+      "capacity_anchor": "H7",
       "fixed_values": {
         "embedding_size": 160,
         "d_ff": 320,
         "d_expert_hidden": 160,
         "d_router_hidden": 80,
+        "MAX_ITEM_LIST_LENGTH": 20,
+        "d_feat_emb": 16,
+        "expert_scale": 3,
         "lr_scheduler_type": "warmup_cosine",
         "num_heads": 4
       },
-      "phase_id": "P4S1",
-      "aux_z_loss_lambda": 0.0002,
-      "source_family_id": "T01_balanced_h7",
-      "eval_batch_size": 4096,
-      "setting_desc": "T01_balanced_h7",
-      "tune_patience": 3,
-      "stage_group": "stage1",
-      "axis_desc": "stage1_a12_broad_templates",
-      "variant_id": "broad",
-      "max_evals": 8,
-      "tuning_stage": "stage1",
-      "run_phase": "P4S1_S1_KUAIRECLARGESTRICTPOSV2_0_2_T01_BALANCED_H7_S1",
-      "exp_brief": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
-      "stage": "stage1",
-      "template_count": 8,
-      "run_id": "S1_KUAIRECLARGESTRICTPOSV2_0_2_T01_BALANCED_H7_S1",
-      "setting_id": "T01_balanced_h7",
-      "train_batch_size": 4096,
-      "dataset": "KuaiRecLargeStrictPosV2_0.2",
-      "search_algo": "random",
-      "selected_from_stage": "manual_template_bank",
-      "capacity_anchor": "H7",
-      "aux_route_consistency_lambda": 0.0008,
-      "tune_epochs": 25
+      "tune_patience": 5,
+      "architecture_key": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5"
     },
     {
-      "selection_score": "",
-      "search_space": {
-        "learning_rate": [
-          0.00015,
-          0.00035,
-          0.0007
-        ],
-        "hidden_dropout_prob": [
-          0.05,
-          0.08,
-          0.1
-        ],
-        "MAX_ITEM_LIST_LENGTH": [
-          30,
-          40,
-          50
-        ],
-        "d_feat_emb": [
-          16,
-          24
-        ],
-        "expert_scale": [
-          4
-        ],
-        "stage_family_dropout_prob": [
-          {
-            "macro": 0.02,
-            "mid": 0.02,
-            "micro": 0.02
-          },
-          {
-            "macro": 0.04,
-            "mid": 0.04,
-            "micro": 0.04
-          }
-        ],
-        "stage_feature_dropout_prob": [
-          {
-            "macro": 0.0,
-            "mid": 0.0,
-            "micro": 0.0
-          },
-          {
-            "macro": 0.02,
-            "mid": 0.02,
-            "micro": 0.02
-          }
-        ],
-        "attn_dropout_prob": [
-          0.08,
-          0.1
-        ],
-        "num_heads": [
-          4
-        ],
-        "weight_decay": [
-          2.5e-07,
-          5e-07,
-          1e-06
-        ]
-      },
-      "seed_id": 1,
-      "runtime_seed": 260001,
-      "axis_id": "N4S1A12",
-      "architecture_key": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
-      "setting_key": "T02_capacity_h14",
-      "architecture_name": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
-      "family_group": "template",
+      "dataset": "KuaiRecLargeStrictPosV2_0.2",
       "overrides": {
         "layer_layout": [
           "attn",
@@ -390,10 +296,10 @@
         "topk_scope_mode": "global_flat",
         "moe_top_k": 0,
         "balance_loss_lambda": 0.0,
-        "z_loss_lambda": 0.0002,
+        "z_loss_lambda": 0.0001,
         "gate_entropy_lambda": 0.0,
         "route_smoothness_lambda": 0.0,
-        "route_consistency_lambda": 0.0008,
+        "route_consistency_lambda": 0.0005,
         "route_sharpness_lambda": 0.0,
         "route_monopoly_lambda": 0.0,
         "route_monopoly_tau": 0.25,
@@ -534,40 +440,81 @@
           "micro": "token"
         }
       },
-      "family_id": "T02_capacity_h14",
+      "tuning_stage": "stage1",
+      "stage_group": "stage1",
+      "exp_brief": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
+      "search_space": {
+        "learning_rate": {
+          "type": "loguniform",
+          "values": [
+            0.00045,
+            0.0016
+          ]
+        },
+        "hidden_dropout_prob": {
+          "type": "choice",
+          "values": [
+            0.13,
+            0.15
+          ]
+        },
+        "attn_dropout_prob": {
+          "type": "choice",
+          "values": [
+            0.08,
+            0.1
+          ]
+        },
+        "weight_decay": {
+          "type": "choice",
+          "values": [
+            5e-07,
+            1e-06,
+            2e-06
+          ]
+        }
+      },
+      "axis_id": "N4S1A12",
+      "template_count": 8,
+      "search_algo": "tpe",
+      "setting_key": "T03_lrhi_h7",
+      "selected_from_stage": "manual_template_bank",
+      "family_group": "template",
+      "aux_z_loss_lambda": 0.0001,
       "architecture_id": "A12",
+      "axis_desc": "stage1_a12_broad_templates",
+      "seed_id": 1,
+      "aux_route_consistency_lambda": 0.0005,
+      "stage": "stage1",
+      "setting_desc": "T03_lrhi_h7",
+      "train_batch_size": 4096,
+      "run_phase": "P4S1_S1_KUAIRECLARGESTRICTPOSV2_0_2_T03_LRHI_H7_S1",
+      "phase_id": "P4S1",
+      "max_evals": 10,
+      "variant_id": "broad",
+      "run_id": "S1_KUAIRECLARGESTRICTPOSV2_0_2_T03_LRHI_H7_S1",
+      "setting_id": "T03_lrhi_h7",
+      "family_id": "T03_lrhi_h7",
+      "tune_epochs": 50,
+      "eval_batch_size": 4096,
+      "selection_score": "",
+      "source_family_id": "T03_lrhi_h7",
+      "architecture_name": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
+      "runtime_seed": 260001,
+      "capacity_anchor": "H7",
       "fixed_values": {
-        "embedding_size": 256,
-        "d_ff": 512,
-        "d_expert_hidden": 256,
-        "d_router_hidden": 128,
+        "embedding_size": 160,
+        "d_ff": 320,
+        "d_expert_hidden": 160,
+        "d_router_hidden": 80,
+        "MAX_ITEM_LIST_LENGTH": 20,
+        "d_feat_emb": 16,
+        "expert_scale": 3,
         "lr_scheduler_type": "warmup_cosine",
         "num_heads": 4
       },
-      "phase_id": "P4S1",
-      "aux_z_loss_lambda": 0.0002,
-      "source_family_id": "T02_capacity_h14",
-      "eval_batch_size": 4096,
-      "setting_desc": "T02_capacity_h14",
-      "tune_patience": 3,
-      "stage_group": "stage1",
-      "axis_desc": "stage1_a12_broad_templates",
-      "variant_id": "broad",
-      "max_evals": 8,
-      "tuning_stage": "stage1",
-      "run_phase": "P4S1_S1_KUAIRECLARGESTRICTPOSV2_0_2_T02_CAPACITY_H14_S1",
-      "exp_brief": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5",
-      "stage": "stage1",
-      "template_count": 8,
-      "run_id": "S1_KUAIRECLARGESTRICTPOSV2_0_2_T02_CAPACITY_H14_S1",
-      "setting_id": "T02_capacity_h14",
-      "train_batch_size": 4096,
-      "dataset": "KuaiRecLargeStrictPosV2_0.2",
-      "search_algo": "random",
-      "selected_from_stage": "manual_template_bank",
-      "capacity_anchor": "H14",
-      "aux_route_consistency_lambda": 0.0008,
-      "tune_epochs": 25
+      "tune_patience": 5,
+      "architecture_key": "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5"
     }
   ]
 }
