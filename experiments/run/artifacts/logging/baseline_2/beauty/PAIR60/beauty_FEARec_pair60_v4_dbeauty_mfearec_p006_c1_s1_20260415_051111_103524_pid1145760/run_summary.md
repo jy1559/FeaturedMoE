@@ -5,8 +5,8 @@
 - run_group: baseline_2
 - run_axis: pair60_v4
 - run_phase: PAIR60_V4_DBEAUTY_MFEAREC_P006_C1_S1
-- best_mrr@20: 0.0802
-- test_mrr@20: 0.0531
+- best_mrr@20: 0.0841
+- test_mrr@20: 0.0496
 - test_hr@10: 0.1232
 
 ## Artifacts
