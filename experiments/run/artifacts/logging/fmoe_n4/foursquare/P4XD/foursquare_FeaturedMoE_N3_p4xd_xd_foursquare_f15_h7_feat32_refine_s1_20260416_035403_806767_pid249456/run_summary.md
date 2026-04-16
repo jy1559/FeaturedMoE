@@ -5,9 +5,9 @@
 - run_group: fmoe_n4
 - run_axis: crossdataset_a12_portfolio
 - run_phase: P4XD_XD_FOURSQUARE_F15_H7_FEAT32_REFINE_S1
-- best_mrr@20: 0.2012
-- test_mrr@20: 0.168
-- test_hr@10: 0.3153
+- best_mrr@20: 0.2013
+- test_mrr@20: 0.1689
+- test_hr@10: 0.3177
 
 ## Artifacts
 
