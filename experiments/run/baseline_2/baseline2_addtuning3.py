@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 EXP_DIR = REPO_ROOT / "experiments"
 ARTIFACT_ROOT = EXP_DIR / "run" / "artifacts"
 TRACK = "baseline_2"
-AXIS = "PAIR60_ADDTUNING3B"
+AXIS = "PAIR60_ADDTUNING3"
 
 RESULTS_ROOT = ARTIFACT_ROOT / "results" / TRACK
 OUTPUT_ROOT = ARTIFACT_ROOT / "logs" / TRACK / AXIS
@@ -37,7 +37,6 @@ DEFAULT_PATIENCE = 7
 SUMMARY_SOURCES = [
     *stage2.SUMMARY_SOURCES,
     ARTIFACT_ROOT / "logs" / TRACK / "PAIR60_ADDTUNING2" / "summary.csv",
-    ARTIFACT_ROOT / "logs" / TRACK / "PAIR60_ADDTUNING3" / "summary.csv",
 ]
 
 TARGETS = [
@@ -367,27 +366,54 @@ def build_search_block(
     search: dict[str, Any] = {}
 
     lr_lo, lr_hi, lr_center = stage1.center_lr(row, params, dataset, model)
-    lr_floor = max(2e-5, lr_lo * 0.55)
-    lr_ceil = min(2e-2, max(lr_hi * 1.5, lr_center * 2.3))
+    lr_floor = max(2e-4, lr_lo * 0.8, lr_center * 0.45)
+    lr_ceil = min(8e-3, max(lr_hi * 2.2, lr_center * 3.0, lr_floor * 3.5))
     if model in {"difsr", "fdsa"}:
-        if combo_kind in {"gate_large", "concat_large", "wide_attr"}:
-            lr_floor = max(8e-5, lr_center * 0.45)
-            lr_ceil = min(1.5e-3, lr_center * 1.8)
-        elif combo_kind in {"gate_mid", "concat_mid", "stable_short"}:
-            lr_floor = max(5e-5, lr_center * 0.35)
-            lr_ceil = min(1.2e-3, lr_center * 1.45)
+        if combo_kind in {"gate_large", "concat_large", "wide_attr", "wide_decay", "large_soft", "large_decay"}:
+            lr_floor = max(4e-4, lr_center * 0.75, lr_hi * 0.55)
+            lr_ceil = min(8e-3, max(lr_center * 6.0, lr_hi * 4.0, 3e-3))
+        elif combo_kind in {"gate_mid", "mid_soft", "mid_decay", "shallow_gate"}:
+            lr_floor = max(2.5e-4, lr_center * 0.55)
+            lr_ceil = min(6e-3, max(lr_center * 4.2, lr_hi * 2.8, 2e-3))
         else:
-            lr_floor = max(3e-5, lr_center * 0.22)
-            lr_ceil = min(1.6e-3, lr_center * 1.7)
+            lr_floor = max(2e-4, lr_center * 0.45)
+            lr_ceil = min(4e-3, max(lr_center * 3.0, lr_hi * 2.0, 1.6e-3))
     elif model == "bsarec":
-        lr_floor = max(4e-5, lr_center * 0.28)
-        lr_ceil = min(2.2e-3, lr_center * 1.9)
+        if combo_kind in {"wide_decay", "alpha_high", "large_soft", "large_decay"}:
+            lr_floor = max(3e-4, lr_center * 0.65)
+            lr_ceil = min(8e-3, max(lr_center * 5.0, lr_hi * 3.5, 2.5e-3))
+        else:
+            lr_floor = max(2e-4, lr_center * 0.5)
+            lr_ceil = min(5e-3, max(lr_center * 3.8, lr_hi * 2.4, 1.8e-3))
+    elif model == "fame":
+        if combo_kind in {"experts_high", "wide_decay", "large_soft", "large_decay"}:
+            lr_floor = max(3e-4, lr_center * 0.65)
+            lr_ceil = min(8e-3, max(lr_center * 4.8, lr_hi * 3.0, 2.4e-3))
+        else:
+            lr_floor = max(2e-4, lr_center * 0.5)
+            lr_ceil = min(5e-3, max(lr_center * 3.2, lr_hi * 2.2, 1.8e-3))
     elif model == "gru4rec":
-        lr_floor = max(3e-5, lr_center * 0.22)
-        lr_ceil = min(3e-3, lr_center * 2.4)
+        if combo_kind in {"gru_mid", "gru_deep", "large_soft", "large_decay", "wide_decay"}:
+            lr_floor = max(3e-4, lr_center * 0.6)
+            lr_ceil = min(6e-3, max(lr_center * 4.5, lr_hi * 3.0, 2.2e-3))
+        else:
+            lr_floor = max(2e-4, lr_center * 0.45)
+            lr_ceil = min(4e-3, max(lr_center * 3.2, lr_hi * 2.3, 1.6e-3))
+    elif model in {"duorec", "fearec", "sasrec", "tisasrec"}:
+        if combo_kind in {"large_soft", "large_decay", "wide_decay", "wide_global", "tau_high", "time_mid"}:
+            lr_floor = max(3e-4, lr_center * 0.6)
+            lr_ceil = min(6e-3, max(lr_center * 4.6, lr_hi * 3.0, 2.2e-3))
+        else:
+            lr_floor = max(2e-4, lr_center * 0.45)
+            lr_ceil = min(4e-3, max(lr_center * 3.2, lr_hi * 2.2, 1.6e-3))
     else:
-        lr_floor = max(lr_floor, lr_center * 0.3)
-        lr_ceil = min(lr_ceil, max(lr_center * 2.0, lr_floor * 3.0))
+        lr_floor = max(lr_floor, lr_center * 0.45)
+        lr_ceil = min(lr_ceil, max(lr_center * 3.0, lr_floor * 3.0, 1.6e-3))
+    if stats.ratio_to_dataset_best < 0.08:
+        lr_floor = max(lr_floor, 3e-4)
+        lr_ceil = min(8e-3, max(lr_ceil, 4e-3))
+    if lr_floor >= lr_ceil:
+        lr_ceil = min(8e-3, max(lr_floor * 1.8, lr_floor + 1e-4))
     search["learning_rate"] = [round(lr_floor, 8), round(lr_ceil, 8)]
 
     wd = stage1.safe_float(params.get("weight_decay", 1e-4), 1e-4)
@@ -847,7 +873,7 @@ def build_combo_specs(
                 search_space=search,
                 fixed_space=fixed,
                 space_yaml=space_yaml,
-                run_phase=f"BASELINE2_ADDTUNE3B_{stage1.sanitize_token(target.dataset).upper()}_{stage1.sanitize_token(target.model).upper()}_{combo_id}",
+                run_phase=f"BASELINE2_ADDTUNE3_{stage1.sanitize_token(target.dataset).upper()}_{stage1.sanitize_token(target.model).upper()}_{combo_id}",
             )
         )
     return specs

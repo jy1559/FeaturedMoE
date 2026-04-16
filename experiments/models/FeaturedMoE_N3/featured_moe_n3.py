@@ -1174,7 +1174,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             losses.append((student * (student.log() - prior.log())).sum(dim=-1).mean())
         return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
 
-    def forward(self, item_seq, item_seq_len, feat=None):
+    def forward(self, item_seq, item_seq_len, feat=None, routing_item_seq_len=None):
         batch_size, seq_len = item_seq.shape
         item_emb = self.item_embedding(item_seq)
         position_ids = torch.arange(seq_len, device=item_seq.device).unsqueeze(0).expand(batch_size, -1)
@@ -1196,6 +1196,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             attention_mask=attention_mask,
             feat=feat,
             item_seq_len=item_seq_len,
+            routing_item_seq_len=routing_item_seq_len,
         )
 
         gather_idx = (item_seq_len - 1).long().view(-1, 1, 1).expand(-1, 1, self.d_model)
@@ -1213,12 +1214,16 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         return seq_output, aux_data
 
     def calculate_loss(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
         pos_items = interaction[self.POS_ITEM_ID]
 
         feat = self._gather_features(interaction) if self._requires_features else None
-        seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+        seq_output, aux_data = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
         logits = seq_output @ self.item_embedding.weight.T
         ce_loss = F.cross_entropy(logits, pos_items)
 
@@ -1316,11 +1321,15 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         return ce_loss + aux_loss
 
     def predict(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
         test_item = interaction[self.ITEM_ID]
         feat = self._gather_features(interaction) if self._requires_features else None
-        seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+        seq_output, aux_data = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
         self._update_eval_diagnostics(
             interaction=interaction,
             feat=feat,
@@ -1331,10 +1340,14 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         return (seq_output * test_item_emb).sum(dim=-1)
 
     def full_sort_predict(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
         feat = self._gather_features(interaction) if self._requires_features else None
-        seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+        seq_output, aux_data = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
         self._update_eval_diagnostics(
             interaction=interaction,
             feat=feat,

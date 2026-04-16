@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import re
 from pathlib import Path
@@ -16,9 +17,17 @@ ALLOWED_AXES = {
     "pair60_v4_revised",
     "pair60_v4_revised_long12h",
     "pair60_addtuning",
+    "pair60_addtuning3",
     "abcd_v1",
     "abcd_v2_lean",
 }
+
+ADDTUNING_AXES = {
+    "pair60_addtuning",
+    "pair60_addtuning3",
+}
+
+ADDTUNING3_SUMMARY_PATH = LOGS_ROOT / "PAIR60_ADDTUNING3" / "summary.csv"
 
 DATASET_ORDER = [
     "beauty",
@@ -50,6 +59,8 @@ MODEL_DISPLAY = {
     (item[0] if isinstance(item, tuple) else item): (item[1] if isinstance(item, tuple) else item)
     for item in MODEL_SPECS
 }
+
+MODEL_SLUG_TO_NAME = {model.lower(): model for model in MODEL_ORDER}
 
 METRIC_ORDER = [
     "hit@5",
@@ -177,6 +188,70 @@ def format_value(value: float, values: list[float]) -> str:
         text = f"*{text}"
 
     return text
+
+
+def load_beauty_addtuning3_shortlist() -> list[dict]:
+    if not ADDTUNING3_SUMMARY_PATH.exists():
+        return []
+
+    grouped: dict[str, list[dict]] = {}
+
+    try:
+        with ADDTUNING3_SUMMARY_PATH.open(newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                if row.get("dataset") != "beauty" or row.get("status") != "ok":
+                    continue
+
+                model = MODEL_SLUG_TO_NAME.get((row.get("model") or "").strip().lower())
+                if model is None:
+                    continue
+
+                best_valid_mrr20 = float(row.get("best_valid_mrr20") or 0.0)
+                seen_test_mrr20 = float(row.get("test_mrr20") or 0.0)
+                grouped.setdefault(model, []).append(
+                    {
+                        "phase": row.get("run_phase") or "",
+                        "combo_id": row.get("combo_id") or "",
+                        "combo_kind": row.get("combo_kind") or "",
+                        "best_valid_mrr20": best_valid_mrr20,
+                        "seen_test_mrr20": seen_test_mrr20,
+                    }
+                )
+    except OSError:
+        return []
+
+    shortlist = []
+    for model in MODEL_ORDER:
+        rows = grouped.get(model)
+        if not rows:
+            continue
+
+        best_valid = max(
+            rows,
+            key=lambda row: (
+                row["best_valid_mrr20"],
+                row["seen_test_mrr20"],
+                row["phase"],
+            ),
+        )
+        best_test = max(
+            rows,
+            key=lambda row: (
+                row["seen_test_mrr20"],
+                row["best_valid_mrr20"],
+                row["phase"],
+            ),
+        )
+        shortlist.append(
+            {
+                "model": model,
+                "best_valid": best_valid,
+                "best_test": best_test,
+            }
+        )
+
+    return shortlist
 
 
 def load_selected_runs() -> dict[tuple[str, str], dict]:
@@ -344,15 +419,15 @@ def build_dataset_trend_lines(selected: dict[tuple[str, str], dict]) -> list[str
         improved = []
         for model in selected_models:
             meta = selected[(dataset, model)]
-            if meta["axis"] == "pair60_addtuning":
+            if meta["axis"] in ADDTUNING_AXES:
                 improved.append(f"{MODEL_DISPLAY[model]} {meta['seen_test_mrr20']:.4f}")
         if improved:
             lines.append(
-                f"- 1차 ADDTUNING 반영으로 표에 실제로 들어온 모델은 {', '.join(improved)}입니다. 즉 이번 갱신은 단순 로그 누적이 아니라, 본문 표의 주력 baseline 후보가 일부 바뀌었다는 의미가 있습니다."
+                f"- staged ADDTUNING 반영으로 표에 실제로 들어온 모델은 {', '.join(improved)}입니다. 즉 이번 갱신은 단순 로그 누적이 아니라, 본문 표의 주력 baseline 후보가 일부 바뀌었다는 의미가 있습니다."
             )
         else:
             lines.append(
-                "- 이번 1차 ADDTUNING에서 새로 본문 표에 들어온 모델은 없었습니다. 이 경우는 기존 Pair60/ABCD에서 이미 선택된 런이 여전히 더 안정적이었다는 뜻으로 해석하는 편이 맞습니다."
+                "- 이번 staged ADDTUNING에서 새로 본문 표에 들어온 모델은 없었습니다. 이 경우는 기존 Pair60/ABCD에서 이미 선택된 런이 여전히 더 안정적이었다는 뜻으로 해석하는 편이 맞습니다."
             )
         lines.append("")
 
@@ -371,17 +446,17 @@ def build_global_analysis_lines(selected: dict[tuple[str, str], dict]) -> list[s
             route_rec_wins += 1
         for model in MODEL_ORDER:
             total_pairs += 1
-            if selected[(dataset, model)]["axis"] == "pair60_addtuning":
+            if selected[(dataset, model)]["axis"] in ADDTUNING_AXES:
                 addtuning_selected += 1
 
     lines.append(
-        f"- 이번 표는 기존 Pair60/ABCD 결과에 1차 ADDTUNING까지 합쳐 다시 뽑은 버전입니다. 전체 dataset-model 조합 {total_pairs}개 중 {addtuning_selected}개는 1차 ADDTUNING 결과가 최종 선택으로 올라왔습니다. 즉 추가 튜닝이 실제로 표의 모양을 바꾸는 데 의미가 있었다고 볼 수 있습니다."
+        f"- 이번 표는 기존 Pair60/ABCD 결과에 staged ADDTUNING까지 합쳐 다시 뽑은 버전입니다. 전체 dataset-model 조합 {total_pairs}개 중 {addtuning_selected}개는 ADDTUNING 결과가 최종 선택으로 올라왔습니다. 즉 추가 튜닝이 실제로 표의 모양을 바꾸는 데 의미가 있었다고 볼 수 있습니다."
     )
     lines.append(
         f"- 다만 RouteRec은 현재 seen MRR@20 기준으로 6개 데이터셋 중 {route_rec_wins}개만 1위입니다. 이번 단계에서 중요한 건 RouteRec을 옹호하는 문장을 늘리는 것이 아니라, strong baseline을 충분히 끌어올린 뒤에도 RouteRec이 어디서 남고 어디서 밀리는지 구조적으로 설명하는 것입니다."
     )
     lines.append(
-        "- beauty에서는 DuoRec/FEARec 쪽이 눈에 띄게 회복됐고, 기존에 과하게 약했던 BSARec/FAME/DIFSR도 일부는 올라왔지만 아직 선두권과는 거리가 있습니다. 반대로 retail_rocket은 BSARec/FAME이 거의 선두권까지 정리되면서, 이제는 'baseline을 덜 튜닝해서 낮게 나온 것 아니냐'는 반론이 많이 줄었습니다."
+        "- beauty에서는 staged ADDTUNING 이후 TiSASRec/FDSA가 상단을 더 단단히 잡았고, DuoRec/FEARec도 선두권에 다시 붙었습니다. 다만 BSARec/FAME/DIFSR은 분명히 회복됐어도 아직 top tier와는 갭이 남아 있어서, beauty를 더 판다면 이 세 모델만 선택적으로 보는 편이 맞습니다. 반대로 retail_rocket은 BSARec/FAME이 거의 선두권까지 정리되면서, 이제는 'baseline을 덜 튜닝해서 낮게 나온 것 아니냐'는 반론이 많이 줄었습니다."
     )
     lines.append(
         "- foursquare는 이번 1차에서 가장 의미 있게 표가 바뀐 쪽입니다. DuoRec, FEARec, FDSA, DIFSR이 모두 강해졌고, 그래서 이제는 특정 하나의 backbone이 독주한다기보다 강한 후보군이 촘촘히 붙어 있는 데이터셋으로 보는 편이 맞습니다."
@@ -400,7 +475,7 @@ def build_tuning_lines() -> list[str]:
     return [
         "## 논문에 이대로 쓰면 지적될 수 있는 점",
         "",
-        "- 첫 번째로 바로 들어올 지적은 `best_valid만 보고 뽑은 것 아니냐`입니다. 실제로 beauty FAME처럼 valid는 높지만 seen test가 거의 붕괴하는 조합이 있어서, 이번 표도 그런 런을 그대로 넣으면 선택 규칙 자체가 불신을 받습니다.",
+        "- 첫 번째로 바로 들어올 지적은 `best_valid만 보고 뽑은 것 아니냐`입니다. 실제로 beauty stage3에서도 FAME이나 일부 TiSASRec 조합처럼 valid와 seen test가 크게 엇갈리는 경우가 있어서, 그런 런을 그대로 넣으면 선택 규칙 자체가 불신을 받습니다.",
         "- 두 번째는 `RouteRec과 baseline의 튜닝 강도가 정말 비슷했느냐`입니다. 이번 1차 ADDTUNING으로 일부 baseline이 꽤 올라왔기 때문에, 오히려 논문에서는 이 점을 숨기지 말고 `baseline도 충분히 다시 맞췄다`는 쪽으로 명시하는 편이 낫습니다.",
         "- 세 번째는 dataset마다 서사가 너무 다르다는 점입니다. beauty처럼 side-information/contrastive 계열이 다시 살아나는 데이터셋과, retail_rocket처럼 BSARec/FAME이 거의 정리되는 데이터셋을 하나의 결론으로 묶으면 과한 일반화로 보일 수 있습니다.",
         "- 네 번째는 unseen-target 해석입니다. 지금 숫자는 대체로 0 근처가 많아서, 메인 claim을 unseen generalization으로 세우면 reviewer가 `평가 프로토콜이 너무 sparse한 것 아니냐`고 물을 가능성이 큽니다.",
@@ -409,14 +484,65 @@ def build_tuning_lines() -> list[str]:
     ]
 
 
+def build_beauty_addtuning3_lines(selected: dict[tuple[str, str], dict]) -> list[str]:
+    shortlist = load_beauty_addtuning3_shortlist()
+    if not shortlist:
+        return []
+
+    lines = ["## beauty ADDTUNING3 shortlist", ""]
+    lines.append(
+        "현재 beauty에서는 ADDTUNING3 내부 후보를 따로 훑어서, 각 모델별로 `valid가 가장 좋은 run`과 `seen-test가 가장 좋은 run`을 분리해 적었습니다. 최종 본문 표 반영은 이 후보와 기존 축을 함께 두고 harmonic-mean selection으로 다시 고른 결과입니다."
+    )
+    lines.append("")
+    lines.append("| model | best valid run | valid mrr@20 | seen test mrr@20 | best test run | valid mrr@20 | seen test mrr@20 | final report pick |")
+    lines.append("|---|---|---:|---:|---|---:|---:|---|")
+
+    for item in shortlist:
+        model = item["model"]
+        best_valid = item["best_valid"]
+        best_test = item["best_test"]
+        final_meta = selected[("beauty", model)]
+        final_pick = f"{final_meta['axis']} / {final_meta['phase']}"
+        lines.append(
+            f"| {MODEL_DISPLAY[model]} | {best_valid['phase']} | {best_valid['best_valid_mrr20']:.4f} | {best_valid['seen_test_mrr20']:.4f} | {best_test['phase']} | {best_test['best_valid_mrr20']:.4f} | {best_test['seen_test_mrr20']:.4f} | {final_pick} |"
+        )
+
+    lines.append("")
+    return lines
+
+
+def build_beauty_status_lines(selected: dict[tuple[str, str], dict]) -> list[str]:
+    lines = ["## beauty 판단", ""]
+    top_models = get_top_models(selected, "beauty", "overall_seen_target", "mrr@20", top_n=4)
+    bottom_models = sorted(
+        (
+            (model, get_metric_value(selected, "beauty", model, "overall_seen_target", "mrr@20"))
+            for model in MODEL_ORDER
+        ),
+        key=lambda item: item[1],
+    )[:3]
+
+    lines.append(
+        f"- beauty는 이제 `전체 baseline이 다 망한 상태`는 아닙니다. seen MRR@20 기준 상단은 {', '.join(f'{MODEL_DISPLAY[model]} {value:.4f}' for model, value in top_models[:4])}로 형성돼 있고, stage3 반영으로 TiSASRec/FDSA와 DuoRec/FEARec 후보군이 꽤 정상화됐습니다."
+    )
+    lines.append(
+        f"- 반대로 아직 약한 쪽은 {', '.join(f'{MODEL_DISPLAY[model]} {value:.4f}' for model, value in bottom_models)}입니다. 특히 beauty를 더 보정할 이유가 있다면 이 구간은 BSARec/FAME/DIFSR처럼 회복은 됐지만 절대점수가 아직 낮은 모델 때문이라고 보는 편이 맞습니다."
+    )
+    lines.append(
+        "- 따라서 beauty에서 바로 stage4를 넓게 다시 여는 것은 과합니다. 논문 baseline 방어 목적이라면 weak trio만 짧은 targeted follow-up을 하고, 메인 실험 우선순위는 KuaiRecLargeStrictPosV2_0.2와 lastfm0.03 쪽으로 넘기는 편이 효율적입니다."
+    )
+    lines.append("")
+    return lines
+
+
 def build_publication_lines() -> list[str]:
     return [
         "## 다음에 어떤 실험을 하는 게 괜찮은가", 
         "",
-        "1. beauty는 모델별로 나눠서 접근하는 게 좋습니다. DuoRec과 FEARec은 이미 다시 올라왔으니 local sweep과 seed 확인 위주로 가고, BSARec/FAME/DIFSR은 아직 절대 성능이 낮아서 구조를 더 세게 흔드는 공격적 실험을 계속하는 편이 맞습니다.",
-        "2. retail_rocket은 이제 FDSA보다 BSARec/FAME 쪽을 main strong baseline으로 잡아도 될 수준입니다. 여기서는 더 넓은 탐색보다 shortlist 2~3개 조합을 길게 돌려서 seed 안정성을 보는 것이 효율적입니다.",
-        "3. foursquare는 후보군이 많아졌기 때문에, 다음 단계는 넓은 hyperopt보다 backbone-family별로 작은 confirmation run을 하는 편이 낫습니다. DuoRec/FEARec/FDSA/DIFSR를 각각 2~3개 조합만 골라 재검증하면 표가 훨씬 깔끔해집니다.",
-        "4. movielens1m은 DuoRec/FEARec이 약간 올라오긴 했지만 최종 선두를 바꾸지는 못했습니다. 그래서 여기서는 추가 탐색을 더 넣기보다, 지금 strong baseline들을 RouteRec teacher target으로 삼아서 envelope matching을 하는 편이 낫습니다.",
+        "1. beauty는 broad sweep을 한 번 더 여는 것보다, BSARec/FAME/DIFSR만 targeted follow-up으로 짧게 정리하는 편이 맞습니다. TiSASRec/FDSA/FEARec/DuoRec는 이미 표 방어가 되는 수준까지 올라왔습니다.",
+        "2. baseline 이후 메인 우선순위는 KuaiRecLargeStrictPosV2_0.2와 lastfm0.03로 옮기는 편이 좋습니다. 이 저장소 기준 FMoE_N3 primary track도 두 데이터셋이 핵심이라, baseline 정리 다음 액션과 실험 로드맵이 자연스럽게 이어집니다.",
+        "3. retail_rocket은 이제 FDSA보다 BSARec/FAME 쪽을 main strong baseline으로 잡아도 될 수준입니다. 여기서는 더 넓은 탐색보다 shortlist 2~3개 조합을 길게 돌려서 seed 안정성을 보는 것이 효율적입니다.",
+        "4. foursquare는 후보군이 많아졌기 때문에, 다음 단계는 넓은 hyperopt보다 backbone-family별로 작은 confirmation run을 하는 편이 낫습니다. DuoRec/FEARec/FDSA/DIFSR를 각각 2~3개 조합만 골라 재검증하면 표가 훨씬 깔끔해집니다.",
         "5. KuaiRecLargeStrictPosV2_0.2는 valid-test mismatch가 커서, 후보 선정 기준을 seen-valid 하나로 두지 말고 seen-test 또는 confirmation seed 평균까지 같이 봐야 합니다. 특히 FDSA/BSARec/FAME은 shortlist를 다시 정리할 가치가 있습니다.",
         "6. RouteRec 실험은 이번 baseline 보강 이후에 다시 들어가는 게 맞습니다. 단, 다음 RouteRec 튜닝은 dataset winner를 따라가는 teacher-style local regime부터 시작해야 하고, router 쪽은 그 다음에 보는 순서가 더 안정적입니다.",
     ]
@@ -470,7 +596,7 @@ def build_markdown(selected: dict[tuple[str, str], dict]) -> str:
     lines.append("# baseline_2 best-valid test tables (full_v4 / feature_added_v4)")
     lines.append("")
     lines.append(
-        "Selection rule: for each dataset/model pair, compare `ABCD` (`abcd_v1`, `abcd_v2_lean`), `PAIR60_V4`, `PAIR60_V4_REVISED`, `PAIR60_V4_REVISED_LONG12H`, and `PAIR60_ADDTUNING`. To avoid selecting runs with very high valid but collapsed seen-target test, rank candidates by the harmonic mean of `best_valid_result.mrr@20` and seen-target `test_special_metrics.overall_seen_target.mrr@20`, then break ties by higher valid and higher seen-test."
+        "Selection rule: for each dataset/model pair, compare `ABCD` (`abcd_v1`, `abcd_v2_lean`), `PAIR60_V4`, `PAIR60_V4_REVISED`, `PAIR60_V4_REVISED_LONG12H`, `PAIR60_ADDTUNING`, and `PAIR60_ADDTUNING3`. To avoid selecting runs with very high valid but collapsed seen-target test, rank candidates by the harmonic mean of `best_valid_result.mrr@20` and seen-target `test_special_metrics.overall_seen_target.mrr@20`, then break ties by higher valid and higher seen-test."
     )
     lines.append("")
     lines.append(
@@ -531,6 +657,10 @@ def build_markdown(selected: dict[tuple[str, str], dict]) -> str:
             lines.append("")
 
         lines.append("")
+
+        if dataset == "beauty":
+            lines.extend(build_beauty_addtuning3_lines(selected))
+            lines.extend(build_beauty_status_lines(selected))
 
     lines.extend(build_dataset_trend_lines(selected))
     lines.extend(build_global_analysis_lines(selected))

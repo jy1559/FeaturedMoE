@@ -451,6 +451,7 @@ class StageExecutorN3(nn.Module):
         attention_mask: torch.Tensor,
         feat: Optional[torch.Tensor],
         item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor] = None,
     ) -> Tuple[
         torch.Tensor,
         Dict[str, torch.Tensor],
@@ -489,6 +490,7 @@ class StageExecutorN3(nn.Module):
                         out,
                         feat,
                         item_seq_len=item_seq_len,
+                        routing_item_seq_len=routing_item_seq_len,
                         alpha_override=self.global_residual_alpha,
                     )
                     branch_hiddens.append(next_hidden)
@@ -527,6 +529,7 @@ class StageExecutorN3(nn.Module):
                 out,
                 feat,
                 item_seq_len=item_seq_len,
+                routing_item_seq_len=routing_item_seq_len,
                 alpha_override=self.global_residual_alpha,
             )
             out = next_hidden

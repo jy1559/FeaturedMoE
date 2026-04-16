@@ -1,11 +1,10 @@
 # CMD
-/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ab --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING3/spaces/beauty_tisasrec_K10.yaml --max-evals 13 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 2026041830 --run-group baseline_2 --run-axis pair60_addtuning3 --run-phase BASELINE2_ADDTUNE3_BEAUTY_TISASREC_K10 model=tisasrec dataset=beauty eval_mode=session_fixed feature_mode=full_v4 gpu_id=7 log_wandb=false show_progress=false ++seed=2026041830 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ab --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING3/spaces/beauty_tisasrec_K10.yaml --max-evals 13 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 2026041830 --run-group baseline_2 --run-axis pair60_addtuning3 --run-phase BASELINE2_ADDTUNE3_BEAUTY_TISASREC_K10 model=tisasrec dataset=beauty eval_mode=session_fixed feature_mode=full_v4 gpu_id=1 log_wandb=false show_progress=false ++seed=2026041830 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
 
 /venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
   import pkg_resources
-[RUN_STATUS] START pid=1255446 ts=2026-04-16T04:39:29
+[RUN_STATUS] START pid=1275527 ts=2026-04-16T05:16:23
 [SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING3/spaces/beauty_tisasrec_K10.yaml (fixed=10, search=3)
-[UniqueChoice] enabled: dedupe/remap duplicates across 30 finite combos
 
 =================================================================
   Hyperopt  |  TiSASRec x beauty
@@ -14,13 +13,13 @@
   batch_size(train/valid/test)=4096/8192/8192
   track=baseline_2  axis=pair60_addtuning3  phase=BASELINE2_ADDTUNE3_BEAUTY_TISASREC_K10
 =================================================================
-Changed knobs: learning_rate, time_span, weight_decay
-Tuned params(len>1): 3  (~30 discrete combos)
+Changed knobs: MAX_ITEM_LIST_LENGTH, learning_rate, time_span
+Tuned params(len>1): 3  (~4 discrete combos)
 Tuned groups: 3
   [optimization]
-    learning_rate                   [0.00019225, 0.00029906, 0.00042722, 0.00059811, 0.00085445]  -> choice
-    weight_decay                    [9.75e-05, 0.000195, 0.00039]             -> choice
+    learning_rate                   [0.0002, 0.00192621]                      -> loguniform
   [other]
+    MAX_ITEM_LIST_LENGTH            [12, 14]                                  -> choice
     time_span                       [64, 128]                                 -> choice
 Fixed params(singleton/non-list): 0
 Fixed groups: 0
@@ -28,42 +27,74 @@ Fixed groups: 0
 
 [Wandb] disabled for this hyperopt run
 
-[1/13] learning_rate=0.0005981, time_span=64, weight_decay=0.000195
-  -> MRR@20=0.092300  best=0.092300  (early_stop@46, trial=12s, avg=14s/trial, total=14s, ETA=2.8min)
-[TRIAL_METRICS] cur_best_mrr20=0.092300 cur_best_hr10=0.162700 cur_test_mrr20=0.055000 cur_test_hr10=0.143300 run_best_mrr20=0.092300 run_best_hr10=0.162700 run_test_mrr20=0.055000 run_test_hr10=0.143300
+[1/13] MAX_ITEM_LIST_LENGTH=12, learning_rate=0.0003806, time_span=64
+  -> MRR@20=0.090600  best=0.090600  (early_stop@73, trial=18s, avg=20s/trial, total=20s, ETA=4.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.090600 cur_best_hr10=0.164700 cur_test_mrr20=0.057900 cur_test_hr10=0.149000 run_best_mrr20=0.090600 run_best_hr10=0.164700 run_test_mrr20=0.057900 run_test_hr10=0.149000
 
-[2/13] learning_rate=0.0004272, time_span=128, weight_decay=0.000195
-  -> MRR@20=0.062200  best=0.092300  (early_stop@37, trial=10s, avg=12s/trial, total=24s, ETA=2.2min)
-[TRIAL_METRICS] cur_best_mrr20=0.062200 cur_best_hr10=0.160600 cur_test_mrr20=0.059400 cur_test_hr10=0.151900 run_best_mrr20=0.092300 run_best_hr10=0.162700 run_test_mrr20=0.055000 run_test_hr10=0.143300
+[2/13] MAX_ITEM_LIST_LENGTH=14, learning_rate=0.0005853, time_span=64
+  -> MRR@20=0.056400  best=0.090600  (early_stop@22, trial=7s, avg=14s/trial, total=28s, ETA=2.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.056400 cur_best_hr10=0.132500 cur_test_mrr20=0.024800 cur_test_hr10=0.091700 run_best_mrr20=0.090600 run_best_hr10=0.164700 run_test_mrr20=0.057900 run_test_hr10=0.149000
 
-[3/13] learning_rate=0.0005981, time_span=128, weight_decay=0.00039
-  -> MRR@20=0.061500  best=0.092300  (early_stop@29, trial=7s, avg=11s/trial, total=32s, ETA=1.8min)
-[TRIAL_METRICS] cur_best_mrr20=0.061500 cur_best_hr10=0.158600 cur_test_mrr20=0.057200 cur_test_hr10=0.146100 run_best_mrr20=0.092300 run_best_hr10=0.162700 run_test_mrr20=0.055000 run_test_hr10=0.143300
+[3/13] MAX_ITEM_LIST_LENGTH=14, learning_rate=0.0009318, time_span=128
+  -> MRR@20=0.091400  best=0.091400  (early_stop@51, trial=13s, avg=14s/trial, total=41s, ETA=2.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.091400 cur_best_hr10=0.152600 cur_test_mrr20=0.070900 cur_test_hr10=0.143300 run_best_mrr20=0.091400 run_best_hr10=0.152600 run_test_mrr20=0.070900 run_test_hr10=0.143300
 
-[4/13] learning_rate=0.0008544, time_span=64, weight_decay=0.000195
-  -> MRR@20=0.069300  best=0.092300  (early_stop@27, trial=6s, avg=10s/trial, total=38s, ETA=1.4min)
-[TRIAL_METRICS] cur_best_mrr20=0.069300 cur_best_hr10=0.148600 cur_test_mrr20=0.054600 cur_test_hr10=0.149000 run_best_mrr20=0.092300 run_best_hr10=0.162700 run_test_mrr20=0.055000 run_test_hr10=0.143300
+[4/13] MAX_ITEM_LIST_LENGTH=12, learning_rate=0.0008091, time_span=128
+  -> MRR@20=0.070300  best=0.091400  (early_stop@42, trial=9s, avg=13s/trial, total=51s, ETA=1.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.070300 cur_best_hr10=0.158600 cur_test_mrr20=0.065500 cur_test_hr10=0.169100 run_best_mrr20=0.091400 run_best_hr10=0.152600 run_test_mrr20=0.070900 run_test_hr10=0.143300
 
-[5/13] learning_rate=0.0005981, time_span=128, weight_decay=0.000195
-  -> MRR@20=0.091400  best=0.092300  (early_stop@72, trial=16s, avg=11s/trial, total=55s, ETA=1.5min)
-[TRIAL_METRICS] cur_best_mrr20=0.091400 cur_best_hr10=0.166700 cur_test_mrr20=0.074700 cur_test_hr10=0.163300 run_best_mrr20=0.092300 run_best_hr10=0.162700 run_test_mrr20=0.055000 run_test_hr10=0.143300
+[5/13] MAX_ITEM_LIST_LENGTH=14, learning_rate=0.001201, time_span=128
+  -> MRR@20=0.091300  best=0.091400  (early_stop@43, trial=11s, avg=12s/trial, total=1.0min, ETA=1.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.091300 cur_best_hr10=0.152600 cur_test_mrr20=0.080400 cur_test_hr10=0.140400 run_best_mrr20=0.091400 run_best_hr10=0.152600 run_test_mrr20=0.070900 run_test_hr10=0.143300
 
-[6/13] learning_rate=0.0005981, time_span=64, weight_decay=9.75e-05
-  -> MRR@20=0.092700  best=0.092700  (early_stop@46, trial=11s, avg=11s/trial, total=1.1min, ETA=1.3min)
-[TRIAL_METRICS] cur_best_mrr20=0.092700 cur_best_hr10=0.164700 cur_test_mrr20=0.054000 cur_test_hr10=0.143300 run_best_mrr20=0.092700 run_best_hr10=0.164700 run_test_mrr20=0.054000 run_test_hr10=0.143300
+[6/13] MAX_ITEM_LIST_LENGTH=12, learning_rate=0.001646, time_span=64
+  -> MRR@20=0.089100  best=0.091400  (early_stop@23, trial=5s, avg=11s/trial, total=1.1min, ETA=1.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.089100 cur_best_hr10=0.156600 cur_test_mrr20=0.065100 cur_test_hr10=0.146100 run_best_mrr20=0.091400 run_best_hr10=0.152600 run_test_mrr20=0.070900 run_test_hr10=0.143300
 
-[7/13] learning_rate=0.0001923, time_span=128, weight_decay=0.000195
-  -> MRR@20=0.064300  best=0.092700  (early_stop@69, trial=19s, avg=12s/trial, total=1.4min, ETA=1.2min)
-[TRIAL_METRICS] cur_best_mrr20=0.064300 cur_best_hr10=0.156600 cur_test_mrr20=0.054000 cur_test_hr10=0.146100 run_best_mrr20=0.092700 run_best_hr10=0.164700 run_test_mrr20=0.054000 run_test_hr10=0.143300
+[7/13] MAX_ITEM_LIST_LENGTH=14, learning_rate=0.0005828, time_span=128
+  -> MRR@20=0.092400  best=0.092400  (early_stop@69, trial=19s, avg=13s/trial, total=1.5min, ETA=1.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.092400 cur_best_hr10=0.146600 cur_test_mrr20=0.063100 cur_test_hr10=0.143300 run_best_mrr20=0.092400 run_best_hr10=0.146600 run_test_mrr20=0.063100 run_test_hr10=0.143300
 
-[8/13] learning_rate=0.0001923, time_span=64, weight_decay=9.75e-05
-  -> MRR@20=0.058400  best=0.092700  (early_stop@86, trial=21s, avg=13s/trial, total=1.8min, ETA=1.1min)
-[TRIAL_METRICS] cur_best_mrr20=0.058400 cur_best_hr10=0.160600 cur_test_mrr20=0.057200 cur_test_hr10=0.149000 run_best_mrr20=0.092700 run_best_hr10=0.164700 run_test_mrr20=0.054000 run_test_hr10=0.143300
+[8/13] MAX_ITEM_LIST_LENGTH=12, learning_rate=0.000436, time_span=64
+  -> MRR@20=0.093000  best=0.093000  (early_stop@63, trial=14s, avg=13s/trial, total=1.7min, ETA=1.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.093000 cur_best_hr10=0.164700 cur_test_mrr20=0.059000 cur_test_hr10=0.143300 run_best_mrr20=0.093000 run_best_hr10=0.164700 run_test_mrr20=0.059000 run_test_hr10=0.143300
 
-[9/13] learning_rate=0.0004272, time_span=64, weight_decay=0.000195
-  -> MRR@20=0.068700  best=0.092700  (early_stop@50, trial=12s, avg=13s/trial, total=2.0min, ETA=52s)
-[TRIAL_METRICS] cur_best_mrr20=0.068700 cur_best_hr10=0.170700 cur_test_mrr20=0.064800 cur_test_hr10=0.140400 run_best_mrr20=0.092700 run_best_hr10=0.164700 run_test_mrr20=0.054000 run_test_hr10=0.143300
+[9/13] MAX_ITEM_LIST_LENGTH=12, learning_rate=0.0006837, time_span=128
+  -> MRR@20=0.064600  best=0.093000  (early_stop@27, trial=7s, avg=12s/trial, total=1.8min, ETA=49s)
+[TRIAL_METRICS] cur_best_mrr20=0.064600 cur_best_hr10=0.164700 cur_test_mrr20=0.059400 cur_test_hr10=0.149000 run_best_mrr20=0.093000 run_best_hr10=0.164700 run_test_mrr20=0.059000 run_test_hr10=0.143300
 
-[10/13] learning_rate=0.0002991, time_span=128, weight_decay=0.000195
-[RUN_STATUS] TERMINATED signal=SIGINT(2) pid=1255446 ts=2026-04-16T04:41:33
-[RUN_STATUS] END status=terminated signal=SIGINT(2) pid=1255446 start=2026-04-16T04:39:29 end=2026-04-16T04:41:34
+[10/13] MAX_ITEM_LIST_LENGTH=14, learning_rate=0.001044, time_span=128
+  -> MRR@20=0.093200  best=0.093200  (early_stop@50, trial=13s, avg=12s/trial, total=2.0min, ETA=37s)
+[TRIAL_METRICS] cur_best_mrr20=0.093200 cur_best_hr10=0.152600 cur_test_mrr20=0.077600 cur_test_hr10=0.149000 run_best_mrr20=0.093200 run_best_hr10=0.152600 run_test_mrr20=0.077600 run_test_hr10=0.149000
+
+[11/13] MAX_ITEM_LIST_LENGTH=14, learning_rate=0.0002357, time_span=64
+  -> MRR@20=0.055400  best=0.093200  (early_stop@42, trial=14s, avg=12s/trial, total=2.3min, ETA=25s)
+[TRIAL_METRICS] cur_best_mrr20=0.055400 cur_best_hr10=0.136500 cur_test_mrr20=0.024400 cur_test_hr10=0.091700 run_best_mrr20=0.093200 run_best_hr10=0.152600 run_test_mrr20=0.077600 run_test_hr10=0.149000
+
+[12/13] MAX_ITEM_LIST_LENGTH=12, learning_rate=0.0003609, time_span=64
+  -> MRR@20=0.091700  best=0.093200  (early_stop@73, trial=18s, avg=13s/trial, total=2.6min, ETA=13s)
+[TRIAL_METRICS] cur_best_mrr20=0.091700 cur_best_hr10=0.162700 cur_test_mrr20=0.056200 cur_test_hr10=0.143300 run_best_mrr20=0.093200 run_best_hr10=0.152600 run_test_mrr20=0.077600 run_test_hr10=0.149000
+
+[13/13] MAX_ITEM_LIST_LENGTH=14, learning_rate=0.0006053, time_span=64
+  -> MRR@20=0.095300  best=0.095300  (early_stop@58, trial=17s, avg=13s/trial, total=2.9min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.095300 cur_best_hr10=0.156600 cur_test_mrr20=0.057500 cur_test_hr10=0.134700 run_best_mrr20=0.095300 run_best_hr10=0.156600 run_test_mrr20=0.057500 run_test_hr10=0.134700
+
+=================================================================
+  DONE  |  TiSASRec x beauty
+  Best MRR@20 = 0.095300  |  13/13 trials OK
+  Best HR@10  = 0.156600
+  Test MRR@20 = 0.057500  (best-valid checkpoint)
+  Test HR@10  = 0.134700  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.095300 best_valid_hr10=0.156600 test_mrr20=0.057500 test_hr10=0.134700
+  Total time: 2.9 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 14
+    learning_rate: 0.000605323
+    time_span: 64
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/beauty_TiSASRec_baseline2_addtune3_beauty_tisasrec_k10_20260416_051623_252314_pid1275527.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning3/BASELINE2/beauty/TiSASRec/beauty_TiSASRec_baseline2_addtune3_beauty_tisasrec_k10_20260416_051623_252314_pid1275527.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning3/BASELINE2/beauty/TiSASRec/beauty_TiSASRec_baseline2_addtune3_beauty_tisasrec_k10_20260416_051623_252314_pid1275527_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning3/BASELINE2/beauty/TiSASRec/beauty_TiSASRec_baseline2_addtune3_beauty_tisasrec_k10_20260416_051623_252314_pid1275527_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1275527 start=2026-04-16T05:16:23 end=2026-04-16T05:19:16
