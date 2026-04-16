@@ -15,6 +15,21 @@ from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
 
 
+def enforce_v4_feature_mode(cfg: DictConfig | Dict[str, Any]) -> None:
+    """Reject legacy v3 feature configs so new runs cannot silently regress."""
+    feature_mode = str(cfg.get("feature_mode", "")).strip().lower()
+    data_path = str(cfg.get("data_path", "")).strip().lower()
+
+    if feature_mode == "full_v3":
+        raise RuntimeError(
+            "feature_mode=full_v3 is blocked. Use feature_mode=full_v4 for all new runs."
+        )
+    if "feature_added_v3" in data_path:
+        raise RuntimeError(
+            "data_path points to feature_added_v3, which is blocked. Use feature_added_v4 for all new runs."
+        )
+
+
 def _detect_item_file(cfg: DictConfig) -> Optional[Path]:
     """Locate the dataset's item or interaction file for counting items."""
     data_path = Path(cfg.get("data_path", "."))
@@ -116,6 +131,7 @@ def load_hydra_config(
     
     # Compose config with overrides
     cfg = compose(config_name=config_name, overrides=overrides_list)
+    enforce_v4_feature_mode(cfg)
     
     # Clean up
     GlobalHydra.instance().clear()

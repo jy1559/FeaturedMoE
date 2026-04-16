@@ -129,6 +129,7 @@ class NMoEStageN2(BaseNMoEStage):
         feat_bank: torch.Tensor,
         valid_mask: torch.Tensor,
         item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         stage_raw_feat = feat.index_select(-1, self.stage_feat_idx)
         stage_bank_flat = self._stage_bank_flat(feat_bank)
@@ -139,17 +140,24 @@ class NMoEStageN2(BaseNMoEStage):
         group_router_feat = self._group_router_features(stage_raw_feat)
         if group_router_feat is not None:
             group_router_feat = group_router_feat * self.router_group_feature_scale
+        session_valid_mask, session_item_seq_len = self._resolve_session_pool_inputs(
+            valid_mask,
+            item_seq_len,
+            routing_item_seq_len,
+        )
 
         if self.router_mode == "session":
             pooled_parts = []
             if self.router_use_hidden:
-                pooled_parts.append(self._pool_sequence(h_norm, valid_mask, item_seq_len) * self.router_hidden_scale)
+                pooled_parts.append(
+                    self._pool_sequence(h_norm, session_valid_mask, session_item_seq_len) * self.router_hidden_scale
+                )
             if self.router_use_feature:
-                pooled_parts.append(self._pool_sequence(stage_bank_flat, valid_mask, item_seq_len))
+                pooled_parts.append(self._pool_sequence(stage_bank_flat, session_valid_mask, session_item_seq_len))
             if group_router_feat is not None:
-                pooled_parts.append(self._pool_sequence(group_router_feat, valid_mask, item_seq_len))
+                pooled_parts.append(self._pool_sequence(group_router_feat, session_valid_mask, session_item_seq_len))
             router_input = pooled_parts[0] if len(pooled_parts) == 1 else torch.cat(pooled_parts, dim=-1)
-            rule_features = self._pool_sequence(stage_raw_feat, valid_mask, item_seq_len)
+            rule_features = self._pool_sequence(stage_raw_feat, session_valid_mask, session_item_seq_len)
             return router_input, rule_features
 
         router_parts = []
@@ -170,6 +178,7 @@ class NMoEStageN2(BaseNMoEStage):
         feat_bank: torch.Tensor,
         valid_mask: torch.Tensor,
         item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
         router_input, rule_features = self._build_router_inputs(
             h_norm=h_norm,
@@ -177,6 +186,7 @@ class NMoEStageN2(BaseNMoEStage):
             feat_bank=feat_bank,
             valid_mask=valid_mask,
             item_seq_len=item_seq_len,
+            routing_item_seq_len=routing_item_seq_len,
         )
 
         rule_logits = self.rule_router.compute_logits(rule_features)
@@ -203,6 +213,7 @@ class NMoEStageN2(BaseNMoEStage):
         feat: torch.Tensor,
         feat_bank: torch.Tensor,
         item_seq_len: Optional[torch.Tensor] = None,
+        routing_item_seq_len: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
         batch_size, seq_len, _ = hidden.shape
         h_norm = self.pre_ln(hidden)
@@ -214,6 +225,7 @@ class NMoEStageN2(BaseNMoEStage):
             feat_bank=feat_bank,
             valid_mask=valid_mask,
             item_seq_len=item_seq_len,
+            routing_item_seq_len=routing_item_seq_len,
         )
         if self.router_mode == "session":
             gate_weights = gate_weights.unsqueeze(1).expand(-1, seq_len, -1)
@@ -330,6 +342,7 @@ class StageBranchRunnerN2(nn.Module):
         feat: torch.Tensor,
         feat_bank: torch.Tensor,
         item_seq_len: Optional[torch.Tensor] = None,
+        routing_item_seq_len: Optional[torch.Tensor] = None,
     ) -> Tuple[
         torch.Tensor,
         Dict[str, torch.Tensor],
@@ -350,7 +363,13 @@ class StageBranchRunnerN2(nn.Module):
             else:
                 out = pre_block(out, item_seq)
             if self.stage_module is not None:
-                out, _delta, w, l, aux = self.stage_module(out, feat, feat_bank, item_seq_len=item_seq_len)
+                out, _delta, w, l, aux = self.stage_module(
+                    out,
+                    feat,
+                    feat_bank,
+                    item_seq_len=item_seq_len,
+                    routing_item_seq_len=routing_item_seq_len,
+                )
                 key = f"{self.stage_name}@{idx}"
                 weights[key] = w
                 logits[key] = l
@@ -368,6 +387,7 @@ class StageBranchRunnerN2(nn.Module):
         feat: torch.Tensor,
         feat_bank: torch.Tensor,
         item_seq_len: Optional[torch.Tensor] = None,
+        routing_item_seq_len: Optional[torch.Tensor] = None,
     ) -> Tuple[
         torch.Tensor,
         torch.Tensor,
@@ -389,7 +409,13 @@ class StageBranchRunnerN2(nn.Module):
             else:
                 out = pre_block(out, item_seq)
             if self.stage_module is not None:
-                out, _delta, w, l, aux = self.stage_module(out, feat, feat_bank, item_seq_len=item_seq_len)
+                out, _delta, w, l, aux = self.stage_module(
+                    out,
+                    feat,
+                    feat_bank,
+                    item_seq_len=item_seq_len,
+                    routing_item_seq_len=routing_item_seq_len,
+                )
                 key = f"{self.stage_name}@{idx}"
                 weights[key] = w
                 logits[key] = l

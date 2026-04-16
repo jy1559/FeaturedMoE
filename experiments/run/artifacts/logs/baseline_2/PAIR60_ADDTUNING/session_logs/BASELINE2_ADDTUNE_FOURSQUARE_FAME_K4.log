@@ -1,0 +1,71 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_fs --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/foursquare_fame_K4.yaml --max-evals 4 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260600 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_FOURSQUARE_FAME_K4 model=fame dataset=foursquare eval_mode=session_fixed feature_mode=full_v4 gpu_id=3 log_wandb=false show_progress=false ++seed=20260600 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1232076 ts=2026-04-16T01:41:16
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/foursquare_fame_K4.yaml (fixed=10, search=7)
+
+=================================================================
+  Hyperopt  |  FAME x foursquare
+  max_evals=4  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/4096/4096
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_FOURSQUARE_FAME_K4
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, dropout_ratio, learning_rate, num_experts, weight_decay
+Tuned params(len>1): 5  (~18 discrete combos)
+Tuned groups: 5
+  [optimization]
+    learning_rate                   [0.00018156, 0.00026409, 0.00033012, 0.00041265, 0.00059421]  -> loguniform
+    weight_decay                    [0.0, 0.0001, 0.0002, 0.0004]             -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.0975, 0.13, 0.1625]                    -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [28, 33]                                  -> choice
+    num_experts                     [2, 3, 4]                                 -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    num_heads                       4                                       
+    num_layers                      2                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/4] MAX_ITEM_LIST_LENGTH=28, dropout_ratio=0.0975, learning_rate=0.000229, num_experts=3, weight_decay=0
+  -> MRR@20=0.119300  best=0.119300  (full@100, trial=3.2min, avg=3.3min/trial, total=3.3min, ETA=9.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.119300 cur_best_hr10=0.181800 cur_test_mrr20=0.095600 cur_test_hr10=0.155100 run_best_mrr20=0.119300 run_best_hr10=0.181800 run_test_mrr20=0.095600 run_test_hr10=0.155100
+
+[2/4] MAX_ITEM_LIST_LENGTH=28, dropout_ratio=0.13, learning_rate=0.0003561, num_experts=3, weight_decay=0.0002108
+  -> MRR@20=0.114500  best=0.119300  (full@100, trial=3.2min, avg=3.3min/trial, total=6.5min, ETA=6.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.114500 cur_best_hr10=0.169500 cur_test_mrr20=0.095600 cur_test_hr10=0.146300 run_best_mrr20=0.119300 run_best_hr10=0.181800 run_test_mrr20=0.095600 run_test_hr10=0.155100
+
+[3/4] MAX_ITEM_LIST_LENGTH=28, dropout_ratio=0.0975, learning_rate=0.000579, num_experts=4, weight_decay=0.0002918
+  -> MRR@20=0.124800  best=0.124800  (full@100, trial=3.4min, avg=3.3min/trial, total=10.0min, ETA=3.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.124800 cur_best_hr10=0.188200 cur_test_mrr20=0.101700 cur_test_hr10=0.155100 run_best_mrr20=0.124800 run_best_hr10=0.188200 run_test_mrr20=0.101700 run_test_hr10=0.155100
+
+[4/4] MAX_ITEM_LIST_LENGTH=33, dropout_ratio=0.1625, learning_rate=0.0002349, num_experts=4, weight_decay=0
+  -> MRR@20=0.124700  best=0.124800  (full@100, trial=4.2min, avg=3.5min/trial, total=14.2min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.124700 cur_best_hr10=0.186700 cur_test_mrr20=0.100800 cur_test_hr10=0.162700 run_best_mrr20=0.124800 run_best_hr10=0.188200 run_test_mrr20=0.101700 run_test_hr10=0.155100
+
+=================================================================
+  DONE  |  FAME x foursquare
+  Best MRR@20 = 0.124800  |  4/4 trials OK
+  Best HR@10  = 0.188200
+  Test MRR@20 = 0.101700  (best-valid checkpoint)
+  Test HR@10  = 0.155100  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.124800 best_valid_hr10=0.188200 test_mrr20=0.101700 test_hr10=0.155100
+  Total time: 14.2 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 28
+    dropout_ratio: 0.0975
+    learning_rate: 0.000578962
+    num_experts: 4
+    weight_decay: 0.00029177
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/foursquare_FAME_baseline2_addtune_foursquare_fame_k4_20260416_014116_755807_pid1232076.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/foursquare/FAME/foursquare_FAME_baseline2_addtune_foursquare_fame_k4_20260416_014116_755807_pid1232076.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/foursquare/FAME/foursquare_FAME_baseline2_addtune_foursquare_fame_k4_20260416_014116_755807_pid1232076_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/foursquare/FAME/foursquare_FAME_baseline2_addtune_foursquare_fame_k4_20260416_014116_755807_pid1232076_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1232076 start=2026-04-16T01:41:16 end=2026-04-16T01:55:27

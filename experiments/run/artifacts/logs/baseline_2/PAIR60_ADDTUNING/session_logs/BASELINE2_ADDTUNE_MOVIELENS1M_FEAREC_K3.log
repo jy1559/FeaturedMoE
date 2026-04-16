@@ -1,0 +1,74 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ml --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/movielens1m_fearec_K3.yaml --max-evals 3 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260699 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_MOVIELENS1M_FEAREC_K3 model=fearec dataset=movielens1m eval_mode=session_fixed feature_mode=full_v4 gpu_id=7 log_wandb=false show_progress=false ++seed=20260699 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1239764 ts=2026-04-16T02:57:30
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/movielens1m_fearec_K3.yaml (fixed=14, search=11)
+
+=================================================================
+  Hyperopt  |  FEARec x movielens1m
+  max_evals=3  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/4096/4096
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_MOVIELENS1M_FEAREC_K3
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, contrast, dropout_ratio, global_ratio, learning_rate, lmd_sem, tau, weight_decay
+Tuned params(len>1): 8  (~486 discrete combos)
+Tuned groups: 8
+  [optimization]
+    learning_rate                   [0.00019523, 0.00028397, 0.00035496, 0.00044371, 0.00063894]  -> loguniform
+    weight_decay                    [0.0, '5e-05', 0.0001, 0.0002]            -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.06, 0.08, 0.1]                         -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [25, 30]                                  -> choice
+    contrast                        ['su', 'un', 'us_x']                      -> choice
+    global_ratio                    [0.765, 0.85, 0.935]                      -> choice
+    lmd_sem                         [0.0, 0.04, 0.08]                         -> choice
+    tau                             [0.192, 0.24, 0.3]                        -> choice
+Fixed params(singleton/non-list): 3
+Fixed groups: 3
+  [other]
+    lmd                             0.0                                     
+    n_heads                         2                                       
+    n_layers                        3                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/3] MAX_ITEM_LIST_LENGTH=30, contrast=su, dropout_ratio=0.06, global_ratio=0.935, learning_rate=0.000335, lmd_sem=0.08, tau=0.24, weight_decay=0.0002
+  -> MRR@20=0.008300  best=0.008300  (early_stop@8, trial=3.2min, avg=3.5min/trial, total=3.5min, ETA=6.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.008300 cur_best_hr10=0.023500 cur_test_mrr20=0.009100 cur_test_hr10=0.020000 run_best_mrr20=0.008300 run_best_hr10=0.023500 run_test_mrr20=0.009100 run_test_hr10=0.020000
+
+[2/3] MAX_ITEM_LIST_LENGTH=25, contrast=su, dropout_ratio=0.08, global_ratio=0.765, learning_rate=0.0006126, lmd_sem=0, tau=0.192, weight_decay=0
+  -> MRR@20=0.074500  best=0.074500  (early_stop@31, trial=2.9min, avg=3.3min/trial, total=6.6min, ETA=3.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.074500 cur_best_hr10=0.194000 cur_test_mrr20=0.051300 cur_test_hr10=0.144500 run_best_mrr20=0.074500 run_best_hr10=0.194000 run_test_mrr20=0.051300 run_test_hr10=0.144500
+
+[3/3] MAX_ITEM_LIST_LENGTH=30, contrast=su, dropout_ratio=0.06, global_ratio=0.85, learning_rate=0.0002207, lmd_sem=0.04, tau=0.24, weight_decay=0.0002
+  -> MRR@20=0.009500  best=0.074500  (early_stop@8, trial=3.2min, avg=3.3min/trial, total=9.8min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.009500 cur_best_hr10=0.027200 cur_test_mrr20=0.007700 cur_test_hr10=0.022300 run_best_mrr20=0.074500 run_best_hr10=0.194000 run_test_mrr20=0.051300 run_test_hr10=0.144500
+
+=================================================================
+  DONE  |  FEARec x movielens1m
+  Best MRR@20 = 0.074500  |  3/3 trials OK
+  Best HR@10  = 0.194000
+  Test MRR@20 = 0.051300  (best-valid checkpoint)
+  Test HR@10  = 0.144500  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.074500 best_valid_hr10=0.194000 test_mrr20=0.051300 test_hr10=0.144500
+  Total time: 9.8 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 25
+    contrast: su
+    dropout_ratio: 0.08
+    global_ratio: 0.765
+    learning_rate: 0.000612644
+    lmd_sem: 0
+    tau: 0.192
+    weight_decay: 0
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/movielens1m_FEARec_baseline2_addtune_movielens1m_fearec_k3_20260416_025730_748522_pid1239764.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/movielens1m/FEARec/movielens1m_FEARec_baseline2_addtune_movielens1m_fearec_k3_20260416_025730_748522_pid1239764.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/movielens1m/FEARec/movielens1m_FEARec_baseline2_addtune_movielens1m_fearec_k3_20260416_025730_748522_pid1239764_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/movielens1m/FEARec/movielens1m_FEARec_baseline2_addtune_movielens1m_fearec_k3_20260416_025730_748522_pid1239764_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1239764 start=2026-04-16T02:57:30 end=2026-04-16T03:07:18

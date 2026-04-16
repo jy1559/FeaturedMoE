@@ -681,6 +681,22 @@ class N3StageBlock(nn.Module):
             idx = item_seq_len.to(device=seq.device).long().clamp(min=1, max=seq.size(1)) - 1
         return seq[torch.arange(seq.size(0), device=seq.device), idx]
 
+    def _resolve_session_pool_inputs(
+        self,
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if self.routing_granularity != "session" or routing_item_seq_len is None:
+            return valid_mask, item_seq_len
+        session_valid_mask = self._build_valid_mask(
+            valid_mask.size(0),
+            valid_mask.size(1),
+            routing_item_seq_len,
+            valid_mask.device,
+        )
+        return session_valid_mask, routing_item_seq_len
+
     def _stage_raw_features(
         self,
         feat: Optional[torch.Tensor],
@@ -736,11 +752,17 @@ class N3StageBlock(nn.Module):
         encoded_feat: torch.Tensor,
         valid_mask: torch.Tensor,
         item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor],
         seq_len: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.routing_granularity == "session":
-            pooled_encoded = self._pool_sequence(encoded_feat, valid_mask, item_seq_len)
-            pooled_raw = self._pool_sequence(stage_raw_feat, valid_mask, item_seq_len)
+            session_valid_mask, session_item_seq_len = self._resolve_session_pool_inputs(
+                valid_mask,
+                item_seq_len,
+                routing_item_seq_len,
+            )
+            pooled_encoded = self._pool_sequence(encoded_feat, session_valid_mask, session_item_seq_len)
+            pooled_raw = self._pool_sequence(stage_raw_feat, session_valid_mask, session_item_seq_len)
             encoded_ctx = pooled_encoded.unsqueeze(1).expand(-1, seq_len, -1)
             raw_ctx = pooled_raw.unsqueeze(1).expand(-1, seq_len, -1)
             return encoded_ctx, raw_ctx
@@ -823,14 +845,20 @@ class N3StageBlock(nn.Module):
         encoded_feat: torch.Tensor,
         valid_mask: torch.Tensor,
         item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor],
         seq_len: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, object]]:
         aux: Dict[str, object] = {}
+        session_valid_mask, session_item_seq_len = self._resolve_session_pool_inputs(
+            valid_mask,
+            item_seq_len,
+            routing_item_seq_len,
+        )
         if self.stage_router_mode == "rule_soft":
             if self.rule_router is None:
                 raise RuntimeError("rule_soft router is not initialized.")
             if self.routing_granularity == "session":
-                rule_input = self._pool_sequence(stage_raw_feat, valid_mask, item_seq_len)
+                rule_input = self._pool_sequence(stage_raw_feat, session_valid_mask, session_item_seq_len)
             else:
                 rule_input = stage_raw_feat
             raw_logits = self.rule_router.compute_logits(rule_input)
@@ -920,7 +948,7 @@ class N3StageBlock(nn.Module):
             aux["primitive_outputs"] = primitive_outputs
             if stage_raw_feat.size(-1) > 0:
                 rule_input = (
-                    self._pool_sequence(stage_raw_feat, valid_mask, item_seq_len)
+                    self._pool_sequence(stage_raw_feat, session_valid_mask, session_item_seq_len)
                     if self.routing_granularity == "session"
                     else stage_raw_feat
                 )
@@ -1070,6 +1098,7 @@ class N3StageBlock(nn.Module):
         hidden: torch.Tensor,
         feat: Optional[torch.Tensor],
         item_seq_len: Optional[torch.Tensor] = None,
+        routing_item_seq_len: Optional[torch.Tensor] = None,
         alpha_override: Optional[torch.Tensor] = None,
     ) -> Tuple[
         torch.Tensor,
@@ -1097,6 +1126,7 @@ class N3StageBlock(nn.Module):
             encoded_feat=encoded_feat,
             valid_mask=valid_mask,
             item_seq_len=item_seq_len,
+            routing_item_seq_len=routing_item_seq_len,
             seq_len=seq_len,
         )
 
@@ -1127,6 +1157,7 @@ class N3StageBlock(nn.Module):
             encoded_feat=feature_context,
             valid_mask=valid_mask,
             item_seq_len=item_seq_len,
+            routing_item_seq_len=routing_item_seq_len,
             seq_len=seq_len,
         )
         if group_hiddens is not None:

@@ -218,6 +218,19 @@ class FeaturedMoE_N(SequentialRecommender):
         self.fmoe_special_logging = bool(resolver.get("fmoe_special_logging", True))
         self.fmoe_schedule_log_every_epoch = max(int(resolver.get("fmoe_schedule_log_every_epoch", 1)), 1)
         self._last_logged_top_k = None
+        self.history_input_mode = str(resolver.get("history_input_mode", "session_only")).lower().strip()
+        self.current_session_item_length_field = str(
+            resolver.get("current_session_item_length_field", "current_session_item_length")
+            or "current_session_item_length"
+        )
+        self.fmoe_session_router_context_scope = str(
+            resolver.get("fmoe_session_router_context_scope", "auto")
+        ).lower().strip()
+        if self.fmoe_session_router_context_scope not in {"auto", "full_sequence", "current_session"}:
+            raise ValueError(
+                "fmoe_session_router_context_scope must be one of ['auto','full_sequence','current_session'], "
+                f"got {self.fmoe_session_router_context_scope}"
+            )
 
         self.feature_encoder_mode = str(resolver.get("feature_encoder_mode", "linear")).lower().strip()
         raw_patterns = resolver.get("feature_encoder_sinusoidal_features", None)
@@ -446,6 +459,43 @@ class FeaturedMoE_N(SequentialRecommender):
         arange = torch.arange(seq_len, device=device).unsqueeze(0)
         return arange < lens.unsqueeze(1)
 
+    def _use_current_session_router_context(self) -> bool:
+        if self.fmoe_session_router_context_scope == "current_session":
+            return True
+        if self.fmoe_session_router_context_scope == "full_sequence":
+            return False
+        return self.history_input_mode == "full_history_session_targets"
+
+    def _resolve_routing_item_seq_len(
+        self,
+        interaction,
+        item_seq_len: torch.Tensor,
+        seq_len: int,
+    ) -> torch.Tensor:
+        if not self._use_current_session_router_context():
+            return item_seq_len
+
+        field_name = self.current_session_item_length_field
+        if field_name not in interaction:
+            return item_seq_len
+
+        routing_item_seq_len = interaction[field_name]
+        if torch.is_tensor(routing_item_seq_len):
+            routing_item_seq_len = routing_item_seq_len.to(device=item_seq_len.device)
+        else:
+            routing_item_seq_len = torch.as_tensor(routing_item_seq_len, device=item_seq_len.device)
+        return routing_item_seq_len.long().clamp(min=1, max=seq_len)
+
+    def _resolve_forward_lengths(self, interaction):
+        item_seq = interaction[self.ITEM_SEQ]
+        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        routing_item_seq_len = self._resolve_routing_item_seq_len(
+            interaction,
+            item_seq_len,
+            item_seq.size(1),
+        )
+        return item_seq, item_seq_len, routing_item_seq_len
+
     def _aux_until_active(self, until: float) -> float:
         limit = float(until or 0.0)
         if limit <= 0:
@@ -517,7 +567,7 @@ class FeaturedMoE_N(SequentialRecommender):
             )
             self._last_logged_top_k = state.stage_top_k
 
-    def forward(self, item_seq, item_seq_len, feat=None):
+    def forward(self, item_seq, item_seq_len, feat=None, routing_item_seq_len=None):
         batch_size, seq_len = item_seq.shape
 
         item_emb = self.item_embedding(item_seq)
@@ -544,6 +594,7 @@ class FeaturedMoE_N(SequentialRecommender):
                 feat=feat,
                 feat_bank=feat_bank,
                 item_seq_len=item_seq_len,
+                routing_item_seq_len=routing_item_seq_len,
             )
 
         hidden, ffn_moe_weights = self.post_transformer(tokens, item_seq)
@@ -561,12 +612,16 @@ class FeaturedMoE_N(SequentialRecommender):
         return seq_output, aux_data
 
     def calculate_loss(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
         pos_items = interaction[self.POS_ITEM_ID]
 
         feat = self._gather_features(interaction)
-        seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+        seq_output, aux_data = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
         logits = seq_output @ self.item_embedding.weight.T
         ce_loss = F.cross_entropy(logits, pos_items)
 
@@ -613,21 +668,29 @@ class FeaturedMoE_N(SequentialRecommender):
         return ce_loss + aux_loss
 
     def predict(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
         test_item = interaction[self.ITEM_ID]
 
         feat = self._gather_features(interaction)
-        seq_output, _ = self.forward(item_seq, item_seq_len, feat)
+        seq_output, _ = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
         test_item_emb = self.item_embedding(test_item)
         return (seq_output * test_item_emb).sum(dim=-1)
 
     def full_sort_predict(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
 
         feat = self._gather_features(interaction)
-        seq_output, _ = self.forward(item_seq, item_seq_len, feat)
+        seq_output, _ = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
         return seq_output @ self.item_embedding.weight.T
 
     def get_epoch_log_summary(self) -> Dict:

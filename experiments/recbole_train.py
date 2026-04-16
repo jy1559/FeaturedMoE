@@ -75,6 +75,7 @@ from hydra_utils import (
     configure_eval_sampling,
     normalize_search_stages,
     narrow_search_space,
+    enforce_v4_feature_mode,
 )
 
 
@@ -1155,6 +1156,7 @@ def main():
     cfg_omega = OmegaConf.create(cfg)
     cfg_omega = configure_eval_sampling(cfg_omega)
     cfg = OmegaConf.to_container(cfg_omega, resolve=True)
+    enforce_v4_feature_mode(cfg)
 
     # Normalize dataset casing against actual files/directories on disk.
     resolved_dataset = _resolve_dataset_name_case(cfg)

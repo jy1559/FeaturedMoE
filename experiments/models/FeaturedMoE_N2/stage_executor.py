@@ -236,6 +236,7 @@ class StageExecutorN2(nn.Module):
         feat: torch.Tensor,
         feat_bank: torch.Tensor,
         item_seq_len: Optional[torch.Tensor] = None,
+        routing_item_seq_len: Optional[torch.Tensor] = None,
     ) -> Tuple[
         torch.Tensor,
         Dict[str, torch.Tensor],
@@ -257,6 +258,7 @@ class StageExecutorN2(nn.Module):
                     feat=feat,
                     feat_bank=feat_bank,
                     item_seq_len=item_seq_len,
+                    routing_item_seq_len=routing_item_seq_len,
                 )
                 gate_weights.update(w)
                 gate_logits.update(l)
@@ -273,6 +275,7 @@ class StageExecutorN2(nn.Module):
                 feat=feat,
                 feat_bank=feat_bank,
                 item_seq_len=item_seq_len,
+                routing_item_seq_len=routing_item_seq_len,
             )
             if delta is not None:
                 stage_deltas[stage_name] = delta

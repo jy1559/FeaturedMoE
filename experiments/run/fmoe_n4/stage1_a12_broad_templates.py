@@ -46,6 +46,8 @@ ARCH_NAME = "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5"
 PHASE_ID = "P4S1"
 PHASE_NAME = "FMOE_N4_STAGE1_A12_BROAD"
 DEFAULT_DATASETS = ["KuaiRecLargeStrictPosV2_0.2"]
+FEATURE_MODE = "full_v4"
+FEATURE_DATASET_DIR = "feature_added_v4"
 
 REPO_ROOT_REAL = THIS_DIR.parents[2]
 LOG_ROOT = REPO_ROOT_REAL / "experiments" / "run" / "artifacts" / "logs" / TRACK / AXIS
@@ -67,8 +69,37 @@ def _dedupe_keep_order(values: Iterable[Any]) -> list[Any]:
     return out
 
 
+def _choice_spec(values: Iterable[Any]) -> Dict[str, Any]:
+    return {"type": "choice", "values": list(values)}
+
+
+def _loguniform_spec(low: float, high: float) -> Dict[str, Any]:
+    return {"type": "loguniform", "values": [float(low), float(high)]}
+
+
+def _normalize_search_spec(spec: Any) -> tuple[str, list[Any]]:
+    if isinstance(spec, dict):
+        search_type = str(spec.get("type", "choice")).strip().lower() or "choice"
+        values = spec.get("values", spec.get("range"))
+    else:
+        search_type = "choice"
+        values = spec
+
+    if search_type not in {"choice", "loguniform"}:
+        raise RuntimeError(f"unsupported search space type: {search_type}")
+    if values is None:
+        raise RuntimeError(f"missing search space values for type={search_type}")
+
+    normalized = list(values)
+    if not normalized:
+        raise RuntimeError(f"empty search space values for type={search_type}")
+    if search_type == "loguniform" and len(normalized) != 2:
+        raise RuntimeError("loguniform search space expects exactly 2 bounds")
+    return search_type, normalized
+
+
 def _validate_session_fixed_files(dataset: str) -> None:
-    ds_dir = REPO_ROOT_REAL / "Datasets" / "processed" / "feature_added_v3" / dataset
+    ds_dir = REPO_ROOT_REAL / "Datasets" / "processed" / FEATURE_DATASET_DIR / dataset
     required = [
         ds_dir / f"{dataset}.train.inter",
         ds_dir / f"{dataset}.valid.inter",
@@ -140,6 +171,22 @@ def _build_overrides(cons_lambda: float, z_lambda: float, family_drop: float, fe
     overrides["stage_feature_dropout_prob"] = _all_stage_map(float(feature_drop))
     overrides["stage_feature_dropout_scope"] = _all_stage_map("token")
     return overrides
+
+
+def _template_batches(template: Dict[str, Any], fixed_values: Dict[str, Any], args: argparse.Namespace) -> tuple[int, int, int]:
+    train_batch_size = int(args.batch_size)
+    eval_batch_size = int(args.eval_batch_size)
+    max_evals = int(args.max_evals)
+
+    expert_scale = int(fixed_values.get("expert_scale", template.get("expert", 3)))
+    d_feat_emb = int(fixed_values.get("d_feat_emb", template.get("d_feat", 16)))
+    anchor = str(template.get("anchor", ""))
+
+    if expert_scale >= 4 or d_feat_emb >= 24 or anchor in {"H14", "H15", "H16"}:
+        train_batch_size = min(train_batch_size, 3072)
+        eval_batch_size = min(eval_batch_size, 4096)
+
+    return int(train_batch_size), int(eval_batch_size), int(max_evals)
 
 
 def _template_bank_16() -> list[Dict[str, Any]]:
@@ -403,7 +450,12 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
         "model=featured_moe_n3_tune",
         f"dataset={row['dataset']}",
         "eval_mode=session_fixed",
-        "feature_mode=full_v3",
+        f"feature_mode={FEATURE_MODE}",
+        "++eval_sampling.mode=full",
+        "++eval_sampling.auto_full_threshold=999999999",
+        "++special_logging=true",
+        "++exclude_unseen_target_from_main_eval=true",
+        "++log_unseen_target_metrics=true",
         f"gpu_id={gpu_id}",
         "log_wandb=false",
         "enable_tf32=true",
@@ -434,9 +486,10 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
         cmd.append(f"++{key}={hydra_literal(value)}")
     for key, value in fixed_values.items():
         cmd.append(f"++{key}={hydra_literal(value)}")
-    for key, values in search_space.items():
-        cmd.append(f"++search.{key}={hydra_literal(list(values))}")
-        cmd.append(f"++search_space_type_overrides.{key}=choice")
+    for key, spec in search_space.items():
+        search_type, values = _normalize_search_spec(spec)
+        cmd.append(f"++search.{key}={hydra_literal(values)}")
+        cmd.append(f"++search_space_type_overrides.{key}={search_type}")
     return cmd
 
 

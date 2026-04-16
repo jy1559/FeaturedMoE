@@ -1,0 +1,73 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/retail_rocket_bsarec_K3.yaml --max-evals 4 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260539 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_RETAIL_ROCKET_BSAREC_K3 model=bsarec dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 gpu_id=5 log_wandb=false show_progress=false ++seed=20260539 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1234080 ts=2026-04-16T02:00:15
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/retail_rocket_bsarec_K3.yaml (fixed=11, search=8)
+
+=================================================================
+  Hyperopt  |  BSARec x retail_rocket
+  max_evals=4  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/8192/8192
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_RETAIL_ROCKET_BSAREC_K3
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, bsarec_alpha, bsarec_c, dropout_ratio, learning_rate, weight_decay
+Tuned params(len>1): 6  (~54 discrete combos)
+Tuned groups: 6
+  [optimization]
+    learning_rate                   [0.0002782, 0.00040466, 0.00050582, 0.00063228, 0.00091048]  -> loguniform
+    weight_decay                    [0.0, 0.0001, 0.0002, 0.0004]             -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.135, 0.18, 0.225]                      -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [20, 25]                                  -> choice
+    bsarec_alpha                    [0.3, 0.5, 0.7]                           -> choice
+    bsarec_c                        [2, 3, 4]                                 -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    num_heads                       4                                       
+    num_layers                      2                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/4] MAX_ITEM_LIST_LENGTH=25, bsarec_alpha=0.7, bsarec_c=2, dropout_ratio=0.225, learning_rate=0.0004113, weight_decay=0
+  -> MRR@20=0.377400  best=0.377400  (early_stop@37, trial=5.3min, avg=5.6min/trial, total=5.6min, ETA=16.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.377400 cur_best_hr10=0.470500 cur_test_mrr20=0.378900 cur_test_hr10=0.465800 run_best_mrr20=0.377400 run_best_hr10=0.470500 run_test_mrr20=0.378900 run_test_hr10=0.465800
+
+[2/4] MAX_ITEM_LIST_LENGTH=20, bsarec_alpha=0.7, bsarec_c=3, dropout_ratio=0.225, learning_rate=0.0007702, weight_decay=0
+  -> MRR@20=0.376000  best=0.377400  (early_stop@20, trial=3.9min, avg=4.9min/trial, total=9.7min, ETA=9.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.376000 cur_best_hr10=0.461700 cur_test_mrr20=0.377500 cur_test_hr10=0.458100 run_best_mrr20=0.377400 run_best_hr10=0.470500 run_test_mrr20=0.378900 run_test_hr10=0.465800
+
+[3/4] MAX_ITEM_LIST_LENGTH=25, bsarec_alpha=0.5, bsarec_c=3, dropout_ratio=0.135, learning_rate=0.0004118, weight_decay=0
+  -> MRR@20=0.376200  best=0.377400  (early_stop@30, trial=6.6min, avg=5.5min/trial, total=16.4min, ETA=5.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.376200 cur_best_hr10=0.461200 cur_test_mrr20=0.377300 cur_test_hr10=0.459000 run_best_mrr20=0.377400 run_best_hr10=0.470500 run_test_mrr20=0.378900 run_test_hr10=0.465800
+
+[4/4] MAX_ITEM_LIST_LENGTH=25, bsarec_alpha=0.5, bsarec_c=4, dropout_ratio=0.225, learning_rate=0.0006577, weight_decay=0
+  -> MRR@20=0.376800  best=0.377400  (early_stop@23, trial=5.1min, avg=5.4min/trial, total=21.5min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.376800 cur_best_hr10=0.463100 cur_test_mrr20=0.378300 cur_test_hr10=0.459800 run_best_mrr20=0.377400 run_best_hr10=0.470500 run_test_mrr20=0.378900 run_test_hr10=0.465800
+
+=================================================================
+  DONE  |  BSARec x retail_rocket
+  Best MRR@20 = 0.377400  |  4/4 trials OK
+  Best HR@10  = 0.470500
+  Test MRR@20 = 0.378900  (best-valid checkpoint)
+  Test HR@10  = 0.465800  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.377400 best_valid_hr10=0.470500 test_mrr20=0.378900 test_hr10=0.465800
+  Total time: 21.5 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 25
+    bsarec_alpha: 0.7
+    bsarec_c: 2
+    dropout_ratio: 0.225
+    learning_rate: 0.000411282
+    weight_decay: 0
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/retail_rocket_BSARec_baseline2_addtune_retail_rocket_bsarec_k3_20260416_020015_586788_pid1234080.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/retail_rocket/BSARec/retail_rocket_BSARec_baseline2_addtune_retail_rocket_bsarec_k3_20260416_020015_586788_pid1234080.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/retail_rocket/BSARec/retail_rocket_BSARec_baseline2_addtune_retail_rocket_bsarec_k3_20260416_020015_586788_pid1234080_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/retail_rocket/BSARec/retail_rocket_BSARec_baseline2_addtune_retail_rocket_bsarec_k3_20260416_020015_586788_pid1234080_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1234080 start=2026-04-16T02:00:15 end=2026-04-16T02:21:45

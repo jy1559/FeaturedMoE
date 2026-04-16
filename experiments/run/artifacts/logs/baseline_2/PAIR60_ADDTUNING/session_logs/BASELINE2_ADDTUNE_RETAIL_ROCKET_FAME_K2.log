@@ -1,0 +1,67 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/retail_rocket_fame_K2.yaml --max-evals 3 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260558 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_RETAIL_ROCKET_FAME_K2 model=fame dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 gpu_id=7 log_wandb=false show_progress=false ++seed=20260558 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1234243 ts=2026-04-16T02:01:33
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/retail_rocket_fame_K2.yaml (fixed=10, search=7)
+
+=================================================================
+  Hyperopt  |  FAME x retail_rocket
+  max_evals=3  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/8192/8192
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_RETAIL_ROCKET_FAME_K2
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, dropout_ratio, learning_rate, num_experts, weight_decay
+Tuned params(len>1): 5  (~12 discrete combos)
+Tuned groups: 5
+  [optimization]
+    learning_rate                   [0.00020174, 0.00029344, 0.0003668, 0.0004585, 0.00066023]  -> loguniform
+    weight_decay                    [0.0, '5e-05', 0.0001, 0.0002]            -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.075, 0.1, 0.125]                       -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [15, 20]                                  -> choice
+    num_experts                     [2, 3]                                    -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    num_heads                       4                                       
+    num_layers                      2                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/3] MAX_ITEM_LIST_LENGTH=20, dropout_ratio=0.125, learning_rate=0.000301, num_experts=3, weight_decay=5e-05
+  -> MRR@20=0.366800  best=0.366800  (early_stop@28, trial=13.9min, avg=14.3min/trial, total=14.3min, ETA=28.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.366800 cur_best_hr10=0.436400 cur_test_mrr20=0.370900 cur_test_hr10=0.437300 run_best_mrr20=0.366800 run_best_hr10=0.436400 run_test_mrr20=0.370900 run_test_hr10=0.437300
+
+[2/3] MAX_ITEM_LIST_LENGTH=20, dropout_ratio=0.125, learning_rate=0.0005046, num_experts=2, weight_decay=0
+  -> MRR@20=0.374200  best=0.374200  (early_stop@34, trial=15.5min, avg=14.9min/trial, total=29.8min, ETA=14.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.374200 cur_best_hr10=0.468500 cur_test_mrr20=0.372800 cur_test_hr10=0.461500 run_best_mrr20=0.374200 run_best_hr10=0.468500 run_test_mrr20=0.372800 run_test_hr10=0.461500
+
+[3/3] MAX_ITEM_LIST_LENGTH=15, dropout_ratio=0.075, learning_rate=0.0003574, num_experts=3, weight_decay=5e-05
+  -> MRR@20=0.367600  best=0.374200  (early_stop@23, trial=11.2min, avg=13.7min/trial, total=41.2min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.367600 cur_best_hr10=0.434200 cur_test_mrr20=0.370900 cur_test_hr10=0.436200 run_best_mrr20=0.374200 run_best_hr10=0.468500 run_test_mrr20=0.372800 run_test_hr10=0.461500
+
+=================================================================
+  DONE  |  FAME x retail_rocket
+  Best MRR@20 = 0.374200  |  3/3 trials OK
+  Best HR@10  = 0.468500
+  Test MRR@20 = 0.372800  (best-valid checkpoint)
+  Test HR@10  = 0.461500  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.374200 best_valid_hr10=0.468500 test_mrr20=0.372800 test_hr10=0.461500
+  Total time: 41.2 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 20
+    dropout_ratio: 0.125
+    learning_rate: 0.000504594
+    num_experts: 2
+    weight_decay: 0
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/retail_rocket_FAME_baseline2_addtune_retail_rocket_fame_k2_20260416_020133_568877_pid1234243.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/retail_rocket/FAME/retail_rocket_FAME_baseline2_addtune_retail_rocket_fame_k2_20260416_020133_568877_pid1234243.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/retail_rocket/FAME/retail_rocket_FAME_baseline2_addtune_retail_rocket_fame_k2_20260416_020133_568877_pid1234243_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/retail_rocket/FAME/retail_rocket_FAME_baseline2_addtune_retail_rocket_fame_k2_20260416_020133_568877_pid1234243_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1234243 start=2026-04-16T02:01:33 end=2026-04-16T02:42:48

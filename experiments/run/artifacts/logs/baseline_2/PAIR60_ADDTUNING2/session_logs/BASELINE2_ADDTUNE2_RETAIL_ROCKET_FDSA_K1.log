@@ -1,0 +1,369 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING2/spaces/retail_rocket_fdsa_K1.yaml --max-evals 14 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 2026041781 --run-group baseline_2 --run-axis pair60_addtuning2 --run-phase BASELINE2_ADDTUNE2_RETAIL_ROCKET_FDSA_K1 model=fdsa dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 gpu_id=2 log_wandb=false show_progress=false ++seed=2026041781 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1247502 ts=2026-04-16T04:08:35
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING2/spaces/retail_rocket_fdsa_K1.yaml (fixed=15, search=2)
+[UniqueChoice] enabled: dedupe/remap duplicates across 14 finite combos
+
+=================================================================
+  Hyperopt  |  FDSA x retail_rocket
+  max_evals=14  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/8192/8192
+  track=baseline_2  axis=pair60_addtuning2  phase=BASELINE2_ADDTUNE2_RETAIL_ROCKET_FDSA_K1
+=================================================================
+Changed knobs: lambda_attr, learning_rate
+Tuned params(len>1): 2  (~14 discrete combos)
+Tuned groups: 2
+  [optimization]
+    learning_rate                   [0.00023428, 0.00030669, 0.00037484, 0.00042596, 0.00048985, 0.00057504, 0.00068153]  -> choice
+  [other]
+    lambda_attr                     [0.15, 0.175]                             -> choice
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/14] lambda_attr=0.175, learning_rate=0.0003748
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.40 GiB is free. Including non-PyTorch memory, this process has 22.10 GiB memory in use. Of the allocated memory 21.53 GiB is allocated by PyTorch, and 118.25 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 261, in _train_epoch
+    scaler.scale(loss + sync_loss).backward()
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/_tensor.py", line 626, in backward
+    torch.autograd.backward(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/autograd/__init__.py", line 347, in backward
+    _engine_run_backward(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/autograd/graph.py", line 823, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.40 GiB is free. Including non-PyTorch memory, this process has 22.10 GiB memory in use. Of the allocated memory 21.53 GiB is allocated by PyTorch, and 118.25 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[2/14] lambda_attr=0.175, learning_rate=0.0004899
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.77 GiB is free. Including non-PyTorch memory, this process has 21.73 GiB memory in use. Of the allocated memory 15.17 GiB is allocated by PyTorch, and 6.11 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.77 GiB is free. Including non-PyTorch memory, this process has 21.73 GiB memory in use. Of the allocated memory 15.17 GiB is allocated by PyTorch, and 6.11 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[3/14] lambda_attr=0.175, learning_rate=0.0003067
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.99 GiB is free. Including non-PyTorch memory, this process has 21.51 GiB memory in use. Of the allocated memory 15.17 GiB is allocated by PyTorch, and 5.89 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 1.99 GiB is free. Including non-PyTorch memory, this process has 21.51 GiB memory in use. Of the allocated memory 15.17 GiB is allocated by PyTorch, and 5.89 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[4/14] lambda_attr=0.15, learning_rate=0.000575
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 2.21 GiB is free. Including non-PyTorch memory, this process has 21.28 GiB memory in use. Of the allocated memory 15.16 GiB is allocated by PyTorch, and 5.67 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 2.21 GiB is free. Including non-PyTorch memory, this process has 21.28 GiB memory in use. Of the allocated memory 15.16 GiB is allocated by PyTorch, and 5.67 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[UniqueChoice] remap duplicate suggestion -> {'lambda_attr': 0.15, 'learning_rate': 0.00023428}
+
+[5/14] lambda_attr=0.15, learning_rate=0.0002343
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 2.43 GiB is free. Including non-PyTorch memory, this process has 21.06 GiB memory in use. Of the allocated memory 15.16 GiB is allocated by PyTorch, and 5.45 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 2.43 GiB is free. Including non-PyTorch memory, this process has 21.06 GiB memory in use. Of the allocated memory 15.16 GiB is allocated by PyTorch, and 5.45 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[6/14] lambda_attr=0.175, learning_rate=0.000575
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 2.66 GiB is free. Including non-PyTorch memory, this process has 20.84 GiB memory in use. Of the allocated memory 15.16 GiB is allocated by PyTorch, and 5.23 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 2.66 GiB is free. Including non-PyTorch memory, this process has 20.84 GiB memory in use. Of the allocated memory 15.16 GiB is allocated by PyTorch, and 5.23 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[7/14] lambda_attr=0.175, learning_rate=0.0002343
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 2.88 GiB is free. Including non-PyTorch memory, this process has 20.62 GiB memory in use. Of the allocated memory 15.16 GiB is allocated by PyTorch, and 5.01 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 2.88 GiB is free. Including non-PyTorch memory, this process has 20.62 GiB memory in use. Of the allocated memory 15.16 GiB is allocated by PyTorch, and 5.01 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[8/14] lambda_attr=0.15, learning_rate=0.0006815
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.10 GiB is free. Including non-PyTorch memory, this process has 20.39 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.79 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.10 GiB is free. Including non-PyTorch memory, this process has 20.39 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.79 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[9/14] lambda_attr=0.175, learning_rate=0.000426
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.32 GiB is free. Including non-PyTorch memory, this process has 20.17 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.57 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.32 GiB is free. Including non-PyTorch memory, this process has 20.17 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.57 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[UniqueChoice] remap duplicate suggestion -> {'lambda_attr': 0.15, 'learning_rate': 0.00030669}
+
+[10/14] lambda_attr=0.15, learning_rate=0.0003067
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.55 GiB is free. Including non-PyTorch memory, this process has 19.95 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.35 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.55 GiB is free. Including non-PyTorch memory, this process has 19.95 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.35 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[UniqueChoice] remap duplicate suggestion -> {'lambda_attr': 0.15, 'learning_rate': 0.00037484}
+
+[11/14] lambda_attr=0.15, learning_rate=0.0003748
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.77 GiB is free. Including non-PyTorch memory, this process has 19.72 GiB memory in use. Of the allocated memory 15.14 GiB is allocated by PyTorch, and 4.13 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.77 GiB is free. Including non-PyTorch memory, this process has 19.72 GiB memory in use. Of the allocated memory 15.14 GiB is allocated by PyTorch, and 4.13 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[UniqueChoice] remap duplicate suggestion -> {'lambda_attr': 0.15, 'learning_rate': 0.00042596}
+
+[12/14] lambda_attr=0.15, learning_rate=0.000426
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.99 GiB is free. Including non-PyTorch memory, this process has 19.50 GiB memory in use. Of the allocated memory 15.14 GiB is allocated by PyTorch, and 3.91 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.99 GiB is free. Including non-PyTorch memory, this process has 19.50 GiB memory in use. Of the allocated memory 15.14 GiB is allocated by PyTorch, and 3.91 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[UniqueChoice] remap duplicate suggestion -> {'lambda_attr': 0.15, 'learning_rate': 0.00048985}
+
+[13/14] lambda_attr=0.15, learning_rate=0.0004899
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 4.21 GiB is free. Including non-PyTorch memory, this process has 19.28 GiB memory in use. Of the allocated memory 15.14 GiB is allocated by PyTorch, and 3.69 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 4.21 GiB is free. Including non-PyTorch memory, this process has 19.28 GiB memory in use. Of the allocated memory 15.14 GiB is allocated by PyTorch, and 3.69 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[UniqueChoice] remap duplicate suggestion -> {'lambda_attr': 0.175, 'learning_rate': 0.00068153}
+
+[14/14] lambda_attr=0.175, learning_rate=0.0006815
+  -> FAILED: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 4.44 GiB is free. Including non-PyTorch memory, this process has 19.06 GiB memory in use. Of the allocated memory 15.14 GiB is allocated by PyTorch, and 3.47 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2956, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 885, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.37 GiB. GPU 0 has a total capacity of 23.52 GiB of which 4.44 GiB is free. Including non-PyTorch memory, this process has 19.06 GiB memory in use. Of the allocated memory 15.14 GiB is allocated by PyTorch, and 3.47 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+[WARN] fmin ended with: 
+
+=================================================================
+  DONE  |  FDSA x retail_rocket
+  Best MRR@20 = 0.000000  |  0/14 trials OK
+  Best HR@10  = 0.000000
+  Test MRR@20 = 0.000000  (best-valid checkpoint)
+  Test HR@10  = 0.000000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.000000 best_valid_hr10=0.000000 test_mrr20=0.000000 test_hr10=0.000000
+  Total time: 0.7 min
+  Best params:
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/retail_rocket_FDSA_baseline2_addtune2_retail_rocket_fdsa_k1_20260416_040836_096766_pid1247502.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning2/BASELINE2/retail_rocket/FDSA/retail_rocket_FDSA_baseline2_addtune2_retail_rocket_fdsa_k1_20260416_040836_096766_pid1247502.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1247502 start=2026-04-16T04:08:35 end=2026-04-16T04:09:19

@@ -601,6 +601,19 @@ class MoEStage(nn.Module):
         arange = torch.arange(seq_len, device=device).unsqueeze(0)  # [1, T]
         return arange < lens.unsqueeze(1)  # [B, T]
 
+    @staticmethod
+    def _resolve_routing_seq_inputs(
+        valid_mask: torch.Tensor,
+        item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if routing_item_seq_len is None:
+            return valid_mask, item_seq_len
+        seq_len = valid_mask.size(1)
+        lens = routing_item_seq_len.to(device=valid_mask.device).long().clamp(min=1, max=seq_len)
+        arange = torch.arange(seq_len, device=valid_mask.device).unsqueeze(0)
+        return arange < lens.unsqueeze(1), lens
+
     def _pool_sequence_query(
         self,
         seq: torch.Tensor,
@@ -675,6 +688,7 @@ class MoEStage(nn.Module):
         feat: torch.Tensor,
         valid_mask: torch.Tensor,
         item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.router_hidden_encoder is None or self.router_feature_encoder is None:
             raise RuntimeError("factorized router encoders are not initialized.")
@@ -694,11 +708,16 @@ class MoEStage(nn.Module):
             feat_enc = stage_feat.new_zeros(stage_feat.shape[0], stage_feat.shape[1], self.router_feature_encoder[-1].out_features)
 
         if self.router_mode == "session":
+            router_valid_mask, router_item_seq_len = self._resolve_routing_seq_inputs(
+                valid_mask,
+                item_seq_len,
+                routing_item_seq_len,
+            )
             if self.router_use_hidden:
                 hidden_enc = self._pool_sequence(
                     hidden_enc,
-                    valid_mask,
-                    item_seq_len,
+                    router_valid_mask,
+                    router_item_seq_len,
                     query=self.session_query_hidden,
                 )
             else:
@@ -706,8 +725,8 @@ class MoEStage(nn.Module):
             if self.router_use_feature:
                 feat_enc = self._pool_sequence(
                     feat_enc,
-                    valid_mask,
-                    item_seq_len,
+                    router_valid_mask,
+                    router_item_seq_len,
                     query=self.session_query_feature,
                 )
             else:
@@ -722,6 +741,7 @@ class MoEStage(nn.Module):
         feat: torch.Tensor,
         valid_mask: torch.Tensor,
         item_seq_len: Optional[torch.Tensor],
+        routing_item_seq_len: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         hidden_ctx, feat_ctx = self._encode_factorized_router_inputs(
             h_norm=h_norm,
@@ -729,6 +749,7 @@ class MoEStage(nn.Module):
             feat=feat,
             valid_mask=valid_mask,
             item_seq_len=item_seq_len,
+            routing_item_seq_len=routing_item_seq_len,
         )
         interaction = torch.cat(
             [
@@ -778,10 +799,15 @@ class MoEStage(nn.Module):
         if self.group_teacher_router is not None:
             teacher_feat = self._reliability_scale_stage_features(stage_feat, feat)
             if self.router_mode == "session":
+                router_valid_mask, router_item_seq_len = self._resolve_routing_seq_inputs(
+                    valid_mask,
+                    item_seq_len,
+                    routing_item_seq_len,
+                )
                 teacher_feat = self._pool_rule_session_features(
                     teacher_feat,
-                    valid_mask=valid_mask,
-                    item_seq_len=item_seq_len,
+                    valid_mask=router_valid_mask,
+                    item_seq_len=router_item_seq_len,
                     session_pooling=self.session_pooling,
                 )
             _, teacher_group_logits = self.group_teacher_router(
@@ -810,6 +836,7 @@ class MoEStage(nn.Module):
         hidden: torch.Tensor,
         feat: torch.Tensor,
         item_seq_len: Optional[torch.Tensor] = None,
+        routing_item_seq_len: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Args:
@@ -824,6 +851,11 @@ class MoEStage(nn.Module):
         B, T, _ = hidden.shape
         h_norm = self.pre_ln(hidden)
         valid_mask = self._build_valid_mask(B, T, item_seq_len, hidden.device)
+        router_valid_mask, router_item_seq_len = self._resolve_routing_seq_inputs(
+            valid_mask,
+            item_seq_len,
+            routing_item_seq_len,
+        )
 
         stage_feat = feat.index_select(-1, self.stage_feat_idx)  # [B, T, F_stage]
 
@@ -834,6 +866,7 @@ class MoEStage(nn.Module):
                 feat=feat,
                 valid_mask=valid_mask,
                 item_seq_len=item_seq_len,
+                routing_item_seq_len=routing_item_seq_len,
             )
         elif self.router_impl == "learned":
             assert self.stage_feat_proj is not None
@@ -849,12 +882,18 @@ class MoEStage(nn.Module):
                 router_inputs = []
                 if self.router_use_hidden:
                     h_sess = self._pool_sequence(
-                        h_norm, valid_mask, item_seq_len, query=self.session_query_hidden
+                        h_norm,
+                        router_valid_mask,
+                        router_item_seq_len,
+                        query=self.session_query_hidden,
                     )
                     router_inputs.append(h_sess)
                 if self.router_use_feature:
                     f_sess = self._pool_sequence(
-                        stage_feat_emb, valid_mask, item_seq_len, query=self.session_query_feature
+                        stage_feat_emb,
+                        router_valid_mask,
+                        router_item_seq_len,
+                        query=self.session_query_feature,
                     )
                     router_inputs.append(f_sess)
                 router_in = router_inputs[0] if len(router_inputs) == 1 else torch.cat(router_inputs, dim=-1)
@@ -884,8 +923,8 @@ class MoEStage(nn.Module):
             if self.router_mode == "session":
                 rule_sess = self._pool_rule_session_features(
                     rule_feat,
-                    valid_mask=valid_mask,
-                    item_seq_len=item_seq_len,
+                    valid_mask=router_valid_mask,
+                    item_seq_len=router_item_seq_len,
                     session_pooling=self.session_pooling,
                 )
                 gate_w_sess, gate_l_sess = self.router(
@@ -1086,6 +1125,7 @@ class HierarchicalMoE(nn.Module):
         hidden: torch.Tensor,
         feat: torch.Tensor,
         item_seq_len: Optional[torch.Tensor] = None,
+        routing_item_seq_len: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Run one stage by name.
 
@@ -1095,13 +1135,19 @@ class HierarchicalMoE(nn.Module):
         if not self.has_stage(stage_name):
             raise ValueError(f"stage '{stage_name}' is not active in this HierarchicalMoE instance")
         stage_module = getattr(self, f"{stage_name}_stage")
-        return stage_module(hidden, feat, item_seq_len=item_seq_len)
+        return stage_module(
+            hidden,
+            feat,
+            item_seq_len=item_seq_len,
+            routing_item_seq_len=routing_item_seq_len,
+        )
 
     def forward(
         self,
         hidden: torch.Tensor,
         feat: torch.Tensor,
         item_seq_len: Optional[torch.Tensor] = None,
+        routing_item_seq_len: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
         Args:
@@ -1121,7 +1167,13 @@ class HierarchicalMoE(nn.Module):
         out = hidden
 
         for stage_name in self.active_stages:
-            out, w, l = self.forward_stage(stage_name, out, feat, item_seq_len=item_seq_len)
+            out, w, l = self.forward_stage(
+                stage_name,
+                out,
+                feat,
+                item_seq_len=item_seq_len,
+                routing_item_seq_len=routing_item_seq_len,
+            )
             all_weights[stage_name] = w
             all_logits[stage_name] = l
 

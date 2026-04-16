@@ -216,12 +216,16 @@ class FeaturedMoE_N2(FeaturedMoE_N):
         return torch.stack(rewards).mean() if rewards else self.item_embedding.weight.new_tensor(0.0)
 
     def calculate_loss(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
         pos_items = interaction[self.POS_ITEM_ID]
 
         feat = self._gather_features(interaction)
-        seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+        seq_output, aux_data = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
         logits = seq_output @ self.item_embedding.weight.T
         ce_loss = F.cross_entropy(logits, pos_items)
 

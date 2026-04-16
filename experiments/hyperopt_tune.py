@@ -115,7 +115,7 @@ from recbole.utils import init_seed, get_trainer
 from recbole.utils import utils as _rbu
 get_model = _rbu.get_model
 
-from hydra_utils import load_hydra_config, configure_eval_sampling
+from hydra_utils import load_hydra_config, configure_eval_sampling, enforce_v4_feature_mode
 from omegaconf import OmegaConf
 
 try:
@@ -3931,6 +3931,7 @@ def main():
     cfg_omega = OmegaConf.create(cfg)
     cfg_omega = configure_eval_sampling(cfg_omega)
     cfg = OmegaConf.to_container(cfg_omega, resolve=True)
+    enforce_v4_feature_mode(cfg)
 
     # Optional stage-space YAML override (fixed + search).
     if args.space_yaml:

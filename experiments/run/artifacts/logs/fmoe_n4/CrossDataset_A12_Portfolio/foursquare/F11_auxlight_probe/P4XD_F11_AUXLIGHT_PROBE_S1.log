@@ -1,0 +1,61 @@
+[FMOE_N4_CROSS_DATASET_A12_PORTFOLIO_SETTING_HEADER]
+run_phase=P4XD_XD_FOURSQUARE_F11_AUXLIGHT_PROBE_S1 exp_brief=A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5 phase_id=P4XD axis_id=N4XDA12 setting_id=F11_auxlight_probe hparam_id= seed=1
+desc=F11_auxlight_probe
+dataset=foursquare gpu=3 order=27
+max_evals=10 tune_epochs=80 tune_patience=
+seed=264026
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --search-algo tpe --max-evals 10 --tune-epochs 80 --tune-patience 6 --seed 264026 --run-group fmoe_n4 --run-axis CrossDataset_A12_Portfolio --run-phase P4XD_XD_FOURSQUARE_F11_AUXLIGHT_PROBE_S1 model=featured_moe_n3_tune dataset=foursquare eval_mode=session_fixed feature_mode=full_v3 gpu_id=3 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A12" ++fmoe_architecture_key="A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5" ++fmoe_hparam_id="H15" ++fmoe_phase="P4XD" train_batch_size=3072 eval_batch_size=4096 ++phase_run_type="stage1" ++phase_axis_id="N4XDA12" ++phase_axis_desc="cross_dataset_a12_portfolio" ++phase_setting_id="F11_auxlight_probe" ++phase_setting_key="F11_auxlight_probe" ++phase_hparam_id="H15" ++phase_seed_id=1 ++phase_run_id="XD_FOURSQUARE_F11_AUXLIGHT_PROBE_S1" ++layer_layout=["attn","macro_ffn","mid_ffn","attn","micro_ffn"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0001 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0005 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w5_exd",mid:"w5_exd",micro:"w5_exd"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++macro_history_window=5 ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++bias_mode="none" ++stage_family_dropout_prob={macro:0.02,mid:0.02,micro:0.02} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++embedding_size=128 ++d_ff=384 ++d_expert_hidden=96 ++d_router_hidden=64 ++MAX_ITEM_LIST_LENGTH=20 ++d_feat_emb=12 ++expert_scale=3 ++lr_scheduler_type="warmup_cosine" ++num_heads=4 ++search.learning_rate=[0.00022,0.0008] ++search_space_type_overrides.learning_rate=loguniform ++search.hidden_dropout_prob=[0.14,0.17,0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.08,0.1] ++search_space_type_overrides.attn_dropout_prob=choice ++search.weight_decay=[1.2e-06,2.4e-06] ++search_space_type_overrides.weight_decay=choice ++search.route_consistency_lambda=[0.0,0.00025,0.0005] ++search_space_type_overrides.route_consistency_lambda=choice ++search.z_loss_lambda=[5e-05,0.0001,0.0002] ++search_space_type_overrides.z_loss_lambda=choice
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=197333 ts=2026-04-16T00:43:18
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x foursquare
+  max_evals=10  epochs=80  patience=6  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=3072/4096/4096
+  track=fmoe_n4  axis=crossdataset_a12_portfolio  phase=P4XD_XD_FOURSQUARE_F11_AUXLIGHT_PROBE_S1
+=================================================================
+Changed knobs: attn_dropout_prob, hidden_dropout_prob, learning_rate, route_consistency_lambda, weight_decay, z_loss_lambda
+Tuned params(len>1): 6  (~108 discrete combos)
+Tuned groups: 6
+  [optimization]
+    hidden_dropout_prob             [0.14, 0.17, 0.2]                         -> choice
+    learning_rate                   [0.00022, 0.0008]                         -> loguniform
+    weight_decay                    [1.2e-06, 2.4e-06]                        -> choice
+  [model_core]
+    attn_dropout_prob               [0.08, 0.1]                               -> choice
+  [other]
+    route_consistency_lambda        [0.0, 0.00025, 0.0005]                    -> choice
+    z_loss_lambda                   [5e-05, 0.0001, 0.0002]                   -> choice
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] attn_dropout_prob=0.1, hidden_dropout_prob=0.17, learning_rate=0.0006342, route_consistency_lambda=0.00025, weight_decay=1.2e-06, z_loss_lambda=0.0001
+  -> MRR@20=0.144200  best=0.144200  (early_stop@25, trial=2.8min, avg=2.8min/trial, total=2.8min, ETA=25.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.144200 cur_best_hr10=0.267600 cur_test_mrr20=0.112000 cur_test_hr10=0.217600 run_best_mrr20=0.144200 run_best_hr10=0.267600 run_test_mrr20=0.112000 run_test_hr10=0.217600
+
+[2/10] attn_dropout_prob=0.1, hidden_dropout_prob=0.14, learning_rate=0.0004309, route_consistency_lambda=0, weight_decay=2.4e-06, z_loss_lambda=0.0002
+  -> MRR@20=0.146600  best=0.146600  (early_stop@41, trial=4.4min, avg=3.6min/trial, total=7.2min, ETA=28.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.146600 cur_best_hr10=0.267600 cur_test_mrr20=0.116200 cur_test_hr10=0.219900 run_best_mrr20=0.146600 run_best_hr10=0.267600 run_test_mrr20=0.116200 run_test_hr10=0.219900
+
+[3/10] attn_dropout_prob=0.1, hidden_dropout_prob=0.2, learning_rate=0.00025, route_consistency_lambda=0, weight_decay=2.4e-06, z_loss_lambda=0.0002
+  -> MRR@20=0.142200  best=0.146600  (early_stop@73, trial=7.7min, avg=5.0min/trial, total=14.9min, ETA=34.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.142200 cur_best_hr10=0.262600 cur_test_mrr20=0.110300 cur_test_hr10=0.215100 run_best_mrr20=0.146600 run_best_hr10=0.267600 run_test_mrr20=0.116200 run_test_hr10=0.219900
+
+[4/10] attn_dropout_prob=0.08, hidden_dropout_prob=0.2, learning_rate=0.0006354, route_consistency_lambda=0.00025, weight_decay=2.4e-06, z_loss_lambda=0.0002
+  -> MRR@20=0.145200  best=0.146600  (early_stop@37, trial=3.9min, avg=4.7min/trial, total=18.8min, ETA=28.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.145200 cur_best_hr10=0.267100 cur_test_mrr20=0.116200 cur_test_hr10=0.219300 run_best_mrr20=0.146600 run_best_hr10=0.267600 run_test_mrr20=0.116200 run_test_hr10=0.219900
+
+[5/10] attn_dropout_prob=0.08, hidden_dropout_prob=0.14, learning_rate=0.0004072, route_consistency_lambda=0, weight_decay=1.2e-06, z_loss_lambda=0.0001
+  -> MRR@20=0.147000  best=0.147000  (early_stop@46, trial=4.7min, avg=4.7min/trial, total=23.5min, ETA=23.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.147000 cur_best_hr10=0.267900 cur_test_mrr20=0.117200 cur_test_hr10=0.218200 run_best_mrr20=0.147000 run_best_hr10=0.267900 run_test_mrr20=0.117200 run_test_hr10=0.218200
+
+[6/10] attn_dropout_prob=0.08, hidden_dropout_prob=0.17, learning_rate=0.0002247, route_consistency_lambda=0.00025, weight_decay=1.2e-06, z_loss_lambda=5e-05
+[RUN_STATUS] TERMINATED signal=SIGINT(2) pid=197333 ts=2026-04-16T01:09:54
+[RUN_STATUS] END status=terminated signal=SIGINT(2) pid=197333 start=2026-04-16T00:43:18 end=2026-04-16T01:09:55

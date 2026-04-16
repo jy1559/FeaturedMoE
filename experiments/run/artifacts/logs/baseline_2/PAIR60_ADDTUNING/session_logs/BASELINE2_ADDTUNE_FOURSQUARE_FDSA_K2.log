@@ -1,0 +1,80 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_fs --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/foursquare_fdsa_K2.yaml --max-evals 5 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260678 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_FOURSQUARE_FDSA_K2 model=fdsa dataset=foursquare eval_mode=session_fixed feature_mode=full_v4 gpu_id=5 log_wandb=false show_progress=false ++seed=20260678 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1237646 ts=2026-04-16T02:38:45
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/foursquare_fdsa_K2.yaml (fixed=15, search=9)
+
+=================================================================
+  Hyperopt  |  FDSA x foursquare
+  max_evals=5  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/4096/4096
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_FOURSQUARE_FDSA_K2
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attribute_hidden_size, dropout_ratio, fusion_type, learning_rate, n_heads, n_layers, weight_decay
+Tuned params(len>1): 8  (~324 discrete combos)
+Tuned groups: 8
+  [optimization]
+    learning_rate                   [0.00017079, 0.00024842, 0.00031052, 0.00038815, 0.00055894]  -> loguniform
+    weight_decay                    [0.0, 0.00025, 0.0005, 0.001]             -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.1875, 0.25, 0.3125]                    -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [45, 50]                                  -> choice
+    attribute_hidden_size           [80, 112, 144]                            -> choice
+    fusion_type                     ['concat', 'gate', 'sum']                 -> choice
+    n_heads                         [2, 4, 8]                                 -> choice
+    n_layers                        [1, 2]                                    -> choice
+Fixed params(singleton/non-list): 1
+Fixed groups: 1
+  [other]
+    lambda_attr                     0.0                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/5] MAX_ITEM_LIST_LENGTH=45, attribute_hidden_size=144, dropout_ratio=0.25, fusion_type=concat, learning_rate=0.0004326, n_heads=2, n_layers=1, weight_decay=0
+  -> MRR@20=0.199900  best=0.199900  (early_stop@62, trial=1.5min, avg=1.6min/trial, total=1.6min, ETA=6.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.199900 cur_best_hr10=0.338600 cur_test_mrr20=0.162000 cur_test_hr10=0.295000 run_best_mrr20=0.199900 run_best_hr10=0.338600 run_test_mrr20=0.162000 run_test_hr10=0.295000
+
+[2/5] MAX_ITEM_LIST_LENGTH=45, attribute_hidden_size=112, dropout_ratio=0.25, fusion_type=sum, learning_rate=0.0002521, n_heads=8, n_layers=1, weight_decay=0.0009957
+  -> MRR@20=0.199100  best=0.199900  (full@100, trial=2.8min, avg=2.2min/trial, total=4.4min, ETA=6.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.199100 cur_best_hr10=0.334100 cur_test_mrr20=0.160400 cur_test_hr10=0.284200 run_best_mrr20=0.199900 run_best_hr10=0.338600 run_test_mrr20=0.162000 run_test_hr10=0.295000
+
+[3/5] MAX_ITEM_LIST_LENGTH=50, attribute_hidden_size=144, dropout_ratio=0.25, fusion_type=concat, learning_rate=0.0004647, n_heads=8, n_layers=1, weight_decay=0.0002527
+  -> MRR@20=0.201300  best=0.201300  (early_stop@48, trial=1.5min, avg=2.0min/trial, total=5.9min, ETA=4.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.201300 cur_best_hr10=0.337800 cur_test_mrr20=0.164800 cur_test_hr10=0.291000 run_best_mrr20=0.201300 run_best_hr10=0.337800 run_test_mrr20=0.164800 run_test_hr10=0.291000
+
+[4/5] MAX_ITEM_LIST_LENGTH=45, attribute_hidden_size=144, dropout_ratio=0.3125, fusion_type=concat, learning_rate=0.0002602, n_heads=2, n_layers=2, weight_decay=0
+  -> MRR@20=0.205400  best=0.205400  (early_stop@88, trial=3.4min, avg=2.3min/trial, total=9.3min, ETA=2.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.205400 cur_best_hr10=0.342700 cur_test_mrr20=0.169000 cur_test_hr10=0.306600 run_best_mrr20=0.205400 run_best_hr10=0.342700 run_test_mrr20=0.169000 run_test_hr10=0.306600
+
+[5/5] MAX_ITEM_LIST_LENGTH=45, attribute_hidden_size=112, dropout_ratio=0.25, fusion_type=sum, learning_rate=0.00023, n_heads=8, n_layers=2, weight_decay=0
+  -> MRR@20=0.205800  best=0.205800  (early_stop@87, trial=4.1min, avg=2.7min/trial, total=13.4min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.205800 cur_best_hr10=0.339700 cur_test_mrr20=0.167600 cur_test_hr10=0.297800 run_best_mrr20=0.205800 run_best_hr10=0.339700 run_test_mrr20=0.167600 run_test_hr10=0.297800
+
+=================================================================
+  DONE  |  FDSA x foursquare
+  Best MRR@20 = 0.205800  |  5/5 trials OK
+  Best HR@10  = 0.339700
+  Test MRR@20 = 0.167600  (best-valid checkpoint)
+  Test HR@10  = 0.297800  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.205800 best_valid_hr10=0.339700 test_mrr20=0.167600 test_hr10=0.297800
+  Total time: 13.4 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 45
+    attribute_hidden_size: 112
+    dropout_ratio: 0.25
+    fusion_type: sum
+    learning_rate: 0.000230039
+    n_heads: 8
+    n_layers: 2
+    weight_decay: 0
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/foursquare_FDSA_baseline2_addtune_foursquare_fdsa_k2_20260416_023845_936580_pid1237646.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/foursquare/FDSA/foursquare_FDSA_baseline2_addtune_foursquare_fdsa_k2_20260416_023845_936580_pid1237646.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/foursquare/FDSA/foursquare_FDSA_baseline2_addtune_foursquare_fdsa_k2_20260416_023845_936580_pid1237646_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/foursquare/FDSA/foursquare_FDSA_baseline2_addtune_foursquare_fdsa_k2_20260416_023845_936580_pid1237646_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1237646 start=2026-04-16T02:38:45 end=2026-04-16T02:52:12

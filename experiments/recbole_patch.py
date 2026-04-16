@@ -79,6 +79,69 @@ def _config_get(config_obj, key, default=None):
         return getattr(config_obj, key, default)
 
 
+def _history_input_mode(config_obj) -> str:
+    return str(_config_get(config_obj, "history_input_mode", "session_only") or "session_only").lower().strip()
+
+
+def _history_full_mode_enabled(config_obj) -> bool:
+    return _history_input_mode(config_obj) == "full_history_session_targets"
+
+
+def _history_group_field(config_obj) -> str:
+    return str(_config_get(config_obj, "history_group_field", "user_id") or "user_id").strip()
+
+
+def _target_group_field(config_obj, default: str = "session_id") -> str:
+    return str(_config_get(config_obj, "target_group_field", default) or default).strip()
+
+
+def _history_eval_policy(config_obj) -> str:
+    return str(_config_get(config_obj, "history_eval_policy", "strict_train_prefix") or "strict_train_prefix").lower().strip()
+
+
+def _current_session_item_length_field(config_obj) -> str:
+    return str(
+        _config_get(config_obj, "current_session_item_length_field", "current_session_item_length")
+        or "current_session_item_length"
+    ).strip()
+
+
+def _ensure_history_input_load_col(config_obj) -> None:
+    if not _history_full_mode_enabled(config_obj):
+        return
+
+    time_field = str(_config_get(config_obj, "TIME_FIELD", "timestamp") or "timestamp").strip()
+    required_fields = [
+        _history_group_field(config_obj),
+        _target_group_field(config_obj, default=str(_config_get(config_obj, "SESSION_ID_FIELD", "session_id") or "session_id")),
+        time_field,
+    ]
+
+    load_col = _config_get(config_obj, "load_col", None)
+    if not isinstance(load_col, dict):
+        load_col = {}
+    inter_cols = list(load_col.get("inter", []) or [])
+
+    changed = False
+    for field in required_fields:
+        if field and field not in inter_cols:
+            inter_cols.append(field)
+            changed = True
+
+    if not changed:
+        return
+
+    new_load_col = dict(load_col)
+    new_load_col["inter"] = inter_cols
+    try:
+        config_obj["load_col"] = new_load_col
+    except Exception:
+        pass
+    final_cfg = getattr(config_obj, "final_config_dict", None)
+    if isinstance(final_cfg, dict):
+        final_cfg["load_col"] = new_load_col
+
+
 def _dataset_file_signature(config_obj, dataset_name: str) -> dict:
     """Build a lightweight signature for source .inter/.item files.
 
@@ -265,6 +328,7 @@ def _resolve_dataset_cache_file(config):
 
 def _patched_create_dataset(config):
     """Recover from corrupted dataset cache files and rebuild safely."""
+    _ensure_history_input_load_col(config)
     try:
         return _original_create_dataset(config)
     except Exception as exc:
@@ -301,6 +365,7 @@ def _patched_create_dataset(config):
             pass
 
         logger.warning(f"[CacheRecover] rebuilding dataset after cache load failure: {exc}")
+        _ensure_history_input_load_col(config)
         return _original_create_dataset(config)
 
 
@@ -498,6 +563,344 @@ def _convert_inter_to_sequence(dataset, inter_feat, for_training=True):
         new_dict[list_field] = out
 
     return Interaction(new_dict)
+
+
+def _select_sequence_history_fields(dataset, fields):
+    uid_field = dataset.uid_field
+    iid_field = dataset.iid_field
+    model_name = str(dataset.config["model"]).lower() if "model" in dataset.config else ""
+
+    history_fields = [field for field in fields if field != uid_field]
+    if model_name in {
+        "featured_moe",
+        "featuredmoe",
+        "featured_moe_hgr",
+        "featuredmoe_hgr",
+        "featured_moe_v2",
+        "featuredmoe_v2",
+        "featured_moe_v3",
+        "featuredmoe_v3",
+        "featured_moe_v4_distillation",
+        "featuredmoe_v4_distillation",
+        "featured_moe_n",
+        "featuredmoe_n",
+        "featured_moe_n2",
+        "featuredmoe_n2",
+        "featured_moe_n3",
+        "featuredmoe_n3",
+    }:
+        history_fields = [
+            field
+            for field in history_fields
+            if (
+                field == iid_field
+                or field.startswith("mac_")
+                or field.startswith("mac5_")
+                or field.startswith("mac10_")
+                or field.startswith("mid_")
+                or field.startswith("mic_")
+            )
+        ]
+    return history_fields
+
+
+def _build_sequence_interaction_from_history_indices(
+    dataset,
+    *,
+    sorted_values,
+    target_idx_np,
+    history_idx_np,
+    seq_len_np,
+    current_session_len_np=None,
+):
+    if target_idx_np.size == 0:
+        return None
+
+    max_len = int(dataset.config["MAX_ITEM_LIST_LENGTH"])
+    list_suffix = dataset.config["LIST_SUFFIX"] if "LIST_SUFFIX" in dataset.config else "_list"
+    item_list_length_field = (
+        dataset.config["ITEM_LIST_LENGTH_FIELD"] if "ITEM_LIST_LENGTH_FIELD" in dataset.config else "item_length"
+    )
+    current_session_len_field = _current_session_item_length_field(dataset.config)
+    chunk_size = int(dataset.config["sequence_convert_chunk_size"]) if "sequence_convert_chunk_size" in dataset.config else 16384
+    chunk_size = max(1024, chunk_size)
+    model_name = str(dataset.config["model"]).lower() if "model" in dataset.config else ""
+    default_fp16 = model_name in {
+        "featured_moe",
+        "featuredmoe",
+        "featured_moe_hgr",
+        "featuredmoe_hgr",
+        "featured_moe_v2",
+        "featuredmoe_v2",
+        "featured_moe_v3",
+        "featuredmoe_v3",
+        "featured_moe_v4_distillation",
+        "featuredmoe_v4_distillation",
+        "featured_moe_n",
+        "featuredmoe_n",
+        "featured_moe_n2",
+        "featuredmoe_n2",
+        "featured_moe_n3",
+        "featuredmoe_n3",
+    }
+    use_fp16 = bool(dataset.config["fmoe_feature_fp16"]) if "fmoe_feature_fp16" in dataset.config else default_fp16
+
+    def _is_feature_field(name: str) -> bool:
+        return (
+            name.startswith("mac_")
+            or name.startswith("mac5_")
+            or name.startswith("mac10_")
+            or name.startswith("mid_")
+            or name.startswith("mic_")
+        )
+
+    fields = list(sorted_values.keys())
+    history_fields = _select_sequence_history_fields(dataset, fields)
+
+    target_idx = torch.from_numpy(target_idx_np.astype(np.int64, copy=False)).long()
+    seq_len = torch.from_numpy(seq_len_np.astype(np.int64, copy=False)).long()
+    safe_history_idx = torch.from_numpy(np.maximum(history_idx_np, 0).astype(np.int64, copy=False)).long()
+    valid_history_mask = torch.from_numpy(history_idx_np >= 0)
+
+    new_dict = {
+        item_list_length_field: seq_len,
+    }
+    if current_session_len_np is not None:
+        new_dict[current_session_len_field] = torch.from_numpy(
+            current_session_len_np.astype(np.int64, copy=False)
+        ).long()
+
+    new_length = int(target_idx.shape[0])
+    for field in fields:
+        values = sorted_values[field]
+        if not torch.is_tensor(values):
+            values = torch.as_tensor(values)
+
+        new_dict[field] = values[target_idx]
+        if field not in history_fields:
+            continue
+
+        hist_values = values
+        if use_fp16 and _is_feature_field(field) and hist_values.is_floating_point():
+            hist_values = hist_values.to(torch.float16)
+
+        out_shape = (new_length, max_len) + tuple(hist_values.shape[1:])
+        out = torch.zeros(out_shape, dtype=hist_values.dtype)
+
+        for start in range(0, new_length, chunk_size):
+            end = min(new_length, start + chunk_size)
+            idx = safe_history_idx[start:end]
+            valid = valid_history_mask[start:end]
+            gathered = hist_values[idx]
+            if gathered.dim() == 2:
+                gathered = gathered.masked_fill(~valid, 0)
+            else:
+                mask = ~valid
+                for _ in range(gathered.dim() - 2):
+                    mask = mask.unsqueeze(-1)
+                gathered = gathered.masked_fill(mask, 0)
+            out[start:end] = gathered
+
+        new_dict[field + list_suffix] = out
+
+    return Interaction(new_dict)
+
+
+def _convert_split_interactions_to_full_history_sequences(dataset, split_interactions, split_names):
+    max_len = int(dataset.config["MAX_ITEM_LIST_LENGTH"])
+    history_group_field = _history_group_field(dataset.config)
+    target_group_field = _target_group_field(
+        dataset.config,
+        default=str(_config_get(dataset.config, "SESSION_ID_FIELD", dataset.uid_field) or dataset.uid_field),
+    )
+    history_policy = _history_eval_policy(dataset.config)
+    if history_policy not in {"strict_train_prefix", "rolling_observed_prefix"}:
+        raise ValueError(
+            "history_eval_policy must be one of ['strict_train_prefix','rolling_observed_prefix'], "
+            f"got {history_policy}"
+        )
+
+    non_empty = [inter for inter in split_interactions if inter is not None]
+    if not non_empty:
+        return [None for _ in split_interactions]
+
+    fields = list(non_empty[0].columns)
+    if history_group_field not in fields:
+        raise ValueError(
+            f"history_input_mode=full_history_session_targets requires '{history_group_field}' in loaded inter columns. "
+            "Add it to load_col.inter or use a feature_mode that loads it."
+        )
+    if target_group_field not in fields:
+        raise ValueError(
+            f"history_input_mode=full_history_session_targets requires '{target_group_field}' in loaded inter columns."
+        )
+    if dataset.time_field not in fields:
+        raise ValueError(
+            f"history_input_mode=full_history_session_targets requires time field '{dataset.time_field}'."
+        )
+
+    combined_values = {}
+    split_id_parts = []
+    total_rows = 0
+    for split_idx, inter in enumerate(split_interactions):
+        if inter is None:
+            continue
+        split_len = len(inter)
+        total_rows += split_len
+        split_id_parts.append(torch.full((split_len,), split_idx, dtype=torch.long))
+        for field in fields:
+            value = inter[field]
+            if not torch.is_tensor(value):
+                value = torch.as_tensor(value)
+            combined_values.setdefault(field, []).append(value)
+
+    if total_rows == 0:
+        return [None for _ in split_interactions]
+
+    merged_values = {field: torch.cat(parts, dim=0) for field, parts in combined_values.items()}
+    split_id = torch.cat(split_id_parts, dim=0)
+    original_idx = np.arange(total_rows, dtype=np.int64)
+
+    history_group_np = merged_values[history_group_field].cpu().numpy()
+    time_np = merged_values[dataset.time_field].cpu().numpy()
+    order_np = np.lexsort((original_idx, time_np, history_group_np))
+    order_t = torch.from_numpy(order_np.astype(np.int64, copy=False)).long()
+
+    sorted_values = {field: value[order_t] for field, value in merged_values.items()}
+    split_sorted_np = split_id[order_t].cpu().numpy()
+    history_group_sorted_np = sorted_values[history_group_field].cpu().numpy()
+    target_group_sorted_np = sorted_values[target_group_field].cpu().numpy()
+
+    user_changes = np.nonzero(history_group_sorted_np[1:] != history_group_sorted_np[:-1])[0] + 1 if total_rows > 1 else np.array([], dtype=np.int64)
+    user_starts = np.concatenate(([0], user_changes))
+    user_ends = np.concatenate((user_changes, [total_rows]))
+
+    target_idx_list = []
+    seq_len_list = []
+    current_session_len_list = []
+    history_rows = []
+    split_sample_ids = [[] for _ in split_interactions]
+
+    for user_start, user_end in zip(user_starts, user_ends):
+        user_positions = np.arange(user_start, user_end, dtype=np.int32)
+        user_split = split_sorted_np[user_start:user_end]
+        user_target_group = target_group_sorted_np[user_start:user_end]
+
+        user_train_positions = user_positions[user_split == 0]
+        user_valid_positions = user_positions[user_split == 1]
+
+        if user_positions.size == 0:
+            continue
+
+        session_changes = (
+            np.nonzero(user_target_group[1:] != user_target_group[:-1])[0] + 1
+            if user_target_group.size > 1
+            else np.array([], dtype=np.int64)
+        )
+        session_starts = np.concatenate(([0], session_changes))
+        session_ends = np.concatenate((session_changes, [user_target_group.size]))
+
+        for sess_start_rel, sess_end_rel in zip(session_starts, session_ends):
+            sess_start = int(user_start + sess_start_rel)
+            sess_end = int(user_start + sess_end_rel)
+            session_len = sess_end - sess_start
+            if session_len < 2:
+                continue
+
+            session_split = int(split_sorted_np[sess_start])
+            if np.any(split_sorted_np[sess_start:sess_end] != session_split):
+                raise ValueError("A target session spans multiple split files; expected one split per session.")
+
+            train_cut = np.searchsorted(user_train_positions, sess_start, side="left")
+            valid_cut = np.searchsorted(user_valid_positions, sess_start, side="left")
+            cross_base = user_train_positions[:train_cut]
+            if session_split == 2 and history_policy == "rolling_observed_prefix":
+                cross_base = np.concatenate([cross_base, user_valid_positions[:valid_cut]], axis=0)
+
+            if session_split == 0:
+                rel_targets = np.arange(1, session_len, dtype=np.int32)
+            else:
+                rel_targets = np.array([session_len - 1], dtype=np.int32)
+
+            for rel_target in rel_targets:
+                target_pos = sess_start + int(rel_target)
+                same_session_prefix = np.arange(sess_start, target_pos, dtype=np.int32)
+                if cross_base.size == 0:
+                    history_positions = same_session_prefix
+                elif same_session_prefix.size == 0:
+                    history_positions = cross_base
+                else:
+                    history_positions = np.concatenate([cross_base, same_session_prefix], axis=0)
+
+                if history_positions.size == 0:
+                    continue
+
+                selected = history_positions[-max_len:]
+                sample_idx = len(target_idx_list)
+                target_idx_list.append(int(target_pos))
+                seq_len_list.append(int(selected.size))
+                current_session_len_list.append(int(min(int(rel_target), max_len)))
+                history_rows.append(selected)
+                split_sample_ids[session_split].append(sample_idx)
+
+    if not target_idx_list:
+        return [None for _ in split_interactions]
+
+    n_samples = len(target_idx_list)
+    history_idx_np = np.full((n_samples, max_len), -1, dtype=np.int32)
+    for sample_idx, selected in enumerate(history_rows):
+        history_idx_np[sample_idx, : selected.size] = selected
+
+    target_idx_np = np.asarray(target_idx_list, dtype=np.int64)
+    seq_len_np = np.asarray(seq_len_list, dtype=np.int64)
+    current_session_len_np = np.asarray(current_session_len_list, dtype=np.int64)
+
+    converted_splits = []
+    for split_idx in range(len(split_interactions)):
+        sample_ids = np.asarray(split_sample_ids[split_idx], dtype=np.int64)
+        if sample_ids.size == 0:
+            converted_splits.append(None)
+            continue
+        converted_splits.append(
+            _build_sequence_interaction_from_history_indices(
+                dataset,
+                sorted_values=sorted_values,
+                target_idx_np=target_idx_np[sample_ids],
+                history_idx_np=history_idx_np[sample_ids],
+                seq_len_np=seq_len_np[sample_ids],
+                current_session_len_np=current_session_len_np[sample_ids],
+            )
+        )
+
+    return converted_splits
+
+
+def _make_converted_sequence_dataset(base_dataset, converted, *, list_suffix, item_list_length_field, max_len):
+    new_dataset = base_dataset.copy(converted)
+    if not isinstance(new_dataset.inter_feat, Interaction):
+        new_dataset.inter_feat = converted
+
+    new_dataset.item_id_list_field = base_dataset.iid_field + list_suffix
+    new_dataset.item_list_length_field = item_list_length_field
+
+    for field in converted.columns:
+        if field.endswith(list_suffix):
+            base_field = field[:-len(list_suffix)]
+            setattr(new_dataset, f"{base_field}_list_field", field)
+            if field not in new_dataset.field2type:
+                new_dataset.field2type[field] = FeatureType.TOKEN_SEQ if base_field == base_dataset.iid_field else FeatureType.FLOAT_SEQ
+                new_dataset.field2seqlen[field] = max_len
+
+    if item_list_length_field not in new_dataset.field2type:
+        new_dataset.field2type[item_list_length_field] = FeatureType.TOKEN
+        new_dataset.field2seqlen[item_list_length_field] = 1
+
+    current_session_len_field = _current_session_item_length_field(base_dataset.config)
+    if current_session_len_field in converted.columns and current_session_len_field not in new_dataset.field2type:
+        new_dataset.field2type[current_session_len_field] = FeatureType.TOKEN
+        new_dataset.field2seqlen[current_session_len_field] = 1
+
+    return new_dataset
 
 
 # ============ Patch: Handle benchmark mode with interaction-format files ============
@@ -703,6 +1106,8 @@ def _patched_build(self):
         list_suffix = self.config['LIST_SUFFIX'] if 'LIST_SUFFIX' in self.config else '_list'
         item_list_length_field = self.config['ITEM_LIST_LENGTH_FIELD'] if 'ITEM_LIST_LENGTH_FIELD' in self.config else 'item_length'
         max_len = self.config['MAX_ITEM_LIST_LENGTH']
+        history_mode = _history_input_mode(self.config)
+        history_policy = _history_eval_policy(self.config)
         split_cache_enabled = True if "enable_session_split_cache" not in self.config else bool(self.config["enable_session_split_cache"])
         split_cache_file = None
         if split_cache_enabled and "checkpoint_dir" in self.config:
@@ -719,6 +1124,14 @@ def _patched_build(self):
                         "data_path": data_path,
                         "feature_mode": feature_mode,
                         "load_col": load_col,
+                        "history_input_mode": history_mode,
+                        "history_group_field": _history_group_field(self.config),
+                        "target_group_field": _target_group_field(
+                            self.config,
+                            default=str(_config_get(self.config, "SESSION_ID_FIELD", self.uid_field) or self.uid_field),
+                        ),
+                        "history_eval_policy": history_policy,
+                        "current_session_item_length_field": _current_session_item_length_field(self.config),
                         "data_sig": data_sig,
                     },
                     sort_keys=True,
@@ -741,64 +1154,50 @@ def _patched_build(self):
         # Get file boundaries
         cumsum = list(np.cumsum(self.file_size_list))
         boundaries = [0] + cumsum
-        
-        datasets = []
         split_names = ['train', 'valid', 'test']
-        
-        for i, (start, end) in enumerate(zip(boundaries[:-1], boundaries[1:])):
-            # Get this split's data (now Interaction)
-            split_inter = self.inter_feat[start:end]
-            
-            # Convert to sequence format
-            is_train = (i == 0)  # First split is train
-            converted = _convert_inter_to_sequence(self, split_inter, for_training=is_train)
-            
+        split_interactions = [self.inter_feat[start:end] for start, end in zip(boundaries[:-1], boundaries[1:])]
+
+        if history_mode == "full_history_session_targets":
+            self.logger.info(
+                f"SESSION mode: Using full-history session targets | history_group_field={_history_group_field(self.config)} "
+                f"| target_group_field={_target_group_field(self.config, default=str(_config_get(self.config, 'SESSION_ID_FIELD', self.uid_field) or self.uid_field))} "
+                f"| policy={history_policy}"
+            )
+            converted_splits = _convert_split_interactions_to_full_history_sequences(
+                self,
+                split_interactions=split_interactions,
+                split_names=split_names,
+            )
+        else:
+            converted_splits = []
+            for i, split_inter in enumerate(split_interactions):
+                converted_splits.append(_convert_inter_to_sequence(self, split_inter, for_training=(i == 0)))
+
+        datasets = []
+        for i, (split_inter, converted) in enumerate(zip(split_interactions, converted_splits)):
             if converted is not None:
-                # Create dataset copy with converted Interaction
-                new_dataset = self.copy(converted)
-                
-                # Ensure inter_feat is Interaction
-                if not isinstance(new_dataset.inter_feat, Interaction):
-                    new_dataset.inter_feat = converted
-                
-                # Set up field properties
-                new_dataset.item_id_list_field = self.iid_field + list_suffix
-                new_dataset.item_list_length_field = item_list_length_field
-                
-                # Register list fields and set field properties
-                for field in converted.columns:
-                    if field.endswith(list_suffix):
-                        base_field = field[:-len(list_suffix)]
-                        setattr(new_dataset, f'{base_field}_list_field', field)
-                        
-                        # Determine feature type based on base field
-                        if base_field == self.iid_field:
-                            ftype = FeatureType.TOKEN_SEQ
-                        else:
-                            ftype = FeatureType.FLOAT_SEQ
-                            
-                        # Register field
-                        if field not in new_dataset.field2type:
-                            new_dataset.field2type[field] = ftype
-                            new_dataset.field2seqlen[field] = max_len
-                
-                # Register item_length field
-                if item_list_length_field not in new_dataset.field2type:
-                    new_dataset.field2type[item_list_length_field] = FeatureType.TOKEN
-                    new_dataset.field2seqlen[item_list_length_field] = 1
-                
+                new_dataset = _make_converted_sequence_dataset(
+                    self,
+                    converted,
+                    list_suffix=list_suffix,
+                    item_list_length_field=item_list_length_field,
+                    max_len=max_len,
+                )
                 datasets.append(new_dataset)
                 try:
+                    extra = ""
+                    current_session_len_field = _current_session_item_length_field(self.config)
+                    if current_session_len_field in converted.columns:
+                        avg_current = float(converted[current_session_len_field].float().mean().item())
+                        extra = f" | avg_current_session_len={avg_current:.2f}"
                     self.logger.info(
-                        f"  {split_names[i]}: converted sequences={len(converted)} | rows={len(split_inter)} | max_len={max_len}"
+                        f"  {split_names[i]}: converted sequences={len(converted)} | rows={len(split_inter)} | max_len={max_len}{extra}"
                     )
                 except Exception:
                     pass
             else:
                 self.logger.warning(f"  {split_names[i]}: No valid sequences!")
-                # Create empty dataset
-                empty = self.copy(self.inter_feat[:0])
-                datasets.append(empty)
+                datasets.append(self.copy(self.inter_feat[:0]))
         
         if split_cache_file is not None:
             try:
