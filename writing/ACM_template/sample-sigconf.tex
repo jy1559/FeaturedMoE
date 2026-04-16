@@ -139,6 +139,13 @@ In a standard MoE layer with $E$ experts, an expert-weighted output at position 
 \end{equation}
 where $\boldsymbol{\pi}_t \in \mathbb{R}^{E}$ is a routing distribution with $\sum_e \pi_{t,e}=1$.
 
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/figure2_overall_arch_simple.pdf}
+  \caption{Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided MoE stages. (b) All stages use the same scalar-group conditional routing composition: a group-level distribution and a conditional intra-group distribution are multiplied to form expert probabilities. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by router formula.}
+  \Description{A three-panel architecture figure showing RouteRec with a unified scalar-group conditional router across macro, mid, and micro stages, where stages differ by temporal evidence scope and granularity.}
+  \label{fig:framework}
+\end{figure*}
 In many practical systems, $\boldsymbol{\pi}_t$ is computed from hidden states. This is effective but often semantically opaque, because routing and content encoding are entangled in the same latent space. RouteRec follows a different view: routing is computed from behavior cues, while hidden states are dedicated to expert transformation. The distinction is conceptually small but operationally important for interpretability and diagnosis.
 
 Another practical point is temporal scope. Sequential recommendation combines long-range tendency and short-range fluctuation, so a single routing granularity can be suboptimal. RouteRec addresses this by applying the same MoE interface at multiple stages with different evidence windows. This keeps notation light while allowing routing behavior to adapt across horizons.
@@ -148,13 +155,6 @@ In the final model used in our main experiments, this multi-stage principle is r
 \section{Method}
 \label{sec:method}
 
-\begin{figure*}[!t]
-  \centering
-  \includegraphics[width=0.95\textwidth]{figures/figure2_overall_arch_simple.pdf}
-  \caption{Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided MoE stages. (b) All stages use the same scalar-group conditional routing composition: a group-level distribution and a conditional intra-group distribution are multiplied to form expert probabilities. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by router formula.}
-  \Description{A three-panel architecture figure showing RouteRec with a unified scalar-group conditional router across macro, mid, and micro stages, where stages differ by temporal evidence scope and granularity.}
-  \label{fig:framework}
-\end{figure*}
 
 \subsection{RouteRec Overview}
 \label{sec:problem-framework}
@@ -260,33 +260,6 @@ where $L_i$ is the valid sequence length. For each stage $s$, we construct a pai
 \]
 which encourages neighboring behavioral states to produce compatible routing distributions. In other words, semantically similar inputs should not induce arbitrarily different routing behavior.
 
-To stabilize gating numerics, we adopt z-loss on router logits~\cite{zoph2022stmoe}:
-\[
-\mathcal{L}_{z}
-=
-\frac{1}{|\mathcal{T}|}
-\sum_{s \in \mathcal{T}}
-\frac{1}{N_s}
-\sum_{(i,t)\in\mathcal{V}_s}
-\left(
-\log \sum_{e=1}^{E}\exp q_{i,t,e}^{\,s}
-\right)^2,
-\]
-where $\mathcal{V}_s$ is the set of valid positions and $N_s=|\mathcal{V}_s|$. This term discourages excessive logit scale and helps prevent unstable, overly sharp routing. The final objective is
-\[
-\mathcal{L}
-=
-\mathcal{L}_{\mathrm{CE}}
-+
-\lambda_{\mathrm{cons}}\,\mathcal{L}_{\mathrm{cons}}
-+
-\lambda_{z}\,\mathcal{L}_{z},
-\]
-where $\lambda_{\mathrm{cons}}$ and $\lambda_z$ are trade-off coefficients. This objective jointly optimizes prediction quality, semantic consistency of routing, and numerical stability of expert selection.
-
-\section{Experiments}
-\label{sec:experiments}
-
 \begin{table*}[t]
   \centering
   \small
@@ -331,6 +304,33 @@ where $\lambda_{\mathrm{cons}}$ and $\lambda_z$ are trade-off coefficients. This
   \caption{Main overall results in the text. We report HR@10, NDCG@10, and MRR@20 in the main paper, and defer the full $k\in\{5,10,20\}$ grid to Appendix~A. Bold and underlined values denote the best and second-best results.}
   \label{tab:main-overall}
 \end{table*}
+To stabilize gating numerics, we adopt z-loss on router logits~\cite{zoph2022stmoe}:
+\[
+\mathcal{L}_{z}
+=
+\frac{1}{|\mathcal{T}|}
+\sum_{s \in \mathcal{T}}
+\frac{1}{N_s}
+\sum_{(i,t)\in\mathcal{V}_s}
+\left(
+\log \sum_{e=1}^{E}\exp q_{i,t,e}^{\,s}
+\right)^2,
+\]
+where $\mathcal{V}_s$ is the set of valid positions and $N_s=|\mathcal{V}_s|$. This term discourages excessive logit scale and helps prevent unstable, overly sharp routing. The final objective is
+\[
+\mathcal{L}
+=
+\mathcal{L}_{\mathrm{CE}}
++
+\lambda_{\mathrm{cons}}\,\mathcal{L}_{\mathrm{cons}}
++
+\lambda_{z}\,\mathcal{L}_{z},
+\]
+where $\lambda_{\mathrm{cons}}$ and $\lambda_z$ are trade-off coefficients. This objective jointly optimizes prediction quality, semantic consistency of routing, and numerical stability of expert selection.
+
+\section{Experiments}
+\label{sec:experiments}
+
 
 \subsection{Experimental Setup}
 We evaluate RouteRec on six public datasets. These datasets cover e-commerce, location recommendation, short-video consumption, music listening, movie preference, and anonymous clickstream behavior. The six corpora are Beauty, Foursquare, KuaiRec, LastFM, ML-1M, and Retail Rocket. Appendix~A summarizes their provenance and processed statistics.

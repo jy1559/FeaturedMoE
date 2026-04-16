@@ -1,0 +1,93 @@
+[FMOE_N4_CROSS_DATASET_A12_PORTFOLIO_SETTING_HEADER]
+run_phase=P4XD_XD_FOURSQUARE_F08_LEN30_ZERO_DROP_S1 exp_brief=A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5 phase_id=P4XD axis_id=N4XDA12 setting_id=F08_len30_zero_drop hparam_id= seed=1
+desc=F08_len30_zero_drop
+dataset=foursquare gpu=2 order=20
+max_evals=12 tune_epochs=100 tune_patience=
+seed=264019
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --search-algo tpe --max-evals 9 --tune-epochs 100 --tune-patience 6 --seed 264019 --run-group fmoe_n4 --run-axis CrossDataset_A12_Portfolio --run-phase P4XD_XD_FOURSQUARE_F08_LEN30_ZERO_DROP_S1 model=featured_moe_n3_tune dataset=foursquare eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=2 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A12" ++fmoe_architecture_key="A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5" ++fmoe_hparam_id="H5" ++fmoe_phase="P4XD" train_batch_size=3072 eval_batch_size=4096 ++phase_run_type="cross_dataset" ++phase_axis_id="N4XDA12" ++phase_axis_desc="cross_dataset_a12_portfolio" ++phase_setting_id="F08_len30_zero_drop" ++phase_setting_key="F08_len30_zero_drop" ++phase_hparam_id="H5" ++phase_seed_id=1 ++phase_run_id="XD_FOURSQUARE_F08_LEN30_ZERO_DROP_S1" ++layer_layout=["attn","macro_ffn","mid_ffn","attn","micro_ffn"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0001 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0005 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w5_exd",mid:"w5_exd",micro:"w5_exd"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++macro_history_window=5 ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++bias_mode="none" ++stage_family_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++embedding_size=168 ++d_ff=336 ++d_expert_hidden=168 ++d_router_hidden=84 ++MAX_ITEM_LIST_LENGTH=30 ++d_feat_emb=12 ++expert_scale=3 ++lr_scheduler_type="warmup_cosine" ++num_heads=4 ++search.learning_rate=[0.00025,0.0008] ++search_space_type_overrides.learning_rate=loguniform ++search.hidden_dropout_prob=[0.08,0.1] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.06,0.08] ++search_space_type_overrides.attn_dropout_prob=choice ++search.weight_decay=[5e-07,1e-06] ++search_space_type_overrides.weight_decay=choice ++search.stage_family_dropout_prob=[{macro:0.0,mid:0.0,micro:0.0}] ++search_space_type_overrides.stage_family_dropout_prob=choice ++search.stage_feature_dropout_prob=[{macro:0.0,mid:0.0,micro:0.0}] ++search_space_type_overrides.stage_feature_dropout_prob=choice
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=141838 ts=2026-04-15T11:23:00
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x foursquare
+  max_evals=9  epochs=100  patience=6  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=3072/4096/4096
+  track=fmoe_n4  axis=crossdataset_a12_portfolio  phase=P4XD_XD_FOURSQUARE_F08_LEN30_ZERO_DROP_S1
+=================================================================
+Changed knobs: attn_dropout_prob, hidden_dropout_prob, learning_rate, weight_decay
+Tuned params(len>1): 4  (~8 discrete combos)
+Tuned groups: 4
+  [optimization]
+    hidden_dropout_prob             [0.08, 0.1]                               -> choice
+    learning_rate                   [0.00025, 0.0008]                         -> loguniform
+    weight_decay                    [5e-07, 1e-06]                            -> choice
+  [model_core]
+    attn_dropout_prob               [0.06, 0.08]                              -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    stage_family_dropout_prob       {'macro': 0.0, 'mid': 0.0, 'micro': 0.0}
+    stage_feature_dropout_prob      {'macro': 0.0, 'mid': 0.0, 'micro': 0.0}
+
+[Wandb] disabled for this hyperopt run
+
+[1/9] attn_dropout_prob=0.08, hidden_dropout_prob=0.1, learning_rate=0.0004154, weight_decay=1e-06
+  -> MRR@20=0.201400  best=0.201400  (early_stop@36, trial=4.9min, avg=5.1min/trial, total=5.1min, ETA=41.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.201400 cur_best_hr10=0.356200 cur_test_mrr20=0.166800 cur_test_hr10=0.311400 run_best_mrr20=0.201400 run_best_hr10=0.356200 run_test_mrr20=0.166800 run_test_hr10=0.311400
+
+[2/9] attn_dropout_prob=0.08, hidden_dropout_prob=0.08, learning_rate=0.0003805, weight_decay=1e-06
+  -> MRR@20=0.201600  best=0.201600  (early_stop@38, trial=5.1min, avg=5.1min/trial, total=10.3min, ETA=35.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.201600 cur_best_hr10=0.356500 cur_test_mrr20=0.166900 cur_test_hr10=0.311000 run_best_mrr20=0.201600 run_best_hr10=0.356500 run_test_mrr20=0.166900 run_test_hr10=0.311000
+
+[3/9] attn_dropout_prob=0.08, hidden_dropout_prob=0.08, learning_rate=0.000443, weight_decay=5e-07
+  -> MRR@20=0.201600  best=0.201600  (early_stop@30, trial=4.0min, avg=4.8min/trial, total=14.3min, ETA=28.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.201600 cur_best_hr10=0.357300 cur_test_mrr20=0.164900 cur_test_hr10=0.313300 run_best_mrr20=0.201600 run_best_hr10=0.357300 run_test_mrr20=0.164900 run_test_hr10=0.313300
+
+[4/9] attn_dropout_prob=0.08, hidden_dropout_prob=0.1, learning_rate=0.00074, weight_decay=1e-06
+  -> MRR@20=0.200300  best=0.201600  (early_stop@21, trial=2.9min, avg=4.3min/trial, total=17.1min, ETA=21.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.200300 cur_best_hr10=0.358800 cur_test_mrr20=0.163400 cur_test_hr10=0.314100 run_best_mrr20=0.201600 run_best_hr10=0.356500 run_test_mrr20=0.166900 run_test_hr10=0.311000
+
+[5/9] attn_dropout_prob=0.06, hidden_dropout_prob=0.08, learning_rate=0.0003996, weight_decay=1e-06
+  -> MRR@20=0.201000  best=0.201600  (early_stop@30, trial=4.0min, avg=4.2min/trial, total=21.2min, ETA=17.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.201000 cur_best_hr10=0.357300 cur_test_mrr20=0.164400 cur_test_hr10=0.314100 run_best_mrr20=0.201600 run_best_hr10=0.356500 run_test_mrr20=0.166900 run_test_hr10=0.311000
+
+[6/9] attn_dropout_prob=0.08, hidden_dropout_prob=0.1, learning_rate=0.0006373, weight_decay=1e-06
+  -> MRR@20=0.200600  best=0.201600  (early_stop@27, trial=3.6min, avg=4.1min/trial, total=24.8min, ETA=12.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.200600 cur_best_hr10=0.355000 cur_test_mrr20=0.164600 cur_test_hr10=0.309000 run_best_mrr20=0.201600 run_best_hr10=0.356500 run_test_mrr20=0.166900 run_test_hr10=0.311000
+
+[7/9] attn_dropout_prob=0.06, hidden_dropout_prob=0.1, learning_rate=0.0004008, weight_decay=5e-07
+  -> MRR@20=0.200100  best=0.201600  (early_stop@32, trial=4.3min, avg=4.2min/trial, total=29.1min, ETA=8.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.200100 cur_best_hr10=0.358800 cur_test_mrr20=0.165700 cur_test_hr10=0.313300 run_best_mrr20=0.201600 run_best_hr10=0.356500 run_test_mrr20=0.166900 run_test_hr10=0.311000
+
+[8/9] attn_dropout_prob=0.06, hidden_dropout_prob=0.1, learning_rate=0.0005496, weight_decay=5e-07
+  -> MRR@20=0.202000  best=0.202000  (early_stop@27, trial=3.6min, avg=4.1min/trial, total=32.8min, ETA=4.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.202000 cur_best_hr10=0.359100 cur_test_mrr20=0.165900 cur_test_hr10=0.315700 run_best_mrr20=0.202000 run_best_hr10=0.359100 run_test_mrr20=0.165900 run_test_hr10=0.315700
+
+[9/9] attn_dropout_prob=0.08, hidden_dropout_prob=0.1, learning_rate=0.000541, weight_decay=1e-06
+  -> MRR@20=0.200600  best=0.202000  (early_stop@30, trial=4.1min, avg=4.1min/trial, total=36.9min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.200600 cur_best_hr10=0.351700 cur_test_mrr20=0.166500 cur_test_hr10=0.307800 run_best_mrr20=0.202000 run_best_hr10=0.359100 run_test_mrr20=0.165900 run_test_hr10=0.315700
+[1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 11.40 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.82s/it, [1;33mGPU RAM: 11.40 G/23.56 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 11.40 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.79s/it, [1;33mGPU RAM: 11.40 G/23.56 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                  | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 11.40 G/23.56 G[0m][0m[1;35mEvaluate   [0m: 100%|██████████████████████████| 1/1 [00:01<00:00,  1.79s/it, [1;33mGPU RAM: 11.40 G/23.56 G[0m][0m                                                                                                    
+=================================================================
+  DONE  |  FeaturedMoE_N3 x foursquare
+  Best MRR@20 = 0.202000  |  9/9 trials OK
+  Best HR@10  = 0.359100
+  Test MRR@20 = 0.165900  (best-valid checkpoint)
+  Test HR@10  = 0.315700  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.202000 best_valid_hr10=0.359100 test_mrr20=0.165900 test_hr10=0.315700
+  Total time: 37.0 min
+  Best params:
+    attn_dropout_prob: 0.06
+    hidden_dropout_prob: 0.1
+    learning_rate: 0.000549571
+    weight_decay: 5e-07
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n4/foursquare_FeaturedMoE_N3_p4xd_xd_foursquare_f08_len30_zero_drop_s1_20260415_112301_058506_pid141838.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n4/normal/crossdataset_a12_portfolio/P4XD/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p4xd_xd_foursquare_f08_len30_zero_drop_s1_20260415_112301_058506_pid141838.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n4/special/crossdataset_a12_portfolio/P4XD/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p4xd_xd_foursquare_f08_len30_zero_drop_s1_20260415_112301_058506_pid141838_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/fmoe_n4/special/crossdataset_a12_portfolio/P4XD/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p4xd_xd_foursquare_f08_len30_zero_drop_s1_20260415_112301_058506_pid141838_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=141838 start=2026-04-15T11:23:00 end=2026-04-15T12:00:02

@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: beauty
+- run_group: fmoe_n4
+- run_axis: crossdataset_a12_portfolio
+- run_phase: P4XD_XD_BEAUTY_B22_HYP_STEADY_MID_H5_S1
+- best_mrr@20: 0.068
+- test_mrr@20: 0.0714
+- test_hr@10: 0.1311
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4XD/beauty_FeaturedMoE_N3_p4xd_xd_beauty_b22_hyp_steady_mid_h5_s1_20260416_023330_547406_pid236281/diag/raw/epoch_trace.csv
+- feature_ablation: 
