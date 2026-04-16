@@ -1,0 +1,22 @@
+[revised] axis=PAIR60_V4_REVISED_CHECK targets=4 gpus=['0', '1']
+[revised][plan] PAIR60_V4_DLASTFM0_03_MTISASREC_P053_C2_S1
+  reason: OOM in 3/4 trials
+  ref: Keep TiSASRec shape, only reduce memory pressure.
+  batch: train=1024 eval=2048
+[revised][plan] PAIR60_V4_DMOVIELENS1M_MTISASREC_P043_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Use smaller batch and slightly shorter time window for stability.
+  batch: train=1024 eval=2048
+  fixed_overrides: {"time_span": 256}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MTISASREC_P013_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Retail Rocket TiSASRec memory cut + softer model width.
+  batch: train=1024 eval=2048
+  fixed_overrides: {"hidden_size": 96, "embedding_size": 96, "inner_size": 192}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MDIFSR_P017_C1_S1
+  reason: OOM in 6/6 trials and zero score
+  ref: Reference DIFSR stable profile: smaller width/layers + lower batch.
+  batch: train=1024 eval=2048
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 128, "embedding_size": 128, "n_layers": 2, "num_layers": 2, "inner_size": 256, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "fusion_type": "gate", "use_attribute_predictor": true, "lambda_attr": 0.12}
+[revised] manifest=/workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_V4_REVISED_CHECK/revised_manifest.json

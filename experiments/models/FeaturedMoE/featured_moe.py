@@ -327,6 +327,19 @@ class FeaturedMoE(SequentialRecommender):
         self._schedule_epoch = 0
         self._schedule_total_epochs = max(int(_cfg("epochs", 1)), 1)
         self._last_logged_top_k: Optional[int] = None
+        self.history_input_mode = str(_cfg("history_input_mode", "session_only")).lower().strip()
+        self.current_session_item_length_field = str(
+            _cfg("current_session_item_length_field", "current_session_item_length")
+            or "current_session_item_length"
+        )
+        self.fmoe_session_router_context_scope = str(
+            _cfg("fmoe_session_router_context_scope", "auto")
+        ).lower().strip()
+        if self.fmoe_session_router_context_scope not in {"auto", "full_sequence", "current_session"}:
+            raise ValueError(
+                "fmoe_session_router_context_scope must be one of ['auto','full_sequence','current_session'], "
+                f"got {self.fmoe_session_router_context_scope}"
+            )
 
         # ---- Aux loss ----
         self.use_aux_loss = _cfg("use_aux_loss", True)
@@ -768,11 +781,48 @@ class FeaturedMoE(SequentialRecommender):
 
         return torch.stack(feat_list, dim=-1)
 
+    def _use_current_session_router_context(self) -> bool:
+        if self.fmoe_session_router_context_scope == "current_session":
+            return True
+        if self.fmoe_session_router_context_scope == "full_sequence":
+            return False
+        return self.history_input_mode == "full_history_session_targets"
+
+    def _resolve_routing_item_seq_len(
+        self,
+        interaction,
+        item_seq_len: torch.Tensor,
+        seq_len: int,
+    ) -> torch.Tensor:
+        if not self._use_current_session_router_context():
+            return item_seq_len
+
+        field_name = self.current_session_item_length_field
+        if field_name not in interaction:
+            return item_seq_len
+
+        routing_item_seq_len = interaction[field_name]
+        if torch.is_tensor(routing_item_seq_len):
+            routing_item_seq_len = routing_item_seq_len.to(device=item_seq_len.device)
+        else:
+            routing_item_seq_len = torch.as_tensor(routing_item_seq_len, device=item_seq_len.device)
+        return routing_item_seq_len.long().clamp(min=1, max=seq_len)
+
+    def _resolve_forward_lengths(self, interaction):
+        item_seq = interaction[self.ITEM_SEQ]
+        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        routing_item_seq_len = self._resolve_routing_item_seq_len(
+            interaction,
+            item_seq_len,
+            item_seq.size(1),
+        )
+        return item_seq, item_seq_len, routing_item_seq_len
+
     # ------------------------------------------------------------------
     # Forward
     # ------------------------------------------------------------------
 
-    def forward(self, item_seq, item_seq_len, feat=None):
+    def forward(self, item_seq, item_seq_len, feat=None, routing_item_seq_len=None):
         """Encode input and return hidden state at last valid position.
 
         Args:
@@ -808,7 +858,11 @@ class FeaturedMoE(SequentialRecommender):
                     for ridx, stage_pre_block in enumerate(self.stage_pre_repeat_blocks[stage_name], start=1):
                         tokens, _ = stage_pre_block(tokens, item_seq)
                         tokens, w, l = self.hierarchical_moe.forward_stage(
-                            stage_name, tokens, feat, item_seq_len=item_seq_len
+                            stage_name,
+                            tokens,
+                            feat,
+                            item_seq_len=item_seq_len,
+                            routing_item_seq_len=routing_item_seq_len,
                         )
                         stage_key = f"{stage_name}@{ridx}"
                         gate_weights[stage_key] = w
@@ -819,7 +873,11 @@ class FeaturedMoE(SequentialRecommender):
                     tokens, _ = self.stage_pre_transformers[stage_name](tokens, item_seq)
 
                 tokens, w, l = self.hierarchical_moe.forward_stage(
-                    stage_name, tokens, feat, item_seq_len=item_seq_len
+                    stage_name,
+                    tokens,
+                    feat,
+                    item_seq_len=item_seq_len,
+                    routing_item_seq_len=routing_item_seq_len,
                 )
                 gate_weights[stage_name] = w
                 gate_logits[stage_name] = l
@@ -842,12 +900,16 @@ class FeaturedMoE(SequentialRecommender):
 
     def calculate_loss(self, interaction):
         """CE loss + optional MoE balance loss."""
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
         pos_items = interaction[self.POS_ITEM_ID]
 
         feat = self._gather_features(interaction)
-        seq_output, aux_data = self.forward(item_seq, item_seq_len, feat)
+        seq_output, aux_data = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
 
         logits = seq_output @ self.item_embedding.weight.T
         ce_loss = F.cross_entropy(logits, pos_items)
@@ -890,23 +952,31 @@ class FeaturedMoE(SequentialRecommender):
     # ------------------------------------------------------------------
 
     def predict(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
         test_item = interaction[self.ITEM_ID]
 
         feat = self._gather_features(interaction)
-        seq_output, _ = self.forward(item_seq, item_seq_len, feat)
+        seq_output, _ = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
 
         test_item_emb = self.item_embedding(test_item)
         scores = (seq_output * test_item_emb).sum(dim=-1)
         return scores
 
     def full_sort_predict(self, interaction):
-        item_seq = interaction[self.ITEM_SEQ]
-        item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        item_seq, item_seq_len, routing_item_seq_len = self._resolve_forward_lengths(interaction)
 
         feat = self._gather_features(interaction)
-        seq_output, _ = self.forward(item_seq, item_seq_len, feat)
+        seq_output, _ = self.forward(
+            item_seq,
+            item_seq_len,
+            feat,
+            routing_item_seq_len=routing_item_seq_len,
+        )
 
         scores = seq_output @ self.item_embedding.weight.T
         return scores

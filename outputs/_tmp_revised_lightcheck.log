@@ -1,0 +1,45 @@
+[revised] axis=PAIR60_V4_REVISED_LIGHTCHECK targets=8 gpus=['0', '1']
+[revised][plan] PAIR60_V4_DLASTFM0_03_MTISASREC_P053_C2_S1
+  reason: OOM in 3/4 trials
+  ref: Keep TiSASRec shape, only reduce memory pressure.
+  batch: train=1024 eval=2048
+[revised][plan] PAIR60_V4_DMOVIELENS1M_MTISASREC_P043_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Use smaller batch and slightly shorter time window for stability.
+  batch: train=1024 eval=2048
+  fixed_overrides: {"time_span": 256}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MTISASREC_P013_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Retail Rocket TiSASRec memory cut + softer model width.
+  batch: train=1024 eval=2048
+  fixed_overrides: {"hidden_size": 96, "embedding_size": 96, "inner_size": 192}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MDIFSR_P017_C1_S1
+  reason: OOM in 6/6 trials and zero score
+  ref: Reference DIFSR stable profile: smaller width/layers + lower batch.
+  batch: train=512 eval=1024
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 96, "embedding_size": 96, "n_layers": 2, "num_layers": 2, "inner_size": 192, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "attribute_hidden_size": 64, "fusion_type": "gate", "use_attribute_predictor": false, "lambda_attr": 0.0, "selected_features": ["category"]}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MDIFSR_P017_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Same as C1 revised to remove memory failures.
+  batch: train=512 eval=1024
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 96, "embedding_size": 96, "n_layers": 2, "num_layers": 2, "inner_size": 192, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "attribute_hidden_size": 64, "fusion_type": "gate", "use_attribute_predictor": false, "lambda_attr": 0.0, "selected_features": ["category"]}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MFDSA_P019_C1_S1
+  reason: OOM in 6/6 trials and zero score
+  ref: Reference FDSA stable shape with lower width + lower batch.
+  batch: train=512 eval=1024
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 96, "embedding_size": 96, "n_layers": 2, "num_layers": 2, "inner_size": 192, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "selected_features": ["category"], "pooling_mode": "mean"}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MFDSA_P019_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Same FDSA revised profile as C1.
+  batch: train=512 eval=1024
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 96, "embedding_size": 96, "n_layers": 2, "num_layers": 2, "inner_size": 192, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "selected_features": ["category"], "pooling_mode": "mean"}
+[revised][plan] PAIR60_V4_DBEAUTY_MBSAREC_P005_C2_S1
+  reason: Severe underperformance vs dataset peers
+  ref: Reference SASRec-like stable transformer width/dropout.
+  lr_range: [0.00015, 0.0007]
+  fixed_overrides: {"hidden_size": 128, "embedding_size": 128, "n_layers": 2, "num_layers": 2, "n_heads": 2, "num_heads": 2, "inner_size": 256, "dropout_ratio": 0.12, "hidden_dropout_prob": 0.12, "attn_dropout_prob": 0.12, "weight_decay": 1e-05}
+[revised] manifest=/workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_V4_REVISED_LIGHTCHECK/revised_manifest.json

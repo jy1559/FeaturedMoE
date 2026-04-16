@@ -14,7 +14,6 @@
 \acmISBN{}
 
 \usepackage{array}
-\usepackage{placeins}
 \usepackage{multirow}
 \usepackage{tabularx}
 
@@ -154,7 +153,6 @@ In the final model used in our main experiments, this multi-stage principle is r
 
 \section{Method}
 \label{sec:method}
-
 
 \subsection{RouteRec Overview}
 \label{sec:problem-framework}
@@ -339,13 +337,13 @@ Across all datasets, interactions are first ordered chronologically and converte
 
 The baselines follow three groups. The first group contains conventional sequential recommenders, namely GRU4Rec, SASRec, and TiSASRec~\cite{hidasi2016gru4rec,kang2018sasrec,li2020tisasrec}. The second group contains recent strong backbones, including DuoRec, FEARec, BSARec, and SIGMA~\cite{qiu2022duorec,du2023fearec,shin2024bsarec,liu2025sigma}. The third group contains feature-aware or expert-related comparators, including DIF-SR, FDSA, and FAME~\cite{xie2022difsr,zhang2019fdsa,liu2025fame}. All methods are trained under the same optimization family with matched early stopping and comparable capacity ranges. Table~\ref{tab:main-overall} reports the compact main-text summary with HR@10, NDCG@10, and MRR@20, while Appendix~A restores the full $3\times3$ cutoff grid. We use MRR@20 as the default scalar summary when a single validation or analysis metric is needed.
 
-\subsection{Overall Performance}
+\subsection{Overall Performance: Does Behavior-Guided Routing Help?}
 \label{sec:overall-performance}
 Table~\ref{tab:main-overall} presents the main overall comparison in the text. The selected metrics balance retrieval quality, rank sensitivity, and early precision, so the reader can assess the central result without scanning the full cutoff grid. RouteRec achieves the strongest pattern on Beauty, Foursquare, KuaiRec, and Retail Rocket, and remains competitive on LastFM and ML-1M, where strong shared-backbone baselines are already highly optimized.
 
 Two points are worth emphasizing. First, the clearest gains appear on Foursquare and Retail Rocket, where broader preference drift and sharp local intent shifts coexist. Second, the gain does not follow a simple capacity story: several baselines already use richer encoders or auxiliary objectives, yet the advantage emerges when computation is routed according to behavior rather than shared uniformly. The detailed @5/@10/@20 table is moved to Appendix~A so that the main paper retains a readable experiments flow while still exposing the full result grid.
 
-\subsection{Routing Signal Comparison}
+\subsection{What Should Control Routing?}
 \label{sec:routing-control}
 Figure~\ref{fig:routing-control-panels} compares four routing controls: a shared FFN, hidden-only routing, mixed hidden+behavior routing, and the final behavior-guided router. Hidden-only routing can improve over a shared FFN, but the gain is smaller and less stable than behavior-guided routing. Re-injecting hidden states into the router also fails to produce a consistent advantage over the behavior-only design.
 
@@ -372,29 +370,29 @@ The consistency panel makes the structural reason clearer. When routing is tied 
   \label{fig:routing-control-panels}
 \end{figure}
 
-\subsection{Stage-wise Architecture Analysis}
+\subsection{Why Is the Staged RouteRec Structure Effective?}
 \label{sec:stage-structure}
 Figure~\ref{fig:stage-structure-panels} examines the RouteRec architecture itself. Panel (a) removes macro, mid, or micro routing to isolate the role of each temporal scope. Panel (b) separates staged routing from generic FFN replacement by comparing dense replacement against one-, two-, and three-stage layouts. Panel (c) tests wrapper-map and stage-order variants to show that the final composition is not an arbitrary design choice.
 
 Across all three views, the same pattern is expected. Performance rises when routing is distributed across temporal scopes, dense replacement alone does not recover the same gain, and the final wrapper map remains among the strongest choices. The benefit of RouteRec therefore comes from coarse-to-fine behavioral allocation rather than from expert insertion by itself.
 
-\begin{figure}[!t]
+\begin{figure*}[!t]
   \centering
-  \begin{minipage}[t]{0.31\columnwidth}
+  \begin{minipage}[t]{0.31\textwidth}
     \centering
     \placeholderpanel{1.05in}
 
     \vspace{0.35em}
     {\footnotesize (a) Stage removal}
   \end{minipage}\hfill
-  \begin{minipage}[t]{0.31\columnwidth}
+  \begin{minipage}[t]{0.31\textwidth}
     \centering
     \placeholderpanel{1.05in}
 
     \vspace{0.35em}
     {\footnotesize (b) Dense replacement vs. staged routing}
   \end{minipage}\hfill
-  \begin{minipage}[t]{0.31\columnwidth}
+  \begin{minipage}[t]{0.31\textwidth}
     \centering
     \placeholderpanel{1.05in}
 
@@ -404,9 +402,9 @@ Across all three views, the same pattern is expected. Performance rises when rou
   \caption{Stage and layout ablations. (a) Stage removal. (b) Dense replacement versus staged routing. (c) Wrapper-map and stage-order variants.}
   \Description{A three-panel placeholder figure for stage removal, dense-versus-staged routing comparisons, and wrapper-map or stage-order variants.}
   \label{fig:stage-structure-panels}
-\end{figure}
+\end{figure*}
 
-\subsection{Cue Family Ablation}
+\subsection{Are Lightweight Cues Enough?}
 \label{sec:lightweight-cues}
 Figure~\ref{fig:cue-ablation-panels} evaluates whether RouteRec depends on rich metadata or whether ordinary interaction logs already provide enough routing evidence. The left panel removes cue families from the full model, and the right panel normalizes each variant by the gain of the full-cue model. Removing category-derived or time-derived cues lowers performance, but the sequence-only variant still retains a substantial fraction of the improvement over the shared-backbone baseline.
 
@@ -435,8 +433,6 @@ This result strengthens the portability claim. RouteRec benefits from richer evi
 
 Detailed full-cutoff results and extended analyses, including slice-wise and transfer studies, are reported in Appendices~A--F.
 
-\FloatBarrier
-
 \section{Conclusion}
 \label{sec:conclusion}
 RouteRec starts from a simple hypothesis: when behavioral evidence changes, the computation path should change as well. The experiments support this view from three main angles. First, RouteRec improves next-item ranking over strong sequential baselines across most datasets and cutoffs. Second, the gain comes from the routing signal and the staged design rather than from inserting experts indiscriminately. Third, lightweight cues derived from ordinary interaction logs already recover a substantial share of the benefit, which keeps the method practical even when side information is limited.
@@ -449,8 +445,6 @@ Taken together, these results suggest that compact behavioral cues provide a use
 \nobalance
 \clearpage
 \appendix
-\section*{Appendix}
-\vspace{-0.4em}
 
 \section{Dataset, Evaluation, and Full Results}
 \label{app:data-details}
@@ -574,7 +568,7 @@ The appendix table makes it easier to confirm whether a gain survives beyond the
 \label{app:stage-layout}
 Figure~\ref{fig:appendix-stage-layout} expands the structural study in Figure~\ref{fig:stage-structure-panels} with the broader sweep of stage-removal and wrapper variants.
 
-\begin{figure}[!htbp]
+\begin{figure}[t]
   \centering
   \begin{minipage}[t]{0.48\linewidth}
     \centering
@@ -608,8 +602,6 @@ Figure~\ref{fig:appendix-stage-layout} expands the structural study in Figure~\r
 
 The figure should be read from left to right. Panel (a) verifies that macro, mid, and micro routing each contribute a distinct part of the gain. Panel (b) separates staged routing from generic expert insertion, and panel (c) checks that the final wrapper map is not an arbitrary configuration choice.
 
-\FloatBarrier
-
 \section{Objective and Regularization Variants}
 \label{app:objective}
 Table~\ref{tab:appendix-objective} isolates the contribution of consistency, z-loss, and balance regularization using ranking quality, route consistency, and stability indicators.
@@ -640,7 +632,7 @@ This compact table shows whether the full objective improves MRR@20 while preser
 \label{app:diagnostics}
 Figure~\ref{fig:appendix-diagnostics} groups the main routing diagnostics into one coordinated layout so that stage usage, sharpness, and semantic consistency can be read together.
 
-\begin{figure}[!htbp]
+\begin{figure}[t]
   \centering
   \begin{minipage}[t]{0.48\linewidth}
     \centering
@@ -680,13 +672,11 @@ Figure~\ref{fig:appendix-diagnostics} groups the main routing diagnostics into o
 
 These diagnostics are organized from coarse structure to semantic interpretation. The first two panels show how broad or sharp routing is at each stage, while the last two panels connect those patterns back to feature similarity and interpretable behavioral regimes.
 
-\FloatBarrier
-
 \section{Behavior-Slice Analysis}
 \label{app:behavior-slices}
 Because RouteRec is motivated by heterogeneous behavior, a slice-wise view is a natural complement to the aggregate metrics. This appendix section is intended to localize gains to behavior regimes such as repeat-heavy prefixes, high-tempo sessions, narrow-focus sessions, and exploration-heavy prefixes.
 
-\begin{figure}[!htbp]
+\begin{figure}[t]
   \centering
   \begin{minipage}[t]{\linewidth}
     \centering
@@ -711,8 +701,6 @@ Because RouteRec is motivated by heterogeneous behavior, a slice-wise view is a 
 \end{figure}
 
 The useful reading order is to first check which slices benefit most in panel (a), then verify in panel (b) whether those gains coincide with more decisive and semantically aligned routing. This experiment fits the paper's main argument especially well because it answers not only whether RouteRec helps, but also where the help appears.
-
-\FloatBarrier
 
 \section{Extended Transfer Results}
 \label{app:transfer}
@@ -740,7 +728,7 @@ This section reports additional transfer experiments for low-resource and cross-
 
 The matrix provides the exact source-target view that is too detailed for the main paper. It is useful for identifying asymmetric transfer pairs and for checking whether router reuse is most effective between domains with similar temporal and repetition structure. For compactness, the table uses the abbreviations Bty, Fsq, KRec, LFM, ML1M, and RR.
 
-\begin{figure}[!htbp]
+\begin{figure}[t]
   \centering
   \begin{minipage}[t]{0.48\linewidth}
     \centering
@@ -773,7 +761,5 @@ The matrix provides the exact source-target view that is too detailed for the ma
 \end{figure}
 
 Together, the table and figure let the reader move from exact pairwise results to higher-level patterns. The intended appendix message is that transfer is asymmetric, most helpful in related domains and low-resource regimes, and partially preserved even under coarser router reuse.
-
-\FloatBarrier
 
 \end{document}

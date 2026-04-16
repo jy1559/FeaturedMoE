@@ -1,0 +1,93 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ab --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/beauty_difsr_K3.yaml --max-evals 8 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260459 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_BEAUTY_DIFSR_K3 model=difsr dataset=beauty eval_mode=session_fixed feature_mode=full_v4 gpu_id=2 log_wandb=false show_progress=false ++seed=20260459 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1229811 ts=2026-04-16T01:26:51
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/beauty_difsr_K3.yaml (fixed=13, search=9)
+
+=================================================================
+  Hyperopt  |  DIFSR x beauty
+  max_evals=8  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/8192/8192
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_BEAUTY_DIFSR_K3
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attribute_hidden_size, dropout_ratio, fusion_type, lambda_attr, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 9  (~2187 discrete combos)
+Tuned groups: 9
+  [optimization]
+    learning_rate                   [0.00020063, 0.00029183, 0.00036478, 0.00045598, 0.00065661]  -> loguniform
+    weight_decay                    [0.0, 0.0001, 0.0002, 0.0004]             -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.135, 0.18, 0.225]                      -> choice
+    num_heads                       [2, 4, 8]                                 -> choice
+    num_layers                      [1, 2, 3]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [15, 25, 35]                              -> choice
+    attribute_hidden_size           [128, 160, 192]                           -> choice
+    fusion_type                     ['concat', 'gate', 'sum']                 -> choice
+    lambda_attr                     [0.108, 0.18, 0.252]                      -> choice
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/8] MAX_ITEM_LIST_LENGTH=35, attribute_hidden_size=192, dropout_ratio=0.135, fusion_type=gate, lambda_attr=0.108, learning_rate=0.0002696, num_heads=4, num_layers=3, weight_decay=0
+  -> MRR@20=0.003200  best=0.003200  (early_stop@17, trial=12s, avg=16s/trial, total=16s, ETA=1.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.003200 cur_best_hr10=0.006000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.003200 run_best_hr10=0.006000 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[2/8] MAX_ITEM_LIST_LENGTH=15, attribute_hidden_size=128, dropout_ratio=0.135, fusion_type=concat, lambda_attr=0.18, learning_rate=0.0002958, num_heads=2, num_layers=2, weight_decay=0
+  -> MRR@20=0.000400  best=0.003200  (early_stop@8, trial=2s, avg=9s/trial, total=18s, ETA=55s)
+[TRIAL_METRICS] cur_best_mrr20=0.000400 cur_best_hr10=0.002000 cur_test_mrr20=0.000300 cur_test_hr10=0.000000 run_best_mrr20=0.003200 run_best_hr10=0.006000 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[3/8] MAX_ITEM_LIST_LENGTH=15, attribute_hidden_size=192, dropout_ratio=0.225, fusion_type=gate, lambda_attr=0.108, learning_rate=0.0003622, num_heads=8, num_layers=2, weight_decay=0
+  -> MRR@20=0.001000  best=0.003200  (early_stop@8, trial=2s, avg=7s/trial, total=21s, ETA=35s)
+[TRIAL_METRICS] cur_best_mrr20=0.001000 cur_best_hr10=0.002000 cur_test_mrr20=0.000200 cur_test_hr10=0.000000 run_best_mrr20=0.003200 run_best_hr10=0.006000 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[4/8] MAX_ITEM_LIST_LENGTH=15, attribute_hidden_size=128, dropout_ratio=0.225, fusion_type=gate, lambda_attr=0.252, learning_rate=0.0003508, num_heads=2, num_layers=2, weight_decay=0
+  -> MRR@20=0.005200  best=0.005200  (early_stop@30, trial=7s, avg=7s/trial, total=28s, ETA=28s)
+[TRIAL_METRICS] cur_best_mrr20=0.005200 cur_best_hr10=0.010000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.005200 run_best_hr10=0.010000 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[5/8] MAX_ITEM_LIST_LENGTH=35, attribute_hidden_size=160, dropout_ratio=0.135, fusion_type=concat, lambda_attr=0.18, learning_rate=0.0003808, num_heads=4, num_layers=1, weight_decay=0
+  -> MRR@20=0.000300  best=0.005200  (early_stop@11, trial=3s, avg=6s/trial, total=32s, ETA=19s)
+[TRIAL_METRICS] cur_best_mrr20=0.000300 cur_best_hr10=0.000000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 run_best_mrr20=0.005200 run_best_hr10=0.010000 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[6/8] MAX_ITEM_LIST_LENGTH=25, attribute_hidden_size=192, dropout_ratio=0.18, fusion_type=concat, lambda_attr=0.252, learning_rate=0.0002455, num_heads=8, num_layers=2, weight_decay=0
+  -> MRR@20=0.007200  best=0.007200  (early_stop@26, trial=9s, avg=7s/trial, total=41s, ETA=14s)
+[TRIAL_METRICS] cur_best_mrr20=0.007200 cur_best_hr10=0.014100 cur_test_mrr20=0.005300 cur_test_hr10=0.011500 run_best_mrr20=0.007200 run_best_hr10=0.014100 run_test_mrr20=0.005300 run_test_hr10=0.011500
+
+[7/8] MAX_ITEM_LIST_LENGTH=25, attribute_hidden_size=192, dropout_ratio=0.135, fusion_type=gate, lambda_attr=0.252, learning_rate=0.0003856, num_heads=2, num_layers=3, weight_decay=0
+  -> MRR@20=0.001300  best=0.007200  (early_stop@11, trial=4s, avg=7s/trial, total=46s, ETA=7s)
+[TRIAL_METRICS] cur_best_mrr20=0.001300 cur_best_hr10=0.006000 cur_test_mrr20=0.000200 cur_test_hr10=0.000000 run_best_mrr20=0.007200 run_best_hr10=0.014100 run_test_mrr20=0.005300 run_test_hr10=0.011500
+
+[8/8] MAX_ITEM_LIST_LENGTH=15, attribute_hidden_size=160, dropout_ratio=0.225, fusion_type=gate, lambda_attr=0.252, learning_rate=0.0002629, num_heads=4, num_layers=1, weight_decay=0.0001668
+  -> MRR@20=0.000700  best=0.007200  (early_stop@12, trial=2s, avg=6s/trial, total=49s, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.000700 cur_best_hr10=0.004000 cur_test_mrr20=0.000900 cur_test_hr10=0.002900 run_best_mrr20=0.007200 run_best_hr10=0.014100 run_test_mrr20=0.005300 run_test_hr10=0.011500
+
+=================================================================
+  DONE  |  DIFSR x beauty
+  Best MRR@20 = 0.007200  |  8/8 trials OK
+  Best HR@10  = 0.014100
+  Test MRR@20 = 0.005300  (best-valid checkpoint)
+  Test HR@10  = 0.011500  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.007200 best_valid_hr10=0.014100 test_mrr20=0.005300 test_hr10=0.011500
+  Total time: 0.8 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 25
+    attribute_hidden_size: 192
+    dropout_ratio: 0.18
+    fusion_type: concat
+    lambda_attr: 0.252
+    learning_rate: 0.00024553
+    num_heads: 8
+    num_layers: 2
+    weight_decay: 0
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/beauty_DIFSR_baseline2_addtune_beauty_difsr_k3_20260416_012651_457799_pid1229811.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/beauty/DIFSR/beauty_DIFSR_baseline2_addtune_beauty_difsr_k3_20260416_012651_457799_pid1229811.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/beauty/DIFSR/beauty_DIFSR_baseline2_addtune_beauty_difsr_k3_20260416_012651_457799_pid1229811_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/beauty/DIFSR/beauty_DIFSR_baseline2_addtune_beauty_difsr_k3_20260416_012651_457799_pid1229811_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1229811 start=2026-04-16T01:26:51 end=2026-04-16T01:27:40

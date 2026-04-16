@@ -1,0 +1,88 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_fs --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/foursquare_fearec_K3.yaml --max-evals 6 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260639 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_FOURSQUARE_FEAREC_K3 model=fearec dataset=foursquare eval_mode=session_fixed feature_mode=full_v4 gpu_id=6 log_wandb=false show_progress=false ++seed=20260639 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1236611 ts=2026-04-16T02:30:51
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/foursquare_fearec_K3.yaml (fixed=14, search=11)
+
+=================================================================
+  Hyperopt  |  FEARec x foursquare
+  max_evals=6  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/4096/4096
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_FOURSQUARE_FEAREC_K3
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, contrast, dropout_ratio, global_ratio, learning_rate, lmd_sem, n_heads, n_layers, tau, weight_decay
+Tuned params(len>1): 10  (~2916 discrete combos)
+Tuned groups: 10
+  [optimization]
+    learning_rate                   [0.00017571, 0.00025557, 0.00031947, 0.00039934, 0.00057504]  -> loguniform
+    weight_decay                    [0.0, 7.5e-05, 0.00015, 0.0003]           -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.1125, 0.15, 0.1875]                    -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30]                              -> choice
+    contrast                        ['su', 'un', 'us_x']                      -> choice
+    global_ratio                    [0.765, 0.85, 0.935]                      -> choice
+    lmd_sem                         [0.0, 0.04, 0.08]                         -> choice
+    n_heads                         [2, 4]                                    -> choice
+    n_layers                        [1, 2]                                    -> choice
+    tau                             [0.192, 0.24, 0.3]                        -> choice
+Fixed params(singleton/non-list): 1
+Fixed groups: 1
+  [other]
+    lmd                             0.0                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/6] MAX_ITEM_LIST_LENGTH=30, contrast=us_x, dropout_ratio=0.15, global_ratio=0.765, learning_rate=0.0003766, lmd_sem=0.08, n_heads=2, n_layers=2, tau=0.192, weight_decay=8.174e-05
+  -> MRR@20=0.147200  best=0.147200  (full@100, trial=10.5min, avg=10.6min/trial, total=10.6min, ETA=52.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.147200 cur_best_hr10=0.266400 cur_test_mrr20=0.118300 cur_test_hr10=0.225800 run_best_mrr20=0.147200 run_best_hr10=0.266400 run_test_mrr20=0.118300 run_test_hr10=0.225800
+
+[2/6] MAX_ITEM_LIST_LENGTH=30, contrast=su, dropout_ratio=0.1875, global_ratio=0.765, learning_rate=0.0002718, lmd_sem=0, n_heads=4, n_layers=2, tau=0.3, weight_decay=9.01e-05
+  -> MRR@20=0.187700  best=0.187700  (early_stop@86, trial=2.3min, avg=6.5min/trial, total=12.9min, ETA=25.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.187700 cur_best_hr10=0.351700 cur_test_mrr20=0.161900 cur_test_hr10=0.304200 run_best_mrr20=0.187700 run_best_hr10=0.351700 run_test_mrr20=0.161900 run_test_hr10=0.304200
+
+[3/6] MAX_ITEM_LIST_LENGTH=20, contrast=un, dropout_ratio=0.1125, global_ratio=0.85, learning_rate=0.0003268, lmd_sem=0, n_heads=4, n_layers=1, tau=0.3, weight_decay=0
+  -> MRR@20=0.177400  best=0.187700  (early_stop@49, trial=2.8min, avg=5.3min/trial, total=15.8min, ETA=15.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.177400 cur_best_hr10=0.343400 cur_test_mrr20=0.150000 cur_test_hr10=0.299800 run_best_mrr20=0.187700 run_best_hr10=0.351700 run_test_mrr20=0.161900 run_test_hr10=0.304200
+
+[4/6] MAX_ITEM_LIST_LENGTH=30, contrast=us_x, dropout_ratio=0.1125, global_ratio=0.935, learning_rate=0.0002482, lmd_sem=0.08, n_heads=2, n_layers=1, tau=0.192, weight_decay=0
+  -> MRR@20=0.029000  best=0.187700  (early_stop@8, trial=52s, avg=4.2min/trial, total=16.7min, ETA=8.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.029000 cur_best_hr10=0.029900 cur_test_mrr20=0.037300 cur_test_hr10=0.038000 run_best_mrr20=0.187700 run_best_hr10=0.351700 run_test_mrr20=0.161900 run_test_hr10=0.304200
+
+[5/6] MAX_ITEM_LIST_LENGTH=10, contrast=us_x, dropout_ratio=0.1875, global_ratio=0.765, learning_rate=0.0002501, lmd_sem=0, n_heads=4, n_layers=2, tau=0.24, weight_decay=0
+  -> MRR@20=0.185000  best=0.187700  (early_stop@66, trial=2.2min, avg=3.8min/trial, total=19.0min, ETA=3.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.185000 cur_best_hr10=0.348300 cur_test_mrr20=0.154600 cur_test_hr10=0.309000 run_best_mrr20=0.187700 run_best_hr10=0.351700 run_test_mrr20=0.161900 run_test_hr10=0.304200
+
+[6/6] MAX_ITEM_LIST_LENGTH=30, contrast=un, dropout_ratio=0.1125, global_ratio=0.935, learning_rate=0.0003355, lmd_sem=0.04, n_heads=4, n_layers=1, tau=0.192, weight_decay=0.000141
+  -> MRR@20=0.181000  best=0.187700  (early_stop@44, trial=3.1min, avg=3.7min/trial, total=22.0min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.181000 cur_best_hr10=0.340400 cur_test_mrr20=0.153000 cur_test_hr10=0.295800 run_best_mrr20=0.187700 run_best_hr10=0.351700 run_test_mrr20=0.161900 run_test_hr10=0.304200
+
+=================================================================
+  DONE  |  FEARec x foursquare
+  Best MRR@20 = 0.187700  |  6/6 trials OK
+  Best HR@10  = 0.351700
+  Test MRR@20 = 0.161900  (best-valid checkpoint)
+  Test HR@10  = 0.304200  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.187700 best_valid_hr10=0.351700 test_mrr20=0.161900 test_hr10=0.304200
+  Total time: 22.0 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 30
+    contrast: su
+    dropout_ratio: 0.1875
+    global_ratio: 0.765
+    learning_rate: 0.000271794
+    lmd_sem: 0
+    n_heads: 4
+    n_layers: 2
+    tau: 0.3
+    weight_decay: 9.01039e-05
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/foursquare_FEARec_baseline2_addtune_foursquare_fearec_k3_20260416_023051_745799_pid1236611.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/foursquare/FEARec/foursquare_FEARec_baseline2_addtune_foursquare_fearec_k3_20260416_023051_745799_pid1236611.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/foursquare/FEARec/foursquare_FEARec_baseline2_addtune_foursquare_fearec_k3_20260416_023051_745799_pid1236611_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/foursquare/FEARec/foursquare_FEARec_baseline2_addtune_foursquare_fearec_k3_20260416_023051_745799_pid1236611_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1236611 start=2026-04-16T02:30:51 end=2026-04-16T02:52:54

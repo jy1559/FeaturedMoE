@@ -1,0 +1,73 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/retail_rocket_bsarec_K1.yaml --max-evals 4 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260537 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_RETAIL_ROCKET_BSAREC_K1 model=bsarec dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 gpu_id=2 log_wandb=false show_progress=false ++seed=20260537 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1233765 ts=2026-04-16T01:58:04
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/retail_rocket_bsarec_K1.yaml (fixed=11, search=8)
+
+=================================================================
+  Hyperopt  |  BSARec x retail_rocket
+  max_evals=4  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/8192/8192
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_RETAIL_ROCKET_BSAREC_K1
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, bsarec_alpha, bsarec_c, dropout_ratio, learning_rate, weight_decay
+Tuned params(len>1): 6  (~54 discrete combos)
+Tuned groups: 6
+  [optimization]
+    learning_rate                   [0.0002782, 0.00040466, 0.00050582, 0.00063228, 0.00091048]  -> loguniform
+    weight_decay                    [0.0, 0.0001, 0.0002, 0.0004]             -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.1125, 0.15, 0.1875]                    -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [25, 30]                                  -> choice
+    bsarec_alpha                    [0.3, 0.5, 0.7]                           -> choice
+    bsarec_c                        [2, 3, 4]                                 -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    num_heads                       4                                       
+    num_layers                      3                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/4] MAX_ITEM_LIST_LENGTH=25, bsarec_alpha=0.7, bsarec_c=3, dropout_ratio=0.1125, learning_rate=0.0002917, weight_decay=0.0002488
+  -> MRR@20=0.369700  best=0.369700  (early_stop@25, trial=4.3min, avg=4.7min/trial, total=4.7min, ETA=14.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.369700 cur_best_hr10=0.429100 cur_test_mrr20=0.373100 cur_test_hr10=0.431200 run_best_mrr20=0.369700 run_best_hr10=0.429100 run_test_mrr20=0.373100 run_test_hr10=0.431200
+
+[2/4] MAX_ITEM_LIST_LENGTH=25, bsarec_alpha=0.5, bsarec_c=2, dropout_ratio=0.15, learning_rate=0.0005908, weight_decay=0.0001189
+  -> MRR@20=0.373900  best=0.373900  (early_stop@33, trial=5.7min, avg=5.2min/trial, total=10.4min, ETA=10.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.373900 cur_best_hr10=0.477500 cur_test_mrr20=0.374300 cur_test_hr10=0.470300 run_best_mrr20=0.373900 run_best_hr10=0.477500 run_test_mrr20=0.374300 run_test_hr10=0.470300
+
+[3/4] MAX_ITEM_LIST_LENGTH=30, bsarec_alpha=0.3, bsarec_c=2, dropout_ratio=0.15, learning_rate=0.0004462, weight_decay=0.0001158
+  -> MRR@20=0.373600  best=0.373900  (early_stop@40, trial=8.0min, avg=6.2min/trial, total=18.7min, ETA=6.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.373600 cur_best_hr10=0.476000 cur_test_mrr20=0.376200 cur_test_hr10=0.472000 run_best_mrr20=0.373900 run_best_hr10=0.477500 run_test_mrr20=0.374300 run_test_hr10=0.470300
+
+[4/4] MAX_ITEM_LIST_LENGTH=30, bsarec_alpha=0.5, bsarec_c=2, dropout_ratio=0.1125, learning_rate=0.0003207, weight_decay=0.0003324
+  -> MRR@20=0.369400  best=0.373900  (early_stop@27, trial=5.4min, avg=6.0min/trial, total=24.1min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.369400 cur_best_hr10=0.431300 cur_test_mrr20=0.373700 cur_test_hr10=0.433000 run_best_mrr20=0.373900 run_best_hr10=0.477500 run_test_mrr20=0.374300 run_test_hr10=0.470300
+
+=================================================================
+  DONE  |  BSARec x retail_rocket
+  Best MRR@20 = 0.373900  |  4/4 trials OK
+  Best HR@10  = 0.477500
+  Test MRR@20 = 0.374300  (best-valid checkpoint)
+  Test HR@10  = 0.470300  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.373900 best_valid_hr10=0.477500 test_mrr20=0.374300 test_hr10=0.470300
+  Total time: 24.1 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 25
+    bsarec_alpha: 0.5
+    bsarec_c: 2
+    dropout_ratio: 0.15
+    learning_rate: 0.000590818
+    weight_decay: 0.000118883
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/retail_rocket_BSARec_baseline2_addtune_retail_rocket_bsarec_k1_20260416_015804_367256_pid1233765.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/retail_rocket/BSARec/retail_rocket_BSARec_baseline2_addtune_retail_rocket_bsarec_k1_20260416_015804_367256_pid1233765.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/retail_rocket/BSARec/retail_rocket_BSARec_baseline2_addtune_retail_rocket_bsarec_k1_20260416_015804_367256_pid1233765_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/retail_rocket/BSARec/retail_rocket_BSARec_baseline2_addtune_retail_rocket_bsarec_k1_20260416_015804_367256_pid1233765_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1233765 start=2026-04-16T01:58:04 end=2026-04-16T02:22:10
