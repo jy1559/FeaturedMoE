@@ -1,0 +1,76 @@
+# CMD
+/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --space-yaml /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/retail_rocket_fame_K4.yaml --max-evals 3 --tune-epochs 100 --tune-patience 7 --search-algo tpe --seed 20260560 --run-group baseline_2 --run-axis pair60_addtuning --run-phase BASELINE2_ADDTUNE_RETAIL_ROCKET_FAME_K4 model=fame dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 gpu_id=3 log_wandb=false show_progress=false ++seed=20260560 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1234339 ts=2026-04-16T02:02:09
+[SpaceYAML] loaded: /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_ADDTUNING/spaces/retail_rocket_fame_K4.yaml (fixed=10, search=7)
+
+=================================================================
+  Hyperopt  |  FAME x retail_rocket
+  max_evals=3  epochs=100  patience=7  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/8192/8192
+  track=baseline_2  axis=pair60_addtuning  phase=BASELINE2_ADDTUNE_RETAIL_ROCKET_FAME_K4
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, dropout_ratio, learning_rate, num_experts, weight_decay
+Tuned params(len>1): 5  (~12 discrete combos)
+Tuned groups: 5
+  [optimization]
+    learning_rate                   [0.00020174, 0.00029344, 0.0003668, 0.0004585, 0.00066023]  -> loguniform
+    weight_decay                    [0.0, '5e-05', 0.0001, 0.0002]            -> loguniform_zero
+  [model_core]
+    dropout_ratio                   [0.0975, 0.13, 0.1625]                    -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 15]                                  -> choice
+    num_experts                     [2, 3]                                    -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    num_heads                       2                                       
+    num_layers                      1                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/3] MAX_ITEM_LIST_LENGTH=15, dropout_ratio=0.1625, learning_rate=0.0003351, num_experts=2, weight_decay=0.0001
+  -> MRR@20=0.358900  best=0.358900  (early_stop@29, trial=3.9min, avg=4.3min/trial, total=4.3min, ETA=8.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.358900 cur_best_hr10=0.421900 cur_test_mrr20=0.361700 cur_test_hr10=0.423800 run_best_mrr20=0.358900 run_best_hr10=0.421900 run_test_mrr20=0.361700 run_test_hr10=0.423800
+
+[2/3] MAX_ITEM_LIST_LENGTH=15, dropout_ratio=0.1625, learning_rate=0.0002563, num_experts=3, weight_decay=0.0001
+  -> MRR@20=0.357800  best=0.358900  (early_stop@38, trial=5.3min, avg=4.8min/trial, total=9.5min, ETA=4.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.357800 cur_best_hr10=0.422000 cur_test_mrr20=0.361300 cur_test_hr10=0.424200 run_best_mrr20=0.358900 run_best_hr10=0.421900 run_test_mrr20=0.361700 run_test_hr10=0.423800
+
+[3/3] MAX_ITEM_LIST_LENGTH=10, dropout_ratio=0.1625, learning_rate=0.0002458, num_experts=2, weight_decay=0
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4218, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2779, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 269, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+=================================================================
+  DONE  |  FAME x retail_rocket
+  Best MRR@20 = 0.358900  |  2/3 trials OK
+  Best HR@10  = 0.421900
+  Test MRR@20 = 0.361700  (best-valid checkpoint)
+  Test HR@10  = 0.423800  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.358900 best_valid_hr10=0.421900 test_mrr20=0.361700 test_hr10=0.423800
+  Total time: 9.6 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 15
+    dropout_ratio: 0.1625
+    learning_rate: 0.000335117
+    num_experts: 2
+    weight_decay: 0.0001
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/retail_rocket_FAME_baseline2_addtune_retail_rocket_fame_k4_20260416_020209_911894_pid1234339.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/normal/pair60_addtuning/BASELINE2/retail_rocket/FAME/retail_rocket_FAME_baseline2_addtune_retail_rocket_fame_k4_20260416_020209_911894_pid1234339.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline_2/special/pair60_addtuning/BASELINE2/retail_rocket/FAME/retail_rocket_FAME_baseline2_addtune_retail_rocket_fame_k4_20260416_020209_911894_pid1234339_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/special/pair60_addtuning/BASELINE2/retail_rocket/FAME/retail_rocket_FAME_baseline2_addtune_retail_rocket_fame_k4_20260416_020209_911894_pid1234339_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1234339 start=2026-04-16T02:02:09 end=2026-04-16T02:11:43

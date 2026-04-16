@@ -1,0 +1,83 @@
+[revised] axis=PAIR60_V4_REVISED targets=16 gpus=['0', '1', '2', '3', '4', '5', '6', '7']
+[revised][skip] run_phase=PAIR60_V4_DKUAIRECLARGESTRICTPOSV2_0_2_MGRU4REC_P002_C1_S1 reason=base_log_not_found
+[revised][plan] PAIR60_V4_DLASTFM0_03_MTISASREC_P053_C2_S1
+  reason: OOM in 3/4 trials
+  ref: Keep TiSASRec shape, only reduce memory pressure.
+  batch: train=1024 eval=2048
+[revised][plan] PAIR60_V4_DMOVIELENS1M_MTISASREC_P043_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Use smaller batch and slightly shorter time window for stability.
+  batch: train=1024 eval=2048
+  fixed_overrides: {"time_span": 256}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MTISASREC_P013_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Retail Rocket TiSASRec memory cut + softer model width.
+  batch: train=1024 eval=2048
+  fixed_overrides: {"hidden_size": 96, "embedding_size": 96, "inner_size": 192}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MDIFSR_P017_C1_S1
+  reason: OOM in 6/6 trials and zero score
+  ref: Restore original DIFSR width with moderate batch increase and keep OOM-safe fallback.
+  batch: train=768 eval=1536
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 160, "embedding_size": 160, "n_layers": 2, "num_layers": 2, "inner_size": 320, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "attribute_hidden_size": 160, "fusion_type": "gate", "use_attribute_predictor": false, "lambda_attr": 0.0, "selected_features": ["category"]}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MDIFSR_P017_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Restore original C2 DIFSR width with moderate batch increase and keep OOM-safe fallback.
+  batch: train=768 eval=1536
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 112, "embedding_size": 112, "n_layers": 2, "num_layers": 2, "inner_size": 224, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "attribute_hidden_size": 112, "fusion_type": "gate", "use_attribute_predictor": false, "lambda_attr": 0.0, "selected_features": ["category"]}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MFDSA_P019_C1_S1
+  reason: OOM in 6/6 trials and zero score
+  ref: Restore original FDSA width with moderate batch increase and keep OOM-safe fallback.
+  batch: train=768 eval=1536
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 160, "embedding_size": 160, "n_layers": 2, "num_layers": 2, "inner_size": 320, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "attribute_hidden_size": 160, "selected_features": ["category"], "pooling_mode": "mean"}
+[revised][plan] PAIR60_V4_DRETAIL_ROCKET_MFDSA_P019_C2_S1
+  reason: OOM in 6/6 trials
+  ref: Restore original C2 FDSA width with moderate batch increase and keep OOM-safe fallback.
+  batch: train=768 eval=1536
+  lr_range: [0.00012, 0.00055]
+  fixed_overrides: {"hidden_size": 112, "embedding_size": 112, "n_layers": 2, "num_layers": 2, "inner_size": 224, "dropout_ratio": 0.15, "hidden_dropout_prob": 0.15, "attn_dropout_prob": 0.15, "weight_decay": 0.0002, "attribute_hidden_size": 112, "selected_features": ["category"], "pooling_mode": "mean"}
+[revised][plan] PAIR60_V4_DBEAUTY_MBSAREC_P005_C2_S1
+  reason: Severe underperformance vs dataset peers
+  ref: Reference SASRec-like stable transformer width/dropout.
+  lr_range: [0.00015, 0.0007]
+  fixed_overrides: {"hidden_size": 128, "embedding_size": 128, "n_layers": 2, "num_layers": 2, "n_heads": 2, "num_heads": 2, "inner_size": 256, "dropout_ratio": 0.12, "hidden_dropout_prob": 0.12, "attn_dropout_prob": 0.12, "weight_decay": 1e-05}
+[revised][plan] PAIR60_V4_DBEAUTY_MDIFSR_P007_C2_S1
+  reason: Near-zero score compared to same-dataset models
+  ref: Reference DIFSR gate fusion setting used in stronger runs.
+  batch: train=768 eval=1536
+  lr_range: [0.00012, 0.0006]
+  fixed_overrides: {"hidden_size": 160, "embedding_size": 160, "n_layers": 2, "num_layers": 2, "inner_size": 320, "dropout_ratio": 0.12, "hidden_dropout_prob": 0.12, "attn_dropout_prob": 0.12, "weight_decay": 1e-05, "attribute_hidden_size": 160, "fusion_type": "gate", "use_attribute_predictor": false, "lambda_attr": 0.0, "selected_features": ["category"]}
+[revised][plan] PAIR60_V4_DBEAUTY_MFAME_P008_C1_S1
+  reason: Very low score outlier
+  ref: Reference stronger FAME setup with more regularized transformer block.
+  lr_range: [0.00018, 0.00055]
+  fixed_overrides: {"hidden_size": 128, "embedding_size": 128, "n_layers": 2, "num_layers": 2, "inner_size": 256, "dropout_ratio": 0.12, "hidden_dropout_prob": 0.12, "attn_dropout_prob": 0.12, "weight_decay": 0.00015, "num_experts": 3}
+[revised][plan] PAIR60_V4_DBEAUTY_MGRU4REC_P002_C1_S1
+  reason: Low score vs transformer baselines
+  ref: Reference stronger GRU4Rec profile from better datasets.
+  lr_range: [0.0002, 0.001]
+  fixed_overrides: {"hidden_size": 192, "embedding_size": 192, "num_layers": 1, "dropout_prob": 0.25, "hidden_dropout_prob": 0.25, "weight_decay": 1e-05, "MAX_ITEM_LIST_LENGTH": 30}
+[revised][plan] PAIR60_V4_DFOURSQUARE_MBSAREC_P035_C2_S1
+  reason: Underperforming BSARec combo
+  ref: Reference BSARec C1-style balanced transformer settings.
+  lr_range: [0.00012, 0.0006]
+  fixed_overrides: {"hidden_size": 128, "embedding_size": 128, "n_layers": 2, "num_layers": 2, "n_heads": 2, "num_heads": 2, "inner_size": 256, "dropout_ratio": 0.12, "hidden_dropout_prob": 0.12, "attn_dropout_prob": 0.12, "weight_decay": 1e-05}
+[revised][plan] PAIR60_V4_DFOURSQUARE_MFAME_P038_C1_S1
+  reason: Underperforming FAME combo
+  ref: Reference stronger FAME settings used in lastfm/foursquare families.
+  lr_range: [0.00015, 0.0005]
+  fixed_overrides: {"hidden_size": 128, "embedding_size": 128, "n_layers": 2, "num_layers": 2, "inner_size": 256, "dropout_ratio": 0.1, "hidden_dropout_prob": 0.1, "attn_dropout_prob": 0.1, "weight_decay": 0.0001, "num_experts": 3}
+[revised][plan] PAIR60_V4_DFOURSQUARE_MGRU4REC_P032_C2_S1
+  reason: Underperforming GRU4Rec combo
+  ref: Reference GRU4Rec high-LR profile that performed better in similar runs.
+  lr_range: [0.0002, 0.0009]
+  fixed_overrides: {"hidden_size": 192, "embedding_size": 192, "num_layers": 1, "dropout_prob": 0.2, "hidden_dropout_prob": 0.2, "weight_decay": 1e-05, "MAX_ITEM_LIST_LENGTH": 30}
+[revised][plan] PAIR60_V4_DKUAIRECLARGESTRICTPOSV2_0_2_MTISASREC_P023_C1_S1
+  reason: Lower-than-expected TiSASRec score
+  ref: Reference TiSASRec stable setting from lastfm, with conservative width/time_span.
+  batch: train=1536 eval=3072
+  lr_range: [0.00012, 0.00045]
+  fixed_overrides: {"hidden_size": 96, "embedding_size": 96, "n_layers": 2, "num_layers": 2, "n_heads": 2, "num_heads": 2, "inner_size": 192, "dropout_ratio": 0.12, "hidden_dropout_prob": 0.12, "attn_dropout_prob": 0.12, "weight_decay": 1e-06, "time_span": 512}
+[revised] manifest=/workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline_2/PAIR60_V4_REVISED/revised_manifest.json
