@@ -46,6 +46,8 @@ ARCH_NAME = "A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5"
 PHASE_ID = "P4S1"
 PHASE_NAME = "FMOE_N4_STAGE1_A12_BROAD"
 DEFAULT_DATASETS = ["KuaiRecLargeStrictPosV2_0.2"]
+FEATURE_MODE = "full_v4"
+FEATURE_DATASET_DIR = "feature_added_v4"
 
 REPO_ROOT_REAL = THIS_DIR.parents[2]
 LOG_ROOT = REPO_ROOT_REAL / "experiments" / "run" / "artifacts" / "logs" / TRACK / AXIS
@@ -97,7 +99,7 @@ def _normalize_search_spec(spec: Any) -> tuple[str, list[Any]]:
 
 
 def _validate_session_fixed_files(dataset: str) -> None:
-    ds_dir = REPO_ROOT_REAL / "Datasets" / "processed" / "feature_added_v3" / dataset
+    ds_dir = REPO_ROOT_REAL / "Datasets" / "processed" / FEATURE_DATASET_DIR / dataset
     required = [
         ds_dir / f"{dataset}.train.inter",
         ds_dir / f"{dataset}.valid.inter",
@@ -448,7 +450,7 @@ def build_command(row: Dict[str, Any], gpu_id: str, args: argparse.Namespace) ->
         "model=featured_moe_n3_tune",
         f"dataset={row['dataset']}",
         "eval_mode=session_fixed",
-        "feature_mode=full_v3",
+        f"feature_mode={FEATURE_MODE}",
         "++eval_sampling.mode=full",
         "++eval_sampling.auto_full_threshold=999999999",
         "++special_logging=true",
