@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import copy
+import re
 import sys
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +34,8 @@ PHASE_NAME = "N4_CORE_GLOBAL_QUEUE"
 AXIS_ID = "N4ABLG"
 AXIS_DESC = "core_global_queue"
 RESUME_AXIS_PREFIX = AXIS
+RUN_PHASE_RE = re.compile(r"\brun_phase=(\S+)")
+RESULT_PATH_RE = re.compile(r"^Results\s*->\s*(.+?)\s*$")
 
 STUDIES = [
     {
@@ -129,7 +133,7 @@ def _order_rows(
         "KuaiRecLargeStrictPosV2_0.2": 1,
     }
 
-    def sort_key(row: dict[str, Any]) -> tuple[int, int, int, int, int]:
+    def sort_key(row: dict[str, Any]) -> tuple[int, int, int, int, int, int]:
         stage_name = str(row.get("stage", ""))
         setting_id = str(row.get("setting_id", ""))
         base_key = str(row.get("base_key", ""))
@@ -145,7 +149,47 @@ def _order_rows(
             seed_id,
         )
 
-    return sorted(rows, key=sort_key)
+    sorted_rows = sorted(rows, key=sort_key)
+    stage_names = [
+        stage_name
+        for stage_name, _order in sorted(study_order.items(), key=lambda item: int(item[1]))
+    ]
+
+    stage_families: dict[str, deque[deque[dict[str, Any]]]] = {}
+    for row in sorted_rows:
+        stage_name = str(row.get("stage", ""))
+        family_key = (
+            str(row.get("dataset", "")),
+            str(row.get("base_key", "")),
+            str(row.get("setting_id", "")),
+        )
+        family_buckets = stage_families.setdefault(stage_name, deque())
+        if not family_buckets or family_buckets[-1][0].get("_queue_family_key") != family_key:
+            family_buckets.append(deque())
+        tagged_row = dict(row)
+        tagged_row["_queue_family_key"] = family_key
+        family_buckets[-1].append(tagged_row)
+
+    active_stages = deque(
+        stage_name
+        for stage_name in stage_names + sorted(name for name in stage_families if name not in set(stage_names))
+        if stage_families.get(stage_name)
+    )
+    interleaved: list[dict[str, Any]] = []
+    while active_stages:
+        stage_name = active_stages.popleft()
+        family_buckets = stage_families.get(stage_name)
+        if not family_buckets:
+            continue
+        family_rows = family_buckets.popleft()
+        row = family_rows.popleft()
+        row.pop("_queue_family_key", None)
+        interleaved.append(row)
+        if family_rows:
+            family_buckets.append(family_rows)
+        if family_buckets:
+            active_stages.append(stage_name)
+    return interleaved
 
 
 def _selected_stages(args: Any) -> set[str]:
@@ -269,6 +313,33 @@ def _find_completed_log_for_result(axis_dir: Path, parsed: dict[str, Any]) -> Pa
     return None
 
 
+def _extract_run_phase_from_log(log_path: Path) -> str:
+    head = common._read_log_head(log_path)
+    match = RUN_PHASE_RE.search(head)
+    if not match:
+        return ""
+    return str(match.group(1)).strip()
+
+
+def _extract_result_path_from_log(log_path: Path) -> Path | None:
+    tail_lines: deque[str] = deque(maxlen=80)
+    try:
+        with log_path.open("r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                tail_lines.append(line)
+    except Exception:
+        return None
+    for line in reversed(tail_lines):
+        stripped = str(line).strip()
+        match = RESULT_PATH_RE.match(stripped)
+        if not match:
+            continue
+        result_path = Path(str(match.group(1)).strip())
+        if result_path.exists():
+            return result_path
+    return None
+
+
 def _cross_axis_completed_keys(current_axis: str, verify_logging: bool) -> dict[tuple[str, str, str, str, int], dict[str, str]]:
     completed: dict[tuple[str, str, str, str, int], dict[str, str]] = {}
     axis_names = _resume_axis_names(current_axis)
@@ -310,6 +381,44 @@ def _cross_axis_completed_keys(current_axis: str, verify_logging: bool) -> dict[
             "run_phase": run_phase,
             "result_path": str(result_path),
         }
+    return completed
+
+
+def _cross_axis_completed_log_keys(current_axis: str, verify_logging: bool) -> dict[tuple[str, str, str, str, int], dict[str, str]]:
+    completed: dict[tuple[str, str, str, str, int], dict[str, str]] = {}
+    for axis_name in sorted(_resume_axis_names(current_axis)):
+        axis_dir = common.ABLATION_LOGS_ROOT / axis_name
+        if not axis_dir.exists():
+            continue
+        for log_path in sorted(axis_dir.rglob("*.log")):
+            if not _is_completed_log(log_path):
+                continue
+            run_phase = _extract_run_phase_from_log(log_path)
+            parsed = _parse_core_queue_run_phase(run_phase)
+            if parsed is None:
+                continue
+            if verify_logging:
+                result_path = _extract_result_path_from_log(log_path)
+                if result_path is None:
+                    continue
+                special_ok, diag_ok, _detail = _verify_special_diag_from_result(str(result_path))
+                if not special_ok or not diag_ok:
+                    continue
+            key = (
+                str(parsed["dataset"]),
+                str(parsed["stage"]),
+                common.sanitize_token(str(parsed["base_setting_id"]), upper=False),
+                common.sanitize_token(str(parsed["setting_id"]), upper=False),
+                int(parsed["seed_id"]),
+            )
+            completed.setdefault(
+                key,
+                {
+                    "axis": axis_name,
+                    "run_phase": run_phase,
+                    "result_path": str(_extract_result_path_from_log(log_path) or ""),
+                },
+            )
     return completed
 
 
@@ -361,6 +470,8 @@ def main() -> int:
     )
 
     completed_keys = _cross_axis_completed_keys(axis, bool(args.verify_logging))
+    for key, payload in _cross_axis_completed_log_keys(axis, bool(args.verify_logging)).items():
+        completed_keys.setdefault(key, payload)
     cross_axis_skipped = [row for row in rows if _semantic_row_key(row) in completed_keys]
     if cross_axis_skipped:
         print(

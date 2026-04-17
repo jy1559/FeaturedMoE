@@ -8,7 +8,7 @@ DEFAULT_ARGS=(
     --setting-tier essential_extended
     --only-stage routing,stage,cue,objective
     --num-base-per-dataset 5
-    --seeds 1,2,3,4
+    --seeds 1,2
     --max-evals 10
     --tune-epochs 100
     --tune-patience 10

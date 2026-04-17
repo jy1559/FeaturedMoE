@@ -327,6 +327,8 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         )
         self.fmoe_diag_logging = bool(resolver.get("fmoe_diag_logging", True))
         self.fmoe_diag_sample_sessions = max(int(resolver.get("fmoe_diag_sample_sessions", 256)), 0)
+        self.fmoe_diag_pair_max_points = max(int(resolver.get("fmoe_diag_pair_max_points", 4096)), 0)
+        self.fmoe_diag_pair_bin_count = max(int(resolver.get("fmoe_diag_pair_bin_count", 20)), 4)
         self.feature_perturb_mode = str(resolver.get("feature_perturb_mode", "none")).lower().strip()
         if self.feature_perturb_mode not in _FEATURE_PERTURB_MODES:
             self.feature_perturb_mode = "none"
@@ -351,6 +353,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         )
         self.feature_meta_v3 = validate_feature_meta_v3(meta) if meta else {}
         requested_feature_mode = str(resolver.get("feature_mode", "")).strip().lower()
+        self.requested_feature_mode = requested_feature_mode or "unknown"
         self.feature_spec = build_stage_feature_spec(
             macro_history_window=self.macro_history_window,
             stage_feature_family_mask=self.stage_feature_family_mask,
@@ -801,6 +804,7 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         if not self.fmoe_diag_logging or not self._supports_diag:
             self._diag_collector = None
             return
+        diag_feature_mode = f"runtime:{self.requested_feature_mode}|ablation:{self._feature_ablation_tag()}"
         self._diag_collector = N3DiagnosticCollector(
             split_name=split_name,
             stage_family_features=self.feature_spec["stage_family_features"],
@@ -808,8 +812,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             stage_router_granularity=self.stage_router_granularity,
             all_feature_columns=self.feature_base_fields,
             max_positions=int(self.max_seq_length),
-            feature_mode=self._feature_ablation_tag(),
+            feature_mode=diag_feature_mode,
             consistency_pairs=int(self.route_consistency_pairs),
+            pair_max_points=int(self.fmoe_diag_pair_max_points),
+            pair_bin_count=int(self.fmoe_diag_pair_bin_count),
         )
 
     def end_diagnostic_eval(self) -> Optional[dict]:
@@ -846,6 +852,9 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         item_seq = interaction[self.ITEM_SEQ]
         batch_size, seq_len = item_seq.shape
         device = item_seq.device
+        if len(self.feature_fields) == 0:
+            # Keep diagnostics and fallback paths robust on datasets without engineered features.
+            return torch.zeros(batch_size, seq_len, 0, device=device)
 
         for base_field, seq_field in zip(self.feature_base_fields, self.feature_fields):
             if seq_field in interaction:
@@ -877,6 +886,22 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         feat = self._apply_feature_ablation(feat)
         feat = self._apply_feature_perturb(feat)
         return feat
+
+    def _maybe_diag_feature_reference(self, interaction, feat: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        """Return a feature tensor for diagnostics, even when router source is hidden-only."""
+        if torch.is_tensor(feat):
+            return feat
+        if self.training or self._diag_collector is None:
+            return None
+        if len(self.feature_fields) == 0:
+            return None
+        try:
+            diag_feat = self._gather_features(interaction)
+        except Exception:
+            return None
+        if not torch.is_tensor(diag_feat) or diag_feat.ndim != 3 or int(diag_feat.size(-1)) <= 0:
+            return None
+        return diag_feat
 
     def _update_eval_diagnostics(self, *, interaction, feat, item_seq_len, aux_data) -> None:
         if self.training or self._diag_collector is None:
@@ -1330,9 +1355,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             feat,
             routing_item_seq_len=routing_item_seq_len,
         )
+        diag_feat = self._maybe_diag_feature_reference(interaction, feat)
         self._update_eval_diagnostics(
             interaction=interaction,
-            feat=feat,
+            feat=diag_feat,
             item_seq_len=item_seq_len,
             aux_data=aux_data,
         )
@@ -1348,9 +1374,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             feat,
             routing_item_seq_len=routing_item_seq_len,
         )
+        diag_feat = self._maybe_diag_feature_reference(interaction, feat)
         self._update_eval_diagnostics(
             interaction=interaction,
-            feat=feat,
+            feat=diag_feat,
             item_seq_len=item_seq_len,
             aux_data=aux_data,
         )
