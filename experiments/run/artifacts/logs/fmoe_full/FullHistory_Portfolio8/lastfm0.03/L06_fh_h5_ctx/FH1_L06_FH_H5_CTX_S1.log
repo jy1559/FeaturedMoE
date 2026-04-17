@@ -1,0 +1,38 @@
+[FMOE_FULL_HISTORY_PORTFOLIO_SETTING_HEADER]
+run_phase=FH1_FH_LASTFM0_03_L06_FH_H5_CTX_S1 exp_brief=A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5 phase_id=FH1 axis_id=FH8 setting_id=L06_fh_h5_ctx hparam_id= seed=1
+desc=steady H5 line with longer crop and slightly lower lr for full-history
+dataset=lastfm0.03 gpu=6 order=46
+max_evals= tune_epochs= tune_patience=
+seed=260545
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --search-algo tpe --max-evals 3 --tune-epochs 100 --tune-patience 10 --seed 260545 --run-group fmoe_full --run-axis FullHistory_Portfolio8 --run-phase FH1_FH_LASTFM0_03_L06_FH_H5_CTX_S1 model=featured_moe_n3_tune dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v4 ++history_input_mode=full_history_session_targets ++history_eval_policy=strict_train_prefix ++history_group_field=user_id ++target_group_field=session_id ++load_col.inter=["session_id","item_id","timestamp","user_id"] ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true ++main_eval_target_mode="seen_target" gpu_id=6 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A12" ++fmoe_architecture_key="A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5" ++fmoe_hparam_id="H5" ++fmoe_phase="FH1" train_batch_size=768 eval_batch_size=1536 ++phase_run_type="full_history" ++phase_axis_id="FH8" ++phase_axis_desc="full_history_portfolio8" ++phase_setting_id="L06_fh_h5_ctx" ++phase_setting_key="L06_fh_h5_ctx" ++phase_hparam_id="H5" ++phase_seed_id=1 ++phase_run_id="FH_LASTFM0_03_L06_FH_H5_CTX_S1" ++layer_layout=["attn","macro_ffn","mid_ffn","attn","micro_ffn"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0001 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0005 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w5_exd",mid:"w5_exd",micro:"w5_exd"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++macro_history_window=5 ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++bias_mode="none" ++stage_family_dropout_prob={macro:0.03,mid:0.03,micro:0.03} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++embedding_size=168 ++d_ff=336 ++d_expert_hidden=168 ++d_router_hidden=84 ++MAX_ITEM_LIST_LENGTH=40 ++d_feat_emb=16 ++expert_scale=3 ++num_heads=4 ++lr_scheduler_type="warmup_cosine" ++attn_dropout_prob=0.06 ++search.learning_rate=[0.00016,0.0005] ++search_space_type_overrides.learning_rate=loguniform ++search.weight_decay=[1e-06,2e-06,4e-06] ++search_space_type_overrides.weight_decay=choice ++search.hidden_dropout_prob=[0.1,0.13,0.15] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.MAX_ITEM_LIST_LENGTH=[35,40,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1373201 ts=2026-04-16T15:21:13
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x lastfm0.03
+  max_evals=3  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=768/1536/1536
+  track=fmoe_full  axis=fullhistory_portfolio8  phase=FH1_FH_LASTFM0_03_L06_FH_H5_CTX_S1
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, hidden_dropout_prob, learning_rate, weight_decay
+Tuned params(len>1): 4  (~27 discrete combos)
+Tuned groups: 4
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.13, 0.15]                         -> choice
+    learning_rate                   [0.00016, 0.0005]                         -> loguniform
+    weight_decay                    [1e-06, 2e-06, 4e-06]                     -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [35, 40, 50]                              -> choice
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/3] MAX_ITEM_LIST_LENGTH=50, hidden_dropout_prob=0.1, learning_rate=0.0002203, weight_decay=4e-06
+[RUN_STATUS] TERMINATED signal=SIGINT(2) pid=1373201 ts=2026-04-16T15:25:28
+[RUN_STATUS] END status=terminated signal=SIGINT(2) pid=1373201 start=2026-04-16T15:21:13 end=2026-04-16T15:25:29

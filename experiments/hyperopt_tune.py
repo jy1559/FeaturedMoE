@@ -198,6 +198,42 @@ def _build_item_counts_from_loader(data_loader):
     return torch.bincount(item_ids, minlength=n_items)[:n_items].cpu()
 
 
+def _safe_len(obj) -> int | None:
+    try:
+        return int(len(obj))
+    except Exception:
+        return None
+
+
+def _estimate_eval_target_count(data_loader) -> int | None:
+    dataset = getattr(data_loader, "dataset", None)
+    if dataset is None:
+        return None
+    inter_feat = getattr(dataset, "inter_feat", None)
+    if inter_feat is not None:
+        try:
+            return int(len(inter_feat))
+        except Exception:
+            pass
+    return _safe_len(dataset)
+
+
+def _summarize_epoch_speed(epoch_trace_rows: list[dict]) -> tuple[float | None, float | None]:
+    epoch_times = []
+    for row in list(epoch_trace_rows or []):
+        try:
+            value = float(row.get("epoch_time_sec", 0.0) or 0.0)
+        except Exception:
+            value = 0.0
+        if value > 0.0:
+            epoch_times.append(value)
+    if not epoch_times:
+        return None, None
+    avg_epoch_time_sec = float(sum(epoch_times) / len(epoch_times))
+    avg_epoch_per_hour = 3600.0 / avg_epoch_time_sec if avg_epoch_time_sec > 0.0 else None
+    return avg_epoch_time_sec, avg_epoch_per_hour
+
+
 def _extract_cold_slice_metrics(special_metrics: dict | None) -> dict:
     out = {
         "count": 0,
@@ -2472,8 +2508,8 @@ def _collect_feature_ablation_metrics(
         )
 
     if enable_global:
-        zero_result, _zero_special, valid_zero_diag = _eval("zero", split_name=f"{split_prefix}_zero")
-        shuffle_result, _shuffle_special, valid_shuffle_diag = _eval("shuffle", split_name=f"{split_prefix}_shuffle")
+        zero_result, _zero_special, valid_zero_diag, _zero_filter = _eval("zero", split_name=f"{split_prefix}_zero")
+        shuffle_result, _shuffle_special, valid_shuffle_diag, _shuffle_filter = _eval("shuffle", split_name=f"{split_prefix}_shuffle")
         metrics.update(
             {
                 "feature_zero_delta_mrr": float(reference_mrr20 - float((zero_result or {}).get("mrr@20", 0.0) or 0.0)),
@@ -2486,12 +2522,12 @@ def _collect_feature_ablation_metrics(
     if enable_family:
         for family_name in list(getattr(model, "feature_family_names", []) or []):
             family_slug = _safe_slug(str(family_name).lower())
-            fam_zero_result, _fam_zero_special, fam_zero_diag = _eval(
+            fam_zero_result, _fam_zero_special, fam_zero_diag, _fam_zero_filter = _eval(
                 "zero",
                 family=family_name,
                 split_name=f"{split_prefix}_{family_slug}_zero",
             )
-            fam_shuffle_result, _fam_shuffle_special, fam_shuffle_diag = _eval(
+            fam_shuffle_result, _fam_shuffle_special, fam_shuffle_diag, _fam_shuffle_filter = _eval(
                 "shuffle",
                 family=family_name,
                 split_name=f"{split_prefix}_{family_slug}_shuffle",
@@ -2982,8 +3018,8 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                     except Exception:
                         pass
 
+                epoch_time = time.time() - epoch_start
                 if trial_epoch_log:
-                    epoch_time = time.time() - epoch_start
                     print(
                         f"    Ep {epoch+1:>3}/{max_epochs:<3}\tSKIP@{eval_every}\t"
                         f"train_loss {train_loss:7.4f}\tlr {epoch_lr:8.2e}\t"
@@ -2999,6 +3035,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                         "best_mrr20": float(best_mrr20) if best_mrr20 > -1e8 else 0.0,
                         "lr": float(epoch_lr),
                         "patience_used": int(no_improve),
+                        "epoch_time_sec": float(epoch_time),
                     }
                 )
                 continue
@@ -3053,8 +3090,8 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 except Exception:
                     pass
 
+            epoch_time = time.time() - epoch_start
             if trial_epoch_log:
-                epoch_time = time.time() - epoch_start
                 best_disp = best_mrr20 if best_mrr20 > -1e8 else 0.0
                 print(
                     f"    Ep {epoch+1:>3}/{max_epochs:<3}\tEVAL    \t"
@@ -3073,6 +3110,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                     "best_mrr20": float(best_mrr20),
                     "lr": float(epoch_lr),
                     "patience_used": int(no_improve),
+                    "epoch_time_sec": float(epoch_time),
                 }
             )
 
@@ -3123,13 +3161,29 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             if isinstance(best_valid_diag, dict):
                 best_valid_diag["feature_ablation"] = feature_ablation_metrics
 
+        test_eval_started = time.time()
         tr, test_special_metrics, test_diag, test_filter = _run_eval(
             test_data,
             split_name="test",
             collect_special=collect_final_artifacts,
             collect_diag=collect_final_artifacts,
         )
+        test_eval_time_sec = time.time() - test_eval_started
         test_result = {k: float(v) for k, v in tr.items()}
+
+        avg_epoch_time_sec, avg_epoch_per_hour = _summarize_epoch_speed(epoch_trace_rows)
+        test_eval_batches = _safe_len(test_data)
+        test_eval_targets = _estimate_eval_target_count(test_data)
+        test_eval_batches_per_sec = (
+            float(test_eval_batches) / float(test_eval_time_sec)
+            if test_eval_batches is not None and test_eval_time_sec > 0.0
+            else None
+        )
+        test_eval_targets_per_sec = (
+            float(test_eval_targets) / float(test_eval_time_sec)
+            if test_eval_targets is not None and test_eval_time_sec > 0.0
+            else None
+        )
 
         elapsed = time.time() - t0
 
@@ -3173,6 +3227,13 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "final_lr": _optimizer_current_lr(trainer.optimizer),
             "lr_scheduler_type": lr_scheduler_type,
             "elapsed": elapsed,
+            "avg_epoch_time_sec": avg_epoch_time_sec,
+            "avg_epoch_per_hour": avg_epoch_per_hour,
+            "test_eval_time_sec": float(test_eval_time_sec),
+            "test_eval_batches": test_eval_batches,
+            "test_eval_targets": test_eval_targets,
+            "test_eval_batches_per_sec": test_eval_batches_per_sec,
+            "test_eval_targets_per_sec": test_eval_targets_per_sec,
             "fmoe_arch": fmoe_arch,
             "artifact_best_checkpoint": artifact_best_checkpoint,
             "artifact_probe_checkpoint": artifact_probe_checkpoint,
@@ -3309,6 +3370,11 @@ def _save_results(
         data["best_hr@10"] = _ser(best_valid_result.get("hit@10", 0.0))
         data["test_mrr@20"] = _ser(test_result.get("mrr@20", 0.0))
         data["test_hr@10"] = _ser(test_result.get("hit@10", 0.0))
+        data["avg_epoch_time_sec"] = _ser(bt.get("avg_epoch_time_sec", 0.0))
+        data["avg_epoch_per_hour"] = _ser(bt.get("avg_epoch_per_hour", 0.0))
+        data["test_eval_time_sec"] = _ser(bt.get("test_eval_time_sec", 0.0))
+        data["test_eval_batches_per_sec"] = _ser(bt.get("test_eval_batches_per_sec", 0.0))
+        data["test_eval_targets_per_sec"] = _ser(bt.get("test_eval_targets_per_sec", 0.0))
         data["best_valid_result"] = best_valid_result
         data["test_result"] = test_result
         data["best_valid_special_metrics"] = bt.get("valid_special_metrics") or {}
@@ -3343,6 +3409,9 @@ def _save_results(
             "mrr@20": trial.get("mrr@20"),
             "test_mrr@20": trial.get("test_mrr@20"),
             "test_hr@10": trial.get("test_hr@10"),
+            "avg_epoch_time_sec": trial.get("avg_epoch_time_sec"),
+            "test_eval_time_sec": trial.get("test_eval_time_sec"),
+            "test_eval_targets_per_sec": trial.get("test_eval_targets_per_sec"),
             "epochs_run": trial.get("epochs_run"),
             "early_stopped": trial.get("early_stopped"),
         }
@@ -4243,6 +4312,10 @@ def main():
             current_best_hr10 = float((result.get("valid_result", {}) or {}).get("hit@10", 0.0) or 0.0)
             current_test_mrr20 = float((result.get("test_result", {}) or {}).get("mrr@20", 0.0) or 0.0)
             current_test_hr10 = float((result.get("test_result", {}) or {}).get("hit@10", 0.0) or 0.0)
+            current_avg_epoch_time_sec = float(result.get("avg_epoch_time_sec", 0.0) or 0.0)
+            current_test_eval_time_sec = float(result.get("test_eval_time_sec", 0.0) or 0.0)
+            current_test_eval_batches_per_sec = float(result.get("test_eval_batches_per_sec", 0.0) or 0.0)
+            current_test_eval_targets_per_sec = float(result.get("test_eval_targets_per_sec", 0.0) or 0.0)
             run_best_trial = {
                 "mrr@20": float(mrr20),
                 "valid_result": result.get("valid_result", {}) or {},
@@ -4284,6 +4357,10 @@ def main():
                 f"cur_best_hr10={current_best_hr10:.6f} "
                 f"cur_test_mrr20={current_test_mrr20:.6f} "
                 f"cur_test_hr10={current_test_hr10:.6f} "
+                f"avg_epoch_time_sec={current_avg_epoch_time_sec:.4f} "
+                f"test_eval_time_sec={current_test_eval_time_sec:.4f} "
+                f"test_eval_batches_per_sec={current_test_eval_batches_per_sec:.4f} "
+                f"test_eval_targets_per_sec={current_test_eval_targets_per_sec:.4f} "
                 f"run_best_mrr20={run_best_metrics['best_mrr@20']:.6f} "
                 f"run_best_hr10={run_best_metrics['best_hr@10']:.6f} "
                 f"run_test_mrr20={run_best_metrics['test_mrr@20']:.6f} "
@@ -4315,6 +4392,13 @@ def main():
                 "early_stop_epoch": result.get("early_stop_epoch", result["epochs_run"]),
                 "early_stopped": bool(result.get("early_stopped", False)),
                 "elapsed": round(result["elapsed"], 1),
+                "avg_epoch_time_sec": result.get("avg_epoch_time_sec"),
+                "avg_epoch_per_hour": result.get("avg_epoch_per_hour"),
+                "test_eval_time_sec": result.get("test_eval_time_sec"),
+                "test_eval_batches": result.get("test_eval_batches"),
+                "test_eval_targets": result.get("test_eval_targets"),
+                "test_eval_batches_per_sec": result.get("test_eval_batches_per_sec"),
+                "test_eval_targets_per_sec": result.get("test_eval_targets_per_sec"),
                 "status": "ok",
                 "artifact_best_checkpoint": current_artifact_best,
                 "artifact_probe_checkpoint": current_artifact_probe,
@@ -4496,6 +4580,10 @@ def main():
     best_hr10 = float(best_valid_result.get("hit@10", 0.0) or 0.0)
     test_mrr20 = float(best_test_result.get("mrr@20", 0.0) or 0.0)
     test_hr10 = float(best_test_result.get("hit@10", 0.0) or 0.0)
+    best_avg_epoch_time_sec = float((best_trial or {}).get("avg_epoch_time_sec", 0.0) or 0.0)
+    best_test_eval_time_sec = float((best_trial or {}).get("test_eval_time_sec", 0.0) or 0.0)
+    best_test_eval_batches_per_sec = float((best_trial or {}).get("test_eval_batches_per_sec", 0.0) or 0.0)
+    best_test_eval_targets_per_sec = float((best_trial or {}).get("test_eval_targets_per_sec", 0.0) or 0.0)
     if not best_params and ok_trials:
         best_params = max(ok_trials, key=lambda x: x["mrr@20"]).get("params", {})
 
@@ -4548,6 +4636,11 @@ def main():
             test_mrr20 = float(best_test_result.get("mrr@20", 0.0) or 0.0)
             test_hr10 = float(best_test_result.get("hit@10", 0.0) or 0.0)
 
+            best_avg_epoch_time_sec = float((best_trial or {}).get("avg_epoch_time_sec", 0.0) or 0.0)
+            best_test_eval_time_sec = float((best_trial or {}).get("test_eval_time_sec", 0.0) or 0.0)
+            best_test_eval_batches_per_sec = float((best_trial or {}).get("test_eval_batches_per_sec", 0.0) or 0.0)
+            best_test_eval_targets_per_sec = float((best_trial or {}).get("test_eval_targets_per_sec", 0.0) or 0.0)
+
     exported_best_checkpoint = ""
     exported_probe_checkpoint = ""
     combo_best_export_path = str(cfg.get("__artifact_combo_best_export_path", "") or "").strip()
@@ -4569,12 +4662,24 @@ def main():
     print(f"  Best HR@10  = {best_hr10:.6f}")
     print(f"  Test MRR@20 = {test_mrr20:.6f}  (best-valid checkpoint)")
     print(f"  Test HR@10  = {test_hr10:.6f}  (best-valid checkpoint)")
+    if best_avg_epoch_time_sec > 0.0:
+        print(f"  Avg epoch time = {best_avg_epoch_time_sec:.3f} sec/epoch")
+    if best_test_eval_time_sec > 0.0:
+        print(
+            f"  Final test eval = {best_test_eval_time_sec:.3f} sec"
+            f" | batches/s={best_test_eval_batches_per_sec:.3f}"
+            f" | targets/s={best_test_eval_targets_per_sec:.3f}"
+        )
     print(
         "[RUN_METRICS] "
         f"best_valid_mrr20={best_mrr:.6f} "
         f"best_valid_hr10={best_hr10:.6f} "
         f"test_mrr20={test_mrr20:.6f} "
-        f"test_hr10={test_hr10:.6f}"
+        f"test_hr10={test_hr10:.6f} "
+        f"avg_epoch_time_sec={best_avg_epoch_time_sec:.4f} "
+        f"test_eval_time_sec={best_test_eval_time_sec:.4f} "
+        f"test_eval_batches_per_sec={best_test_eval_batches_per_sec:.4f} "
+        f"test_eval_targets_per_sec={best_test_eval_targets_per_sec:.4f}"
     )
     print(f"  Total time: {total_time / 60:.1f} min")
     print(f"  Best params:")

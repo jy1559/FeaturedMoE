@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: beauty
+- run_group: fmoe_n4
+- run_axis: ablation_dualset_core_global_queue_v1_first_primary
+- run_phase: P4C_BEAUTY_B01_B25_LR_H8_SEEN_ANCHOR_CF_02_S1
+- best_mrr@20: 0.0848
+- test_mrr@20: 0.0549
+- test_hr@10: 0.1433
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4C/beauty_FeaturedMoE_N3_p4c_beauty_b01_b25_lr_h8_seen_anchor_cf_02_s1_20260416_191529_246387_pid1399254/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: 
+- diag_raw_best_valid: 
+- diag_raw_test: 
+- diag_raw_epoch_trace: 
+- feature_ablation: 
