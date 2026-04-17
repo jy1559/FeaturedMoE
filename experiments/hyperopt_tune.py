@@ -1572,6 +1572,8 @@ def _write_logging_bundle(
                 "test_hr@10": t.get("test_hr@10", ""),
                 "epochs_run": t.get("epochs_run", ""),
                 "early_stopped": t.get("early_stopped", ""),
+                "avg_epoch_time_sec": t.get("avg_epoch_time_sec", ""),
+                "test_inference_time_sec": t.get("test_inference_time_sec", ""),
             }
         )
     if trials_rows:
@@ -2964,6 +2966,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 if lr_scheduler is not None and lr_scheduler_type in {"cosine", "warmup_cosine"}:
                     lr_scheduler.step()
                     epoch_lr = _optimizer_current_lr(trainer.optimizer)
+                epoch_time = time.time() - epoch_start
                 if progress_cb is not None:
                     try:
                         progress_cb(
@@ -2983,7 +2986,6 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                         pass
 
                 if trial_epoch_log:
-                    epoch_time = time.time() - epoch_start
                     print(
                         f"    Ep {epoch+1:>3}/{max_epochs:<3}\tSKIP@{eval_every}\t"
                         f"train_loss {train_loss:7.4f}\tlr {epoch_lr:8.2e}\t"
@@ -2999,6 +3001,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                         "best_mrr20": float(best_mrr20) if best_mrr20 > -1e8 else 0.0,
                         "lr": float(epoch_lr),
                         "patience_used": int(no_improve),
+                        "epoch_time_sec": float(epoch_time),
                     }
                 )
                 continue
@@ -3053,8 +3056,8 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                 except Exception:
                     pass
 
+            epoch_time = time.time() - epoch_start
             if trial_epoch_log:
-                epoch_time = time.time() - epoch_start
                 best_disp = best_mrr20 if best_mrr20 > -1e8 else 0.0
                 print(
                     f"    Ep {epoch+1:>3}/{max_epochs:<3}\tEVAL    \t"
@@ -3073,6 +3076,7 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
                     "best_mrr20": float(best_mrr20),
                     "lr": float(epoch_lr),
                     "patience_used": int(no_improve),
+                    "epoch_time_sec": float(epoch_time),
                 }
             )
 
@@ -3123,15 +3127,27 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             if isinstance(best_valid_diag, dict):
                 best_valid_diag["feature_ablation"] = feature_ablation_metrics
 
+        test_eval_started = time.time()
         tr, test_special_metrics, test_diag, test_filter = _run_eval(
             test_data,
             split_name="test",
             collect_special=collect_final_artifacts,
             collect_diag=collect_final_artifacts,
         )
+        test_inference_time_sec = time.time() - test_eval_started
         test_result = {k: float(v) for k, v in tr.items()}
 
         elapsed = time.time() - t0
+        avg_epoch_time_sec = 0.0
+        epoch_time_values = [
+            float(row.get("epoch_time_sec", 0.0) or 0.0)
+            for row in epoch_trace_rows
+            if row.get("epoch_time_sec")
+        ]
+        if epoch_time_values:
+            avg_epoch_time_sec = sum(epoch_time_values) / len(epoch_time_values)
+        elif final_epoch:
+            avg_epoch_time_sec = float(elapsed) / max(1, int(final_epoch))
 
         fmoe_arch = {}
         try:
@@ -3170,6 +3186,9 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "epochs_run": final_epoch,
             "early_stop_epoch": final_epoch,
             "early_stopped": early_stopped,
+            "avg_epoch_time_sec": avg_epoch_time_sec,
+            "avg_epoch_time_ms": avg_epoch_time_sec * 1000.0,
+            "test_inference_time_sec": test_inference_time_sec,
             "final_lr": _optimizer_current_lr(trainer.optimizer),
             "lr_scheduler_type": lr_scheduler_type,
             "elapsed": elapsed,
@@ -3315,6 +3334,9 @@ def _save_results(
         data["early_valid_result"] = bt.get("early_valid_result") or {}
         data["early_valid_special_metrics"] = bt.get("early_valid_special_metrics") or {}
         data["test_special_metrics"] = bt.get("test_special_metrics") or {}
+        data["avg_epoch_time_sec"] = _ser(bt.get("avg_epoch_time_sec", 0.0))
+        data["avg_epoch_time_ms"] = _ser(bt.get("avg_epoch_time_ms", 0.0))
+        data["test_inference_time_sec"] = _ser(bt.get("test_inference_time_sec", 0.0))
         data["best_valid_main_eval_filter"] = bt.get("valid_main_eval_filter") or {}
         data["test_main_eval_filter"] = bt.get("test_main_eval_filter") or {}
         data["best_valid_cold_target_metrics"] = bt.get("valid_cold_target_metrics") or {}
@@ -4314,6 +4336,9 @@ def main():
                 "epochs_run": result["epochs_run"],
                 "early_stop_epoch": result.get("early_stop_epoch", result["epochs_run"]),
                 "early_stopped": bool(result.get("early_stopped", False)),
+                "avg_epoch_time_sec": float(result.get("avg_epoch_time_sec", 0.0) or 0.0),
+                "avg_epoch_time_ms": float(result.get("avg_epoch_time_ms", 0.0) or 0.0),
+                "test_inference_time_sec": float(result.get("test_inference_time_sec", 0.0) or 0.0),
                 "elapsed": round(result["elapsed"], 1),
                 "status": "ok",
                 "artifact_best_checkpoint": current_artifact_best,

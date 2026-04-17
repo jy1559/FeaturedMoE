@@ -1068,7 +1068,9 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     if diag_logging_enabled:
         from recbole_patch import begin_diagnostic_eval
         begin_diagnostic_eval(trainer, split_name="test")
+    test_eval_started = time.time()
     test_result = trainer._valid_epoch(test_data, show_progress=eval_show)
+    test_inference_time_sec = time.time() - test_eval_started
     if special_logging_enabled:
         from recbole_patch import end_special_eval
         test_special_metrics = end_special_eval(trainer)
@@ -1078,6 +1080,7 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     if isinstance(test_result, tuple):
         test_result = next((x for x in test_result if isinstance(x, dict)), test_result[0])
     elapsed_time = time.time() - start_time
+    avg_epoch_time_sec = (sum(epoch_times) / len(epoch_times)) if epoch_times else 0.0
 
     valid_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "valid")
     test_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "test")
@@ -1089,6 +1092,9 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
         'best_valid_result': best_valid_result or {},
         'test_result': test_result,
         'elapsed_time': elapsed_time,
+        'avg_epoch_time_sec': avg_epoch_time_sec,
+        'avg_epoch_time_ms': avg_epoch_time_sec * 1000.0,
+        'test_inference_time_sec': test_inference_time_sec,
         'main_eval_filter': {
             'valid': valid_main_filter,
             'test': test_main_filter,
@@ -1113,6 +1119,9 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
                 extra={
                     "best_valid_score": best_metric,
                     "epochs_run": len(epoch_times),
+                    "avg_epoch_time_sec": avg_epoch_time_sec,
+                    "avg_epoch_time_ms": avg_epoch_time_sec * 1000.0,
+                    "test_inference_time_sec": test_inference_time_sec,
                     "model": cfg_i.get("model", ""),
                     "dataset": cfg_i.get("dataset", ""),
                     "phase": cfg_i.get("fmoe_phase", cfg_i.get("phase", "")),
@@ -1393,6 +1402,8 @@ def main():
         print(f"  Test:       HR@5={test_result.get('hit@5', 0):.4f}, "
               f"HR@10={test_result.get('hit@10', 0):.4f}, "
               f"MRR@20={test_result.get('mrr@20', 0):.4f}")
+          print(f"  Avg Epoch:  {result.get('avg_epoch_time_sec', 0.0):.2f} sec ({result.get('avg_epoch_time_ms', 0.0):.0f} ms)")
+          print(f"  Test Infer: {result.get('test_inference_time_sec', 0.0):.3f} sec")
         print(f"  Time: {elapsed_time/60:.2f} min")
 
         metric_key = str(cfg_i.get('valid_metric', 'mrr@20')).lower()
