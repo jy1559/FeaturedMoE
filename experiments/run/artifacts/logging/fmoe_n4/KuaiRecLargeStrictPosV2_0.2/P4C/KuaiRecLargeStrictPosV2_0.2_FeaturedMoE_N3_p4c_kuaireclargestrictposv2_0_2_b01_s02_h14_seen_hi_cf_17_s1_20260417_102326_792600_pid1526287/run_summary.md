@@ -5,9 +5,9 @@
 - run_group: fmoe_n4
 - run_axis: ablation_dualset_core_global_queue_v1
 - run_phase: P4C_KUAIRECLARGESTRICTPOSV2_0_2_B01_S02_H14_SEEN_HI_CF_17_S1
-- best_mrr@20: 0.0187
-- test_mrr@20: 0.3397
-- test_hr@10: 0.3572
+- best_mrr@20: 0.0193
+- test_mrr@20: 0.336
+- test_hr@10: 0.3539
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/KuaiRecLargeStrictPosV2_0.2/P4C/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4c_kuaireclargestrictposv2_0_2_b01_s02_h14_seen_hi_cf_17_s1_20260417_102326_792600_pid1526287/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/KuaiRecLargeStrictPosV2_0.2/P4C/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4c_kuaireclargestrictposv2_0_2_b01_s02_h14_seen_hi_cf_17_s1_20260417_102326_792600_pid1526287/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/KuaiRecLargeStrictPosV2_0.2/P4C/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4c_kuaireclargestrictposv2_0_2_b01_s02_h14_seen_hi_cf_17_s1_20260417_102326_792600_pid1526287/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
-- feature_ablation: 
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/KuaiRecLargeStrictPosV2_0.2/P4C/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4c_kuaireclargestrictposv2_0_2_b01_s02_h14_seen_hi_cf_17_s1_20260417_102326_792600_pid1526287/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/KuaiRecLargeStrictPosV2_0.2/P4C/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4c_kuaireclargestrictposv2_0_2_b01_s02_h14_seen_hi_cf_17_s1_20260417_102326_792600_pid1526287/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/KuaiRecLargeStrictPosV2_0.2/P4C/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4c_kuaireclargestrictposv2_0_2_b01_s02_h14_seen_hi_cf_17_s1_20260417_102326_792600_pid1526287/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/KuaiRecLargeStrictPosV2_0.2/P4C/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4c_kuaireclargestrictposv2_0_2_b01_s02_h14_seen_hi_cf_17_s1_20260417_102326_792600_pid1526287/diag/raw/epoch_trace.csv
+- feature_ablation: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/KuaiRecLargeStrictPosV2_0.2/P4C/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4c_kuaireclargestrictposv2_0_2_b01_s02_h14_seen_hi_cf_17_s1_20260417_102326_792600_pid1526287/feature_ablation.json

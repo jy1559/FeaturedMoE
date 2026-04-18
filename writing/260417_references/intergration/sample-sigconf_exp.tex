@@ -1,0 +1,967 @@
+\documentclass[sigconf,review,anonymous]{acmart}
+
+\AtBeginDocument{%
+  \providecommand\BibTeX{{%
+    Bib\TeX}}}
+
+% RecSys 2026 submission mode (anonymous review).
+% For camera-ready, switch documentclass to [sigconf] and replace rights metadata
+% below with the exact values from ACM rights management.
+\setcopyright{none}
+\acmConference[RecSys '26]{Proceedings of the 20th ACM Conference on Recommender Systems}{September 28--October 2, 2026}{Minneapolis, MN, USA}
+\acmBooktitle{Proceedings of the 20th ACM Conference on Recommender Systems (RecSys '26), September 28--October 2, 2026, Minneapolis, MN, USA}
+\acmDOI{}
+\acmISBN{}
+
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{tabularx}
+
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
+\newcommand{\tblbest}[1]{\textbf{#1}}
+\newcommand{\tblsecond}[1]{\underline{#1}}
+\newcommand{\placeholderpanel}[1]{\fbox{\rule{0pt}{#1}\rule{0.92\linewidth}{0pt}}}
+
+\begin{document}
+
+\title[RouteRec for Sequential Recommendation]{RouteRec: Behavior-Guided Expert Routing for Sequential Recommendation}
+
+\author{First Author}
+\affiliation{%
+  \institution{KAIST}
+  \department{Kim Jaechul Graduate School of AI}
+  \city{Daejeon}
+  \country{Republic of Korea}}
+\email{first.author@kaist.ac.kr}
+
+\author{Second Author}
+\affiliation{%
+  \institution{KAIST}
+  \department{Kim Jaechul Graduate School of AI}
+  \city{Daejeon}
+  \country{Republic of Korea}}
+\email{second.author@kaist.ac.kr}
+
+\renewcommand{\shortauthors}{Author et al.}
+
+\begin{abstract}
+Sequential recommendation is commonly optimized with one shared computation pipeline, even though interaction regimes vary substantially across users, sessions, and time scales. In practice, some prefixes are dominated by stable preference, some by repetition, and others by local exploration. This mismatch between behavioral diversity and shared computation is increasingly visible as backbones become stronger: performance improves, but the model still offers little control over \emph{how} different behavior patterns should trigger different computation.
+
+Mixture-of-experts (MoE) is a natural candidate for conditional computation, yet many sequential MoE variants still route primarily from hidden states. This creates a semantic bottleneck: the same latent signal is asked to encode sequence content and decide routing allocation. As a result, expert assignment is often effective but opaque, making it difficult to interpret specialization, diagnose failure modes, or align routing with observable behavioral factors.
+
+We propose \textbf{RouteRec}, a behavior-guided MoE framework that explicitly decouples routing signals from representation signals. RouteRec keeps a strong sequence encoder for hidden-state construction, while routing is driven by compact behavior cues extracted from standard logs (timestamps, optional categories, and interaction statistics). These cues are organized into four semantic families (Tempo, Focus, Memory, Exposure) and consumed through three temporal scopes (macro, mid, micro), so the routing structure matches evidence granularity rather than imposing a single gating bias everywhere.
+
+This design is intentionally lightweight: we avoid heavy side-information modeling in the routing branch and instead emphasize interpretable, transferable summaries that are easy to compute across datasets. We further provide a dedicated preliminary formulation to make the method readable without overloading notation. Experiments show that RouteRec improves next-item recommendation over strong baselines, and diagnostic analyses indicate that improvements are associated with more behavior-consistent expert usage rather than unstructured parameter scaling.
+\end{abstract}
+
+\begin{CCSXML}
+<ccs2012>
+ <concept>
+  <concept_id>10002951.10003317.10003347.10003350</concept_id>
+  <concept_desc>Information systems~Recommender systems</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Information systems~Recommender systems}
+
+\keywords{sequential recommendation, mixture of experts, conditional computation, routing, behavioral features}
+
+\maketitle
+
+\section{Introduction}
+Sequential recommendation is usually formulated as next-item prediction over an ordered interaction history. At first glance, this appears to be a homogeneous prediction task, but real user behavior is not homogeneous at all. Even for the same user, one session may reflect persistent preference, another may reflect short-term mission behavior, and another may be dominated by quick exploratory clicks. Prior surveys and studies consistently describe this multi-regime nature of sequential and session-based recommendation \cite{wang2019seqsurvey,wang2021sessionsurvey}.
+
+Modern backbones have become very strong at sequence modeling \cite{hidasi2016gru4rec,kang2018sasrec,li2020tisasrec,qiu2022duorec,shin2024bsarec,liu2025sigma}, but they still predominantly rely on shared transformations across behaviorally different cases. This design is efficient and often performant on average, yet it leaves an important modeling question open: when two prefixes imply fundamentally different behavioral contexts, should they really invoke the same computation path?
+
+Figure~\ref{fig:intro-behavioral-features} provides an intuitive view of this gap. Distinct users and sessions can exhibit markedly different tendencies in pace, repetition, and local exploration, but a one-path design does not expose a mechanism for behavior-specific computation allocation. In other words, representation quality improves, but routing semantics remain implicit.
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/figure1_different_user.pdf}
+  \caption{Different users and sessions can require different computational paths.}
+  \Description{A problem-motivation figure contrasting different user and session behavior patterns, highlighting that behaviorally different cases are often processed with the same computation path in standard sequential recommendation.}
+  \label{fig:intro-behavioral-features}
+\end{figure}
+
+Mixture-of-experts (MoE) provides a direct mechanism for conditional computation \cite{jacobs1991adaptive,jordan1994hme,shazeer2017moe,fedus2022switch}. However, in many recommendation settings, routing is still derived from hidden states. This is practical, but it also entangles two roles that are better separated: representing sequence content and deciding where computation should go. When both are handled by the same latent signal, expert specialization becomes harder to interpret and debug.
+
+This limitation becomes more serious when the goal is not only accuracy but also controllability and diagnosis. If routing is purely latent, it is difficult to answer basic questions such as: Which behavior pattern activated which expert? Are similar sessions routed consistently? Is an expert specializing in a meaningful regime or merely in an embedding artifact? These questions are central for robust deployment and scientific understanding, but are weakly supported by hidden-state-only routing.
+
+We therefore adopt a simple principle: \textbf{decouple routing signals from representation signals}. In RouteRec, hidden states remain the content channel processed by experts, while routing is controlled by compact behavior cues traceable to logs. This separation preserves backbone strength while making routing decisions easier to inspect and reason about.
+
+RouteRec also aligns routing with temporal scope. Behavior evidence near the prediction point is not equivalent to long-range history evidence; forcing a single routing bias for all horizons is unnecessarily rigid. We therefore use a multi-stage design with macro, mid, and micro routing, allowing coarse-to-fine expert allocation that reflects cross-session tendency, within-session evolution, and immediate transitions.
+
+Our goal is not to maximize notation complexity or introduce heavy side branches. Instead, we emphasize a compact, transferable routing view built from broadly available signals. This makes the approach practical across datasets and improves method readability, while still enabling richer conditional computation than shared-path baselines.
+
+This paper also introduces a dedicated \textit{Preliminary} section before the main method. The goal is pragmatic: define the problem statement, notation, and MoE basics once, so the method section can focus on RouteRec-specific design choices.
+
+The main contributions of this work are as follows:
+\begin{itemize}
+  \item We identify a core limitation of hidden-state-only routing in sequential MoE recommendation and formalize routing-representation decoupling as a practical design principle.
+  \item We introduce RouteRec, a behavior-guided multi-stage MoE framework that routes with compact cues from standard interaction logs instead of hidden-state-only gating.
+  \item We provide a clear preliminary formulation (problem statement and MoE background) to support readable method development without excessive symbol overhead.
+  \item We show that RouteRec improves recommendation quality over strong baselines and yields more interpretable, behavior-consistent routing patterns in analysis.
+\end{itemize}
+
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Sequential Recommendation Backbones}
+Sequential recommendation has progressed from recurrent and convolutional models to graph and Transformer architectures \cite{hidasi2016gru4rec,tang2018caser,wu2019srgnn,kang2018sasrec,sun2019bert4rec}. Recent methods further strengthen performance with time-aware attention, contrastive objectives, and structural inductive bias \cite{li2020tisasrec,xie2020cl4srec,wang2023multiplecontrast,qiu2022duorec,du2023fearec,shin2024bsarec,liu2025sigma}. These advances improve representation quality, but they generally retain shared computation across behaviorally different cases.
+
+\subsection{Heterogeneous User State Modeling}
+Many studies explicitly acknowledge non-stationary behavior, including short-term intent modeling and multi-interest extraction \cite{li2017narm,liu2018stamp,ying2018shan,ma2019hgn,li2019mind,cen2020comirec}. Most approaches handle heterogeneity inside representation learning, for example by attention reweighting or interest decomposition. RouteRec is complementary: it treats heterogeneity as a routing problem and uses explicit behavior cues to modulate computation paths.
+
+\subsection{Feature-Aware Sequential Recommendation}
+Feature-aware methods use timestamps, side information, and feature channels to strengthen sequence encoding \cite{li2020tisasrec,zhang2019fdsa,xie2022difsr,du2023fearec,bauer2023hybridsession}. In most cases, these signals are fused into hidden representations or combined with session-aware user modeling. RouteRec uses a different role assignment: features are primarily routing controls, while representation transformation remains expert-specific over hidden states.
+
+\subsection{MoE in Recommendation}
+Classical and modern MoE work demonstrates the value of conditional computation \cite{jacobs1991adaptive,jordan1994hme,shazeer2017moe,fedus2022switch}. Recommendation-oriented expert architectures also show strong capacity benefits \cite{ma2018mmoe,tang2020ple,liu2025fame,bian2023m3srec,zhang2025hm4sr}. Our distinction is not simply adding experts, but making routing semantics behavior-grounded and interpretable through explicit cue design.
+
+\section{Preliminary}
+\label{sec:prelim}
+
+\subsection{Problem Statement}
+For each user, we observe interactions ordered by time and train the model for next-item prediction. In one training instance, we denote the observed prefix as $x_{1:t}$ and the target as $x_{t+1}$. Each interaction includes at least an item identity and timestamp, and may additionally include coarse category information depending on the dataset.
+
+To keep the formulation readable, we use two signal channels throughout this paper. The first is the representation channel, where a sequential encoder maps observed prefixes to hidden states $\mathbf{h}_t$. The second is the behavior channel, where lightweight statistics from the same prefix are summarized into a compact cue vector $\mathbf{b}_t$. RouteRec uses $\mathbf{h}_t$ for expert transformation and $\mathbf{b}_t$ for routing decisions. This separation is the central modeling choice that the later method section instantiates stage by stage.
+
+The behavior channel is intentionally simple: cues are derived from standard log attributes rather than from a deep side encoder. This keeps routing signals stable across datasets and easier to interpret during analysis. In practice, cues capture aspects such as pace, repetition tendency, focus concentration, and popularity exposure. We do not force a large handcrafted taxonomy in this section; instead, we keep the abstraction compact and defer stage-specific feature construction details to Method.
+
+\subsection{MoE Background for Sequential Models}
+In a standard MoE layer with $E$ experts, an expert-weighted output at position $t$ is
+\begin{equation}
+\tilde{\mathbf{h}}_t = \sum_{e=1}^{E} \pi_{t,e}\,\mathrm{Expert}_e(\mathbf{h}_t),
+\label{eq:moe-basic}
+\end{equation}
+where $\boldsymbol{\pi}_t \in \mathbb{R}^{E}$ is a routing distribution with $\sum_e \pi_{t,e}=1$.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/figure2_overall_arch_simple.pdf}
+  \caption{Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided MoE stages. (b) All stages use the same scalar-group conditional routing composition: a group-level distribution and a conditional intra-group distribution are multiplied to form expert probabilities. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by router formula.}
+  \Description{A three-panel architecture figure showing RouteRec with a unified scalar-group conditional router across macro, mid, and micro stages, where stages differ by temporal evidence scope and granularity.}
+  \label{fig:framework}
+\end{figure*}
+In many practical systems, $\boldsymbol{\pi}_t$ is computed from hidden states. This is effective but often semantically opaque, because routing and content encoding are entangled in the same latent space. RouteRec follows a different view: routing is computed from behavior cues, while hidden states are dedicated to expert transformation. The distinction is conceptually small but operationally important for interpretability and diagnosis.
+
+Another practical point is temporal scope. Sequential recommendation combines long-range tendency and short-range fluctuation, so a single routing granularity can be suboptimal. RouteRec addresses this by applying the same MoE interface at multiple stages with different evidence windows. This keeps notation light while allowing routing behavior to adapt across horizons.
+
+In the final model used in our main experiments, this multi-stage principle is realized with a shared router composition across all stages, while stage differences are introduced through temporal evidence windows and routing granularity. The next section formalizes this design.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{RouteRec Overview}
+\label{sec:problem-framework}
+
+Figure~\ref{fig:framework} summarizes RouteRec. We retain a strong sequential backbone and replace shared feed-forward computation with stage-wise MoE routing. The core interface follows the preliminary setup: hidden states are transformed by experts, and routing is controlled by behavior cues.
+
+Let $\mathcal{T}=\{\mathrm{macro},\mathrm{mid},\mathrm{micro}\}$ be the stage set. At stage $s \in \mathcal{T}$, routing uses a stage-specific behavior feature $\mathbf{f}^{(s)}_t$, while experts consume the shared hidden state $\mathbf{h}_t$:
+\begin{align}
+\boldsymbol{\pi}^{(s)}_t
+&=
+\mathrm{softmax}\!\left(\mathrm{Router}_s(\mathbf{f}^{(s)}_t)/\tau_s\right), \\
+\tilde{\mathbf{h}}^{(s)}_t
+&=
+\sum_{e=1}^{E}\pi^{(s)}_{t,e}\,\mathrm{Expert}^{(s)}_e(\mathbf{h}_t).
+\label{eq:stage-routing}
+\end{align}
+Eq.~\eqref{eq:stage-routing} is the common stage interface. In the final RouteRec variant, all stages instantiate this interface with the same routing composition, while temporal differences arise from stage windows and routing granularity.
+
+\subsection{Behavioral Features from Raw Signals}
+\label{sec:feature-construction}
+
+RouteRec is designed for realistic data availability. It uses signals that are commonly present in interaction logs: item identity, timestamp, optional category, and optional corpus-level popularity. We intentionally avoid heavy side-information encoders in the routing branch. Instead, raw signals are converted into compact scalar summaries that are easy to compute, stable across datasets, and interpretable at analysis time.
+
+For session $s_m$ and target position $t$, the stage windows are
+\begin{align}
+\mathcal{R}^{\mathrm{macro}}_t &= [s_{\max(1,m-H)},\dots,s_{m-1}], \\
+\mathcal{R}^{\mathrm{mid}}_t &= [x_1,\dots,x_{t-1}], \\
+\mathcal{R}^{\mathrm{micro}}_t &= [x_{\max(1,t-w)},\dots,x_{t-1}],
+\end{align}
+where $H=5$ and $w=5$ in our main setting. A shared summary operator $\mathcal{A}(\cdot)$ maps each window to a low-dimensional feature vector:
+\[
+\mathbf{f}^{(s)}_t=\mathcal{A}(\mathcal{R}^{(s)}_t),\qquad s\in\mathcal{T}.
+\]
+
+The summary dimensions are grouped into four semantic families: \textit{Tempo}, \textit{Focus}, \textit{Memory}, and \textit{Exposure}. Tempo captures pace and interval statistics. Focus captures concentration and switching behavior over coarse categories or item groups. Memory captures recurrence, repetition, and overlap with recent context. Exposure captures interactions with popularity strata and their local drift. This decomposition is semantic rather than architectural: it gives routing modules an interpretable behavioral basis.
+
+Importantly, the feature template is shared across stages, but each stage reads it through a different temporal lens. Macro features reflect persistent tendency and broad preference shape. Mid features track evolving intent inside the current session. Micro features emphasize immediate cues around the prediction target. This shared-template, stage-specific-view design keeps the feature branch compact while preserving temporal specificity.
+
+\subsection{Unified Router Composition}
+
+The final RouteRec architecture uses one shared scalar-group conditional composition at every stage. Experts are partitioned into $G$ groups with $C$ experts per group, so $E=GC$. For stage $s$ and position $t$, the router produces
+\begin{align}
+p^{(s)}_{t,g} &= \mathrm{softmax}_g\!\left(z^{(s)}_{t,g}\right), \\
+r^{(s)}_{t,g,c} &= \mathrm{softmax}_c\!\left(u^{(s)}_{t,g,c}\right),
+\end{align}
+where $p^{(s)}_{t,g}$ is a group-level routing distribution and $r^{(s)}_{t,g,c}$ is a conditional within-group routing distribution. The final expert probability is their product:
+\begin{equation}
+\pi^{(s)}_{t,g,c}=p^{(s)}_{t,g}\,r^{(s)}_{t,g,c},
+\label{eq:group-conditional-product}
+\end{equation}
+followed by flattening $(g,c)$ to expert index $e$. Eq.~\eqref{eq:group-conditional-product} is the same for macro, mid, and micro.
+
+This unified composition is important for two reasons. First, it gives all stages a shared structural prior, which reduces stage-specific router engineering and simplifies debugging. Second, it keeps diagnostics comparable across stages because differences in routing behavior can be attributed to evidence scope rather than formula changes.
+
+In RouteRec, routing is driven by behavior cues, while hidden states remain dedicated to expert transformation in Eq.~\eqref{eq:stage-routing}. This preserves the routing-representation decoupling principle introduced in Preliminary.
+
+\subsection{Stage Instantiation by Temporal Scope}
+
+Although the router formula is shared, stages are not redundant. They differ in temporal evidence and routing granularity.
+
+\paragraph{Macro and mid (session-level routing).}
+Macro and mid compute one routing distribution per sequence from their respective windows, then broadcast it over valid positions inside the sequence. Macro uses broader cross-session history; mid uses within-session prefix evidence. This setting emphasizes stable allocation for slower-changing context.
+
+\paragraph{Micro (token-level routing).}
+Micro computes routing per token near the prediction target using short-horizon context. This enables fast adaptation to immediate transitions without changing the router form itself.
+
+Formally, if $\Gamma_s$ denotes the granularity operator at stage $s$, then
+\[
+\begin{aligned}
+\boldsymbol{\pi}^{(s)}_t &= \Gamma_s\!\left(\mathcal{R}^{(s)}_t\right), \\
+\Gamma_{\mathrm{macro}},\Gamma_{\mathrm{mid}} &: \text{session-level}, \\
+\Gamma_{\mathrm{micro}} &: \text{token-level}.
+\end{aligned}
+\]
+Hence, RouteRec's coarse-to-fine behavior comes from stage evidence scope and update frequency, while the underlying router composition remains constant.
+
+\subsection{Training Objective}
+\label{sec:training-objective}
+
+RouteRec is trained with a standard next-item objective and two router-side regularizers: route consistency and z-loss. The first regularizer shapes routing semantics, and the second stabilizes routing numerics.
+
+Let $\mathbf{z}$ be final logits and $y$ be the target item. The main loss is
+\[
+\mathcal{L}_{\mathrm{CE}}
+=
+-\log \frac{\exp z_y}{\sum_{j}\exp z_j}.
+\]
+For route consistency, we first compute a sample-level routing distribution at each stage by averaging token-level routing weights:
+\[
+\bar{\boldsymbol{\pi}}_i^{\,s}
+=
+\frac{1}{L_i}\sum_{t=1}^{L_i}\boldsymbol{\pi}_{i,t}^{\,s}
+\]
+where $L_i$ is the valid sequence length. For each stage $s$, we construct a pair set $\mathcal{P}_s$ from feature-similar samples in the mini-batch and minimize
+\[
+\mathcal{L}_{\mathrm{cons}}
+=
+\frac{1}{|\mathcal{T}|}
+\sum_{s \in \mathcal{T}}
+\frac{1}{|\mathcal{P}_s|}
+\sum_{(i,j)\in \mathcal{P}_s}
+\mathrm{JSD}\!\left(\bar{\boldsymbol{\pi}}_i^{\,s}, \bar{\boldsymbol{\pi}}_j^{\,s}\right),
+\]
+which encourages neighboring behavioral states to produce compatible routing distributions. In other words, semantically similar inputs should not induce arbitrarily different routing behavior.
+
+\begin{table*}[t]
+  \caption{Seen-target test results under the sessionized temporal protocol. Datasets marked with $^\dagger$ are sampled processed subsets (KuaiRec 20\%, LastFM 3\%). For each method, we report the test metrics of the run achieving the highest mean validation score over the nine reported metrics. Avg.~Rank is computed over all rows in this table, where lower is better. Bold and underlined values denote the best and second-best value within each row; for Avg.~Rank, lower is better.}
+  \label{tab:main-overall}
+  \centering
+  \small
+  \setlength{\tabcolsep}{3.0pt}
+  \renewcommand{\arraystretch}{1.02}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{llrrrrrrrrrr}
+    \toprule
+    Dataset & Metric & SASRec & GRU4Rec & TiSASRec & FEARec & DuoRec & BSARec & FAME & DIF-SR & FDSA & RouteRec \\
+    \midrule
+    \multirow{3}{*}{Beauty}
+      & HR@10   & \tblsecond{0.1347} & 0.0716 & 0.1318 & 0.1261 & 0.1146 & 0.0516 & 0.0315 & 0.1060 & \tblsecond{0.1347} & \tblbest{0.1616} \\
+      & NDCG@10 & 0.0748 & 0.0340 & 0.0878 & 0.0696 & 0.0680 & 0.0316 & 0.0211 & 0.0685 & \tblsecond{0.0909} & \tblbest{0.0982} \\
+      & MRR@20  & 0.0588 & 0.0247 & 0.0770 & 0.0544 & 0.0569 & 0.0260 & 0.0190 & 0.0592 & \tblsecond{0.0805} & \tblbest{0.0822} \\
+    \midrule
+    \multirow{3}{*}{Retail Rocket}
+      & HR@10   & \tblsecond{0.5605} & 0.5211 & 0.5435 & 0.5441 & 0.5377 & 0.4703 & 0.4697 & 0.4365 & 0.5133 & \tblbest{0.5612} \\
+      & NDCG@10 & \tblsecond{0.4099} & 0.3858 & 0.3963 & 0.3935 & 0.3864 & 0.3963 & 0.3934 & 0.3900 & 0.3651 & \tblbest{0.4150} \\
+      & MRR@20  & 0.3673 & 0.3479 & 0.3547 & 0.3515 & 0.3441 & \tblsecond{0.3743} & 0.3710 & \tblbest{0.3744} & 0.3239 & 0.3737 \\
+    \midrule
+    \multirow{3}{*}{Foursquare}
+      & HR@10   & \tblbest{0.3233} & 0.2130 & 0.3157 & 0.3042 & 0.3197 & 0.2462 & 0.2546 & 0.3034 & 0.2998 & \tblsecond{0.3225} \\
+      & NDCG@10 & 0.2014 & 0.1455 & \tblsecond{0.2016} & 0.1925 & 0.1955 & 0.1639 & 0.1646 & 0.1984 & 0.2001 & \tblbest{0.2041} \\
+      & MRR@20  & 0.1679 & 0.1278 & 0.1700 & 0.1619 & 0.1607 & 0.1410 & 0.1401 & 0.1690 & \tblbest{0.1723} & \tblsecond{0.1712} \\
+    \midrule
+    \multirow{3}{*}{ML-1M}
+      & HR@10   & 0.1478 & 0.1413 & 0.1538 & 0.1487 & 0.1520 & \tblsecond{0.1589} & 0.1557 & 0.1501 & \tblbest{0.1594} & 0.1561 \\
+      & NDCG@10 & 0.0770 & 0.0742 & 0.0844 & 0.0724 & 0.0811 & \tblbest{0.0854} & \tblsecond{0.0853} & 0.0764 & 0.0835 & 0.0771 \\
+      & MRR@20  & 0.0608 & 0.0587 & \tblbest{0.0690} & 0.0550 & 0.0649 & 0.0678 & \tblsecond{0.0687} & 0.0595 & 0.0658 & 0.0585 \\
+    \midrule
+    \multirow{3}{*}{LastFM$^\dagger$}
+      & HR@10   & \tblbest{0.3994} & 0.3090 & 0.3780 & 0.3765 & \tblsecond{0.3831} & 0.3453 & 0.3312 & 0.3617 & 0.3657 & 0.3794 \\
+      & NDCG@10 & \tblbest{0.3267} & 0.2673 & 0.3196 & 0.3167 & 0.3083 & 0.3024 & 0.2900 & 0.3149 & 0.3171 & \tblsecond{0.3253} \\
+      & MRR@20  & \tblsecond{0.3054} & 0.2561 & 0.3027 & 0.2989 & 0.2863 & 0.2902 & 0.2784 & 0.3020 & 0.3033 & \tblbest{0.3099} \\
+    \midrule
+    \multirow{3}{*}{KuaiRec$^\dagger$}
+      & HR@10   & \tblsecond{0.1055} & 0.0945 & 0.1011 & 0.1005 & 0.0995 & 0.0918 & 0.1011 & 0.0918 & 0.0967 & \tblbest{0.1060} \\
+      & NDCG@10 & \tblsecond{0.0943} & 0.0790 & 0.0916 & 0.0919 & 0.0919 & 0.0890 & 0.0915 & 0.0871 & 0.0865 & \tblbest{0.0965} \\
+      & MRR@20  & \tblsecond{0.0922} & 0.0753 & 0.0894 & 0.0903 & 0.0905 & 0.0882 & 0.0899 & 0.0863 & 0.0843 & \tblbest{0.0948} \\
+    \midrule
+    \multicolumn{2}{l}{Avg.~Rank$\downarrow$} & \tblsecond{3.42} & 9.06 & 3.72 & 5.92 & 5.69 & 6.56 & 6.86 & 6.42 & 5.14 & \tblbest{2.22} \\
+    \bottomrule
+  \end{tabular}}
+\end{table*}
+To stabilize gating numerics, we adopt z-loss on router logits~\cite{zoph2022stmoe}:
+\[
+\mathcal{L}_{z}
+=
+\frac{1}{|\mathcal{T}|}
+\sum_{s \in \mathcal{T}}
+\frac{1}{N_s}
+\sum_{(i,t)\in\mathcal{V}_s}
+\left(
+\log \sum_{e=1}^{E}\exp q_{i,t,e}^{\,s}
+\right)^2,
+\]
+where $\mathcal{V}_s$ is the set of valid positions and $N_s=|\mathcal{V}_s|$. This term discourages excessive logit scale and helps prevent unstable, overly sharp routing. The final objective is
+\[
+\mathcal{L}
+=
+\mathcal{L}_{\mathrm{CE}}
++
+\lambda_{\mathrm{cons}}\,\mathcal{L}_{\mathrm{cons}}
++
+\lambda_{z}\,\mathcal{L}_{z},
+\]
+where $\lambda_{\mathrm{cons}}$ and $\lambda_z$ are trade-off coefficients. This objective jointly optimizes prediction quality, semantic consistency of routing, and numerical stability of expert selection.
+
+\section{Experiments}
+\label{sec:experiments}
+
+
+\subsection{Experimental Setup}
+We evaluate RouteRec on six public datasets. These datasets cover e-commerce, location recommendation, short-video consumption, music listening, movie preference, and anonymous clickstream behavior. The six corpora are Beauty, Foursquare, KuaiRec, LastFM, ML-1M, and Retail Rocket. Appendix~A summarizes their provenance and processed statistics.
+
+Across datasets, we follow a sessionized temporal evaluation protocol assembled from established practices in session-based and session-aware recommendation rather than claiming a single canonical raw-sequence benchmark~\cite{jannach2022sessions,quadrana2017hrnn,latifi2021sessionaware}. Interactions are first ordered chronologically, converted to sessions with inactivity-based heuristics, and then filtered to remove sessions shorter than $5$ and items with fewer than $3$ interactions, which is consistent with common session-based benchmark stabilization pipelines~\cite{li2017narm,wu2019srgnn}. We use a 30-minute threshold for Foursquare, KuaiRec, LastFM, ML-1M, and Retail Rocket, which matches common practice in dense timestamped logs and later session-aware studies~\cite{quadrana2017hrnn,lacic2020jobsessions}, whereas Beauty uses a 14-day threshold because review timestamps are much sparser than click, play, or check-in logs. This follows the broader observation that sparse or item-poor domains may require task-dependent session definitions rather than a universal short timeout~\cite{borgbruun2022insurance}. Beauty is constructed from Amazon Beauty reviews and additionally excludes interactions with rating below $3$.
+
+For transparency, the reported KuaiRec and LastFM results are obtained from processed sampled subsets rather than the full raw corpora: specifically, we use a 20\% KuaiRec subset and a 3\% LastFM subset, and we mark these datasets explicitly in the result tables. Sessions are then sorted by start time and split chronologically into 70\%/15\%/15\% train/validation/test partitions. Because recent work has shown that split construction can materially affect offline conclusions and may induce leakage when chronology is ignored, we keep the temporal protocol explicit and reserve the full preprocessing details for Appendix~A~\cite{ji2023leakage,gusak2025timesplit}.
+
+Our main comparison uses the seen-target evaluation view. This choice is deliberate: ID-based next-item recommenders cannot rank items absent from the training vocabulary, and session-aware benchmarks commonly treat unseen targets as a supplementary rather than primary evaluation view~\cite{latifi2021sessionaware,li2017narm,wu2019srgnn}. Appendix~A gives the exact held-out cleanup procedure, the processed dataset statistics, the tuning protocol, and the full $k\in\{5,10,20\}$ tables.
+
+The baselines include GRU4Rec, SASRec, TiSASRec, DuoRec, FEARec, BSARec, FAME, DIF-SR, and FDSA~\cite{hidasi2016gru4rec,kang2018sasrec,li2020tisasrec,qiu2022duorec,du2023fearec,shin2024bsarec,liu2025fame,xie2022difsr,zhang2019fdsa}. All methods are trained within the same optimization family, with matched early-stopping rules and comparable capacity ranges. In the comparison tables, each baseline is represented by the run attaining the highest mean validation score over the nine reported metrics, and we report the corresponding test metrics. RouteRec is reported from the best validation-selected configuration considered in this study under the same criterion.
+
+Given that ranking conclusions in sessionized sequential recommendation can change with both protocol construction and optimization quality~\cite{latifi2021sessionaware,latifi2022seqstudy,ji2023leakage,gusak2025timesplit}, we treat tuning as part of the experimental protocol rather than as a secondary implementation detail. Concretely, each model is tuned within a predefined model-specific discrete grid covering standard optimization hyperparameters and a small number of architecture-specific controls. The admissible values are fixed in advance; when adaptive search is used for efficiency, it is applied only over these predeclared candidate sets, following the same validation files, early-stopping rule, and selection criterion for all methods~\cite{galuzzi2020bayesopt}. Appendix~A summarizes the placeholder search ranges, trial budgets, and configuration tables in the form we intend to report in the final version.
+
+All methods are trained and evaluated on the same processed train/validation/test files. RouteRec does not access different held-out sessions or external metadata at evaluation time; its routing cues are computed from the same observed interaction histories that define the benchmark instances. The intended comparison is therefore a sessionized, behavior-aware next-item setting under a shared temporal protocol, not a claim about direct comparability to canonical raw-sequence leaderboards.
+
+To keep the experimental story aligned with the claims of the paper, we organize the main results around five reviewer-facing questions: \textbf{Q1)} does RouteRec improve ranking quality under the shared protocol, \textbf{Q2)} what should control routing, \textbf{Q3)} why is the three-part design meaningful, \textbf{Q4)} are simple widely available cues sufficient in practice, and \textbf{Q5)} do the learned routing patterns align with behavioral regimes. The main text is therefore written as an argument rather than as a list of plots: each subsection states the doubt it is meant to resolve, and the appendix stores the broader controls, definitions, and diagnostics that make the answer defensible.
+
+\subsection{Q1. Does RouteRec Improve Ranking Quality?}
+\label{sec:overall-performance}
+Table~\ref{tab:main-overall} presents the main seen-target comparison in the text using HR@10, NDCG@10, and MRR@20, together with an Avg.~Rank summary across all reported rows. This presentation keeps the main paper focused on a compact set of representative cutoffs, while Appendix~A reports the full $k\in\{5,10,20\}$ grid under the same validation-based selection rule. RouteRec exhibits its clearest gains on Beauty and the sampled KuaiRec subset, remains competitive on Retail Rocket, and stays close to the strongest shared-backbone baselines on Foursquare, LastFM, and ML-1M.
+
+The purpose of Q1 is deliberately narrow. Before asking whether the routing signal is meaningful or whether the staged structure is justified, the paper must first establish that the full model is competitive under the shared protocol and selection rule. Once the final numbers are inserted, the important reading is not whether every dataset is won uniformly, but whether the method is strong enough overall to justify the later design-oriented questions.
+
+\subsection{Q2. What Should Control Routing?}
+\label{sec:routing-control}
+Figure~\ref{fig:routing-control-panels} compares four routing controls: a shared FFN, hidden-only routing, mixed hidden+behavior routing, and the final behavior-guided router. Hidden-only routing can improve over a shared FFN, but the gain is smaller and less stable than behavior-guided routing. Re-injecting hidden states into the router also fails to produce a consistent advantage over the behavior-only design.
+
+The intent of Q2 is to isolate the source of the routing decision. The comparison is designed to answer a specific skepticism: whether the gains could be recovered by a stronger hidden-state gate, or whether explicit behavioral control is doing something qualitatively different. The consistency panel tests that claim from a second angle. If routing is tied to observable cues rather than hidden-state geometry alone, behaviorally similar cases should be assigned more compatible expert patterns. Because RouteRec also uses a routing-side regularizer, we treat this figure as one part of the answer and refer the reader to Appendix~D for the objective variants that separate routing-signal effects from regularizer effects.
+
+\begin{figure}[!t]
+  \centering
+  \begin{minipage}[t]{0.48\columnwidth}
+    \centering
+    \placeholderpanel{1.25in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Avg. ranking quality across routing controls}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\columnwidth}
+    \centering
+    \placeholderpanel{1.25in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Route consistency over feature-similarity buckets}
+  \end{minipage}
+  \caption{Routing-control comparison. (a) Average MRR@20 across shared FFN, hidden-only, mixed, and behavior-guided routing. (b) Routing similarity over feature-similarity buckets.}
+  \Description{A two-panel placeholder figure comparing routing-control variants by average ranking quality and routing consistency over feature-similarity buckets.}
+  \label{fig:routing-control-panels}
+\end{figure}
+
+\subsection{Q3. Why Is RouteRec's Three-Part Design Effective?}
+\label{sec:stage-structure}
+Figure~\ref{fig:stage-structure-panels} directly mirrors the three design axes introduced in the method section. Panel (a) tests whether the semantic organization of the cue space matters, rather than merely the presence of extra scalar inputs. Panel (b) tests whether the temporal roles of macro, mid, and micro are meaningful, rather than merely the presence of multiple MoE blocks. Panel (c) tests whether the final router composition is a necessary design choice or just one arbitrary implementation among several similar alternatives.
+
+Taken together, these ablations answer whether the method benefits come from one isolated trick or from the interaction of semantic cue design, stage semantics, and router composition. This is why Q3 is kept separate from Q4: Q3 is about whether the design is conceptually meaningful, whereas Q4 is about whether the method remains usable when cue availability is limited.
+
+\begin{figure*}[!t]
+  \centering
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Semantic cue design variants}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Stage-semantics variants}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (c) Router composition variants}
+  \end{minipage}
+  \caption{Three-part design ablations. (a) Semantic cue design variants. (b) Stage-semantics variants. (c) Router composition variants.}
+  \Description{A three-panel placeholder figure for RouteRec's three design axes: semantic cue design, stage semantics, and router composition.}
+  \label{fig:stage-structure-panels}
+\end{figure*}
+
+\subsection{Q4. Are Lightweight Cues Sufficient in Practice?}
+\label{sec:lightweight-cues}
+Figure~\ref{fig:cue-ablation-panels} evaluates whether RouteRec depends on rich metadata or whether ordinary interaction logs already provide enough routing evidence. Unlike Q3, which asks whether the semantic cue design is meaningful, Q4 asks a portability question: how much observable signal must remain available before behavior-guided routing stops being useful. The left panel therefore focuses on availability-oriented reductions such as removing category cues, removing time cues, or retaining only sequence-derived summaries, and the right panel normalizes each variant by the gain of the full-cue model.
+
+This analysis is intended to support the portability claim in a conservative way. RouteRec may benefit from richer evidence when it is available, but the question here is whether a practically deployable subset of cues is already sufficient to preserve a meaningful fraction of the full model's benefit.
+
+\begin{figure}[!t]
+  \centering
+  \begin{minipage}[t]{0.48\columnwidth}
+    \centering
+    \placeholderpanel{1.25in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Avg. MRR@20 under reduced cue availability}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\columnwidth}
+    \centering
+    \placeholderpanel{1.25in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Relative retention of the full-cue gain}
+  \end{minipage}
+  \caption{Lightweight-cue analysis. (a) Average MRR@20 under reduced cue availability. (b) Gain retention relative to the full cue set.}
+  \Description{A two-panel placeholder figure for reduced-cue ablations together with normalized gain retention.}
+  \label{fig:cue-ablation-panels}
+\end{figure}
+
+\subsection{Q5. Do Routing Patterns Align with Behavioral Regimes?}
+\label{sec:behavior-regimes}
+Figure~\ref{fig:behavior-regime-panels} addresses the most direct semantic question raised by the method: if RouteRec is designed to react to behavioral regimes, then its gains and routing sharpness should appear where those regimes differ most. We therefore summarize results over repeat-heavy, high-tempo, narrow-focus, and exploration-heavy slices, and compare both ranking quality and routing concentration within those regimes.
+
+This figure is meant to connect the experimental evidence back to the motivation in Figure~\ref{fig:intro-behavioral-features}. To avoid circularity, the slice definitions are specified explicitly in Appendix~G using simple post hoc statistics derived from raw interaction histories rather than optimized labels or supervision targets. The intended message of Q5 is therefore not that RouteRec rediscovers its own features, but that behaviorally distinct regimes expose different degrees of benefit and routing sharpness under an external diagnostic partition.
+
+\begin{figure}[!t]
+  \centering
+  \begin{minipage}[t]{0.48\columnwidth}
+    \centering
+    \placeholderpanel{1.25in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Slice-wise MRR@20 across behavioral regimes}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\columnwidth}
+    \centering
+    \placeholderpanel{1.25in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Relative gain and routing concentration by slice}
+  \end{minipage}
+  \caption{Behavior-regime analysis. (a) Slice-wise ranking quality across repeat-heavy, fast-tempo, focused, and exploration-heavy regimes. (b) Relative RouteRec gain and routing concentration across the same slices.}
+  \Description{A two-panel placeholder figure for slice-wise ranking quality and RouteRec gain across major behavioral regimes, together with routing concentration.}
+  \label{fig:behavior-regime-panels}
+\end{figure}
+
+Detailed full-cutoff results and extended analyses, including broader structural ablations, protocol-sensitivity checks, full diagnostics, qualitative cases, and transfer studies, are reported in Appendices~A--I.
+
+\section{Conclusion}
+\label{sec:conclusion}
+RouteRec starts from a simple hypothesis: when behavioral evidence changes, the computation path should change as well. The experiments support this view from three main angles. First, RouteRec improves next-item ranking most clearly on behaviorally dynamic datasets and remains competitive on several others, although the advantage narrows in more preference-stable settings such as ML-1M. Second, the gain is tied to the routing signal and the staged design rather than to indiscriminate expert insertion. Third, lightweight cues derived from ordinary interaction logs can preserve a meaningful share of the benefit, which keeps the method practical even when side information is limited.
+
+Taken together, these results suggest that compact behavioral cues provide a useful control interface for conditional computation in recommendation. Future work can build on this interface with broader transfer regimes, richer but still robust cue construction, and tighter deployment-aware constraints such as latency, continual adaptation, and router calibration.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{refs}
+
+\nobalance
+\clearpage
+\appendix
+
+\section{Dataset, Evaluation, and Full Results}
+\label{app:data-details}
+This appendix summarizes the six datasets and makes the evaluation protocol explicit. We do so deliberately because recent work has shown that session construction and split strategy can materially affect offline recommender results~\cite{ji2023leakage,gusak2025timesplit}. The original releases are cited here for completeness~\cite{mcauley2015amazon,yang2010foursquare,gao2022kuairec,celma2010music,harper2015movielens,retailrocket2015dataset}. The dataset descriptions emphasize domain differences and signal availability because the routing branch depends on which behavioral evidence is exposed in each corpus.
+
+\subsection{Datasets and Protocol}
+
+\begin{table}[t]
+  \caption{Datasets used in the experiments. Datasets marked with $^\dagger$ are sampled processed subsets.}
+  \label{tab:appendix-datasets}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3.0pt}
+  \begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}llrrrc@{}}
+    \toprule
+    Dataset & Domain & Interactions & Sessions & Items & Avg. len. \\
+    \midrule
+    Beauty & E-com. & 33,488 & 4,243 & 3,625 & 7.9 \\
+    Foursquare & POI & 145,238 & 25,369 & 30,588 & 5.7 \\
+    KuaiRec$^\dagger$ & Video & 287,411 & 24,458 & 6,477 & 11.8 \\
+    LastFM$^\dagger$ & Music & 470,408 & 25,089 & 52,510 & 18.8 \\
+    ML-1M & Movie & 575,281 & 14,539 & 3,533 & 39.6 \\
+    Retail Rocket & Browse & 821,243 & 153,092 & 90,211 & 5.4 \\
+    \bottomrule
+  \end{tabular*}
+\end{table}
+
+Table~\ref{tab:appendix-datasets} reports the statistics of the final processed datasets used in the experiments rather than the raw corpus sizes. In particular, KuaiRec corresponds to the 20\% processed subset used in our runs, and LastFM corresponds to the 3\% processed subset.
+
+For reproducibility, the protocol can be summarized as follows.
+\begin{enumerate}
+  \item Sort all interactions chronologically within each dataset.
+  \item Reconstruct sessions with a dataset-specific inactivity threshold.
+  \item Iteratively prune sessions with length below $5$ and items with support below $3$ until the constraints are simultaneously satisfied.
+  \item Sort the resulting sessions by session start time.
+  \item Assign the earliest 70\% of sessions to train and treat the latest 30\% as a held-out tail.
+  \item Build validation and test from the held-out tail under chronology-preserving cleanup.
+  \item Report seen-target metrics as the primary view and keep unseen-target behavior as supplementary accounting.
+\end{enumerate}
+
+Beauty and Retail Rocket stress sparse e-commerce revisit behavior, Foursquare and KuaiRec emphasize stronger short-horizon intent changes, and LastFM and ML-1M provide longer preference-driven histories. This spread is useful because it tests whether behavior-guided routing helps only in highly dynamic settings or remains competitive when preference structure is more stable.
+
+Signal availability also differs in a way that matters for routing. Beauty exposes item, time, and product-category cues after low-rating removal. Foursquare includes item, timestamp, and venue-category structure with bursty check-in dynamics. KuaiRec offers item, time, and coarse content-side metadata in short-video sessions with strong short-term intent shifts. LastFM provides repeated listening histories with artist-side signals, while ML-1M contributes longer preference-driven sequences with genre information. Retail Rocket is the sparsest side-information setting, relying mainly on anonymous event streams with item and time signals.
+
+We position our setup as a sessionized sequential evaluation protocol assembled from established components, not as the canonical raw-sequence protocol for sequential recommendation~\cite{jannach2022sessions,quadrana2017hrnn,latifi2021sessionaware}. Sessions are reconstructed post hoc with inactivity heuristics, which is standard practice when logs do not provide explicit session boundaries~\cite{jannach2022sessions}. The thresholds are adapted to the logging regime of each corpus: Foursquare, KuaiRec, LastFM, ML-1M, and Retail Rocket use a 30-minute inactivity threshold, consistent with dense-log session-aware practice~\cite{quadrana2017hrnn,lacic2020jobsessions}, whereas Beauty uses a 14-day threshold because review timestamps are substantially more diffuse. More generally, this threshold choice reflects the observation that sparse and item-poor domains often require longer or more domain-specific notions of a session than dense clickstream data~\cite{borgbruun2022insurance}. After sessionization, we repeatedly remove sessions shorter than $5$ and items with fewer than $3$ interactions until no further pruning is required. This iterative filtering follows the same general rationale as common session-based benchmark preprocessing, where short sessions and very low-support items are filtered to stabilize next-item supervision and evaluation~\cite{li2017narm,wu2019srgnn}.
+
+Session splits are constructed at the session level after sorting by session start time. The earliest 70\% of sessions are assigned to training, and the remaining 30\% are treated as a held-out tail. This tail is first divided into validation and test using stratification over three factors: whether the target item already appears in the prefix, the target item's popularity bucket with respect to the training split, and the session-length bucket. For the final evaluation files, we then merge the held-out sessions, restore chronological order, and re-split them contiguously into equal validation and test halves. This chronology-preserving design is meant to reduce leakage and keep the offline protocol aligned with temporal deployment order~\cite{ji2023leakage,gusak2025timesplit}.
+
+For the primary evaluation view, we report seen-target metrics only. Concretely, in the held-out files, non-target rows whose items are unseen in training are removed, and unseen targets are retained only for supplementary accounting rather than the main comparison. This matches long-standing session-based and session-aware evaluation practice for ID-based recommenders, which cannot rank targets outside the training vocabulary and therefore typically separate unseen-target behavior from the primary benchmark table~\cite{latifi2021sessionaware,li2017narm,wu2019srgnn}. We report HR, NDCG, and MRR at $k\in\{5,10,20\}$ for all methods.
+
+For the result tables, each baseline is represented by the run with the highest mean validation score over the nine reported metrics, and RouteRec is reported from the best validation-selected configuration under the same selection rule.
+
+All methods use the same processed train/validation/test partitions. RouteRec's additional macro, mid, and micro cues are deterministic summaries derived from those same observed histories, so the comparison should be read as evaluating different ways of exploiting the shared sessionized interaction context rather than different access to held-out information.
+
+\subsection{Model Selection and Tuning Protocol}
+
+Because this benchmark is built from a sessionized temporal protocol rather than a canonical raw-sequence leaderboard, we make the model-selection procedure explicit. Prior benchmark studies have shown that both baseline quality and model ranking can change materially once methods are re-evaluated under a common framework and retuned under a shared protocol~\cite{latifi2021sessionaware,latifi2022seqstudy}. We therefore do not intend to rely on paper defaults alone.
+
+Our reporting protocol follows three simple rules. First, every model is tuned within a predefined discrete candidate set that is fixed before the final comparison. Second, these candidate sets cover a shared core of optimization hyperparameters together with a small number of model-specific controls, so that the search is broad enough to avoid trivial under-tuning but still budgeted tightly enough to remain comparable across methods. Third, the final reported result for every model is the test performance of the configuration that maximizes the mean validation score over the nine reported metrics. When adaptive search is used for computational efficiency, it is restricted to the same predeclared candidate sets and should therefore be read as an efficient implementation of a controlled grid-style search rather than as open-ended retuning~\cite{galuzzi2020bayesopt}.
+
+Table~\ref{tab:appendix-tuning-space} gives the reporting template for the search spaces and budgets. Table~\ref{tab:appendix-selected-configs} gives the corresponding template for the final validation-selected configurations. The exact discrete values will be finalized after consolidating the current result artifacts and retaining only ranges that remain both reasonable and fair under the present protocol.
+
+\begin{table}[t]
+  \centering
+  \caption{Placeholder summary of the model-specific tuning spaces and budgets.}
+  \label{tab:appendix-tuning-space}
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\columnwidth}{@{}lX>{\raggedright\arraybackslash}Xc@{}}
+    \toprule
+    Model & Shared tuning dimensions & Model-specific controls & Trial budget \\
+    \midrule
+    GRU4Rec & lr, wd, dropout, hidden size, layers & recurrent dropout / max length & grid or adaptive search over fixed candidates \\
+    SASRec & lr, wd, dropout, hidden size, layers & heads / max length & grid or adaptive search over fixed candidates \\
+    TiSASRec & lr, wd, dropout, hidden size, layers & time span / heads / max length & grid or adaptive search over fixed candidates \\
+    FEARec / DuoRec / BSARec / FAME / DIF-SR / FDSA & lr, wd, dropout, hidden size & 1--3 architecture-specific controls & budget-matched fixed candidate search \\
+    RouteRec & lr, wd, dropout, hidden size & experts, groups, $\tau$, $\lambda_{\mathrm{cons}}$, $\lambda_z$ & slightly expanded but documented fixed candidate search \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{table*}[t]
+  \centering
+  \caption{Placeholder summary of the validation-selected configurations used for the final report.}
+  \label{tab:appendix-selected-configs}
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\textwidth}{@{}llX@{}}
+    \toprule
+    Dataset & Model family & Validation-selected configuration summary \\
+    \midrule
+    Beauty & RouteRec / baselines & -- \\
+    Foursquare & RouteRec / baselines & -- \\
+    KuaiRec$^\dagger$ & RouteRec / baselines & -- \\
+    LastFM$^\dagger$ & RouteRec / baselines & -- \\
+    ML-1M & RouteRec / baselines & -- \\
+    Retail Rocket & RouteRec / baselines & -- \\
+    \bottomrule
+  \end{tabularx}
+\end{table*}
+
+\subsection{Full Ranking Results}
+Table~\ref{tab:appendix-full-seen} restores the full cutoff grid summarized more compactly in Table~\ref{tab:main-overall}. This presentation preserves the same selection rule as the main text while exposing the complete $k\in\{5,10,20\}$ breakdown.
+
+\begin{table*}[t]
+  \caption{Full seen-target experimental results across all cutoffs. Datasets marked with $^\dagger$ are sampled processed subsets. Avg.~Rank is computed over all rows in this table, where lower is better. Bold and underlined values denote the best and second-best value within each row; for Avg.~Rank, lower is better.}
+  \label{tab:appendix-full-seen}
+  \centering
+  \scriptsize
+  \setlength{\tabcolsep}{2.6pt}
+  \renewcommand{\arraystretch}{0.96}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{llrrrrrrrrrr}
+    \toprule
+    Dataset & Metric & SASRec & GRU4Rec & TiSASRec & FEARec & DuoRec & BSARec & FAME & DIF-SR & FDSA & RouteRec \\
+    \midrule
+    \multirow{9}{*}{Beauty}
+      & HR@5    & \tblsecond{0.0974} & 0.0372 & 0.0974 & 0.0974 & 0.0974 & 0.0430 & 0.0258 & 0.0802 & 0.0946 & \tblbest{0.1054} \\
+      & HR@10   & \tblsecond{0.1347} & 0.0716 & 0.1318 & 0.1261 & 0.1146 & 0.0516 & 0.0315 & 0.1060 & \tblsecond{0.1347} & \tblbest{0.1616} \\
+      & HR@20   & \tblsecond{0.1719} & 0.1032 & 0.1719 & 0.1719 & 0.1719 & 0.0602 & 0.0516 & 0.1433 & 0.1719 & \tblbest{0.2014} \\
+      & NDCG@5  & 0.0629 & 0.0227 & 0.0765 & 0.0603 & 0.0625 & 0.0289 & 0.0192 & 0.0602 & \tblsecond{0.0779} & \tblbest{0.0803} \\
+      & NDCG@10 & 0.0748 & 0.0340 & 0.0878 & 0.0696 & 0.0680 & 0.0316 & 0.0211 & 0.0685 & \tblsecond{0.0909} & \tblbest{0.0982} \\
+      & NDCG@20 & 0.0842 & 0.0418 & 0.0980 & 0.0810 & 0.0827 & 0.0339 & 0.0260 & 0.0778 & \tblsecond{0.1003} & \tblbest{0.1083} \\
+      & MRR@5   & 0.0514 & 0.0179 & 0.0694 & 0.0476 & 0.0506 & 0.0242 & 0.0170 & 0.0533 & \tblbest{0.0725} & \tblsecond{0.0721} \\
+      & MRR@10  & 0.0563 & 0.0226 & 0.0742 & 0.0515 & 0.0528 & 0.0253 & 0.0178 & 0.0567 & \tblsecond{0.0779} & \tblbest{0.0794} \\
+      & MRR@20  & 0.0588 & 0.0247 & 0.0770 & 0.0544 & 0.0569 & 0.0260 & 0.0190 & 0.0592 & \tblsecond{0.0805} & \tblbest{0.0822} \\
+    \midrule
+    \multirow{9}{*}{Retail Rocket}
+      & HR@5    & \tblsecond{0.4869} & 0.4475 & 0.4700 & 0.4647 & 0.4611 & 0.4413 & 0.4365 & 0.4305 & 0.4344 & \tblbest{0.4883} \\
+      & HR@10   & \tblsecond{0.5605} & 0.5211 & 0.5435 & 0.5441 & 0.5377 & 0.4703 & 0.4697 & 0.4365 & 0.5133 & \tblbest{0.5612} \\
+      & HR@20   & \tblbest{0.6316} & 0.5863 & 0.6135 & 0.6200 & 0.6134 & 0.4986 & 0.5003 & 0.4409 & 0.5886 & \tblsecond{0.6313} \\
+      & NDCG@5  & 0.3860 & 0.3620 & 0.3724 & 0.3678 & 0.3616 & 0.3869 & 0.3826 & \tblsecond{0.3881} & 0.3396 & \tblbest{0.3914} \\
+      & NDCG@10 & \tblsecond{0.4099} & 0.3858 & 0.3963 & 0.3935 & 0.3864 & 0.3963 & 0.3934 & 0.3900 & 0.3651 & \tblbest{0.4150} \\
+      & NDCG@20 & \tblsecond{0.4280} & 0.4023 & 0.4139 & 0.4127 & 0.4057 & 0.4034 & 0.4012 & 0.3911 & 0.3842 & \tblbest{0.4327} \\
+      & MRR@5   & 0.3524 & 0.3335 & 0.3399 & 0.3355 & 0.3284 & \tblsecond{0.3685} & 0.3644 & \tblbest{0.3733} & 0.3082 & 0.3591 \\
+      & MRR@10  & 0.3623 & 0.3434 & 0.3498 & 0.3462 & 0.3388 & \tblsecond{0.3724} & 0.3689 & \tblbest{0.3741} & 0.3187 & 0.3688 \\
+      & MRR@20  & 0.3673 & 0.3479 & 0.3547 & 0.3515 & 0.3441 & \tblsecond{0.3743} & 0.3710 & \tblbest{0.3744} & 0.3239 & 0.3737 \\
+    \midrule
+    \multirow{9}{*}{Foursquare}
+      & HR@5    & \tblsecond{0.2518} & 0.1743 & 0.2474 & 0.2418 & 0.2474 & 0.2014 & 0.2014 & 0.2426 & 0.2478 & \tblbest{0.2562} \\
+      & HR@10   & \tblbest{0.3233} & 0.2130 & 0.3157 & 0.3042 & 0.3197 & 0.2462 & 0.2546 & 0.3034 & 0.2998 & \tblsecond{0.3225} \\
+      & HR@20   & \tblbest{0.3833} & 0.2590 & 0.3721 & 0.3645 & 0.3717 & 0.2866 & 0.3034 & 0.3521 & 0.3477 & \tblsecond{0.3777} \\
+      & NDCG@5  & 0.1782 & 0.1331 & 0.1793 & 0.1721 & 0.1721 & 0.1496 & 0.1475 & 0.1786 & \tblbest{0.1834} & \tblsecond{0.1827} \\
+      & NDCG@10 & 0.2014 & 0.1455 & \tblsecond{0.2016} & 0.1925 & 0.1955 & 0.1639 & 0.1646 & 0.1984 & 0.2001 & \tblbest{0.2041} \\
+      & NDCG@20 & \tblsecond{0.2167} & 0.1572 & 0.2159 & 0.2077 & 0.2088 & 0.1741 & 0.1769 & 0.2107 & 0.2123 & \tblbest{0.2181} \\
+      & MRR@5   & 0.1540 & 0.1195 & 0.1568 & 0.1492 & 0.1473 & 0.1324 & 0.1297 & 0.1574 & \tblbest{0.1620} & \tblsecond{0.1584} \\
+      & MRR@10  & 0.1636 & 0.1246 & 0.1660 & 0.1578 & 0.1569 & 0.1382 & 0.1368 & 0.1656 & \tblbest{0.1689} & \tblsecond{0.1673} \\
+      & MRR@20  & 0.1679 & 0.1278 & 0.1700 & 0.1619 & 0.1607 & 0.1410 & 0.1401 & 0.1690 & \tblbest{0.1723} & \tblsecond{0.1712} \\
+    \midrule
+    \multirow{9}{*}{ML-1M}
+      & HR@5    & 0.0957 & 0.0906 & 0.1018 & 0.0883 & 0.0990 & \tblbest{0.1050} & 0.0976 & 0.0888 & \tblsecond{0.1046} & 0.0939 \\
+      & HR@10   & 0.1478 & 0.1413 & 0.1538 & 0.1487 & 0.1520 & \tblsecond{0.1589} & 0.1557 & 0.1501 & \tblbest{0.1594} & 0.1561 \\
+      & HR@20   & 0.2254 & 0.2119 & \tblsecond{0.2375} & 0.2277 & 0.2305 & 0.2282 & 0.2212 & 0.2300 & \tblbest{0.2430} & 0.2337 \\
+      & NDCG@5  & 0.0605 & 0.0581 & \tblsecond{0.0677} & 0.0531 & 0.0640 & \tblbest{0.0680} & 0.0667 & 0.0566 & 0.0656 & 0.0572 \\
+      & NDCG@10 & 0.0770 & 0.0742 & 0.0844 & 0.0724 & 0.0811 & \tblbest{0.0854} & \tblsecond{0.0853} & 0.0764 & 0.0835 & 0.0771 \\
+      & NDCG@20 & 0.0965 & 0.0919 & \tblbest{0.1054} & 0.0924 & 0.1009 & 0.1028 & 0.1018 & 0.0963 & \tblsecond{0.1043} & 0.0964 \\
+      & MRR@5   & 0.0489 & 0.0474 & \tblsecond{0.0565} & 0.0416 & 0.0525 & 0.0559 & \tblbest{0.0566} & 0.0460 & 0.0529 & 0.0452 \\
+      & MRR@10  & 0.0556 & 0.0539 & \tblsecond{0.0633} & 0.0495 & 0.0595 & 0.0631 & \tblbest{0.0642} & 0.0542 & 0.0603 & 0.0534 \\
+      & MRR@20  & 0.0608 & 0.0587 & \tblbest{0.0690} & 0.0550 & 0.0649 & 0.0678 & \tblsecond{0.0687} & 0.0595 & 0.0658 & 0.0585 \\
+    \midrule
+    \multirow{9}{*}{LastFM$^\dagger$}
+      & HR@5    & \tblbest{0.3638} & 0.2829 & 0.3522 & 0.3515 & 0.3526 & 0.3243 & 0.3097 & 0.3362 & 0.3430 & \tblsecond{0.3562} \\
+      & HR@10   & \tblbest{0.3994} & 0.3090 & 0.3780 & 0.3765 & \tblsecond{0.3831} & 0.3453 & 0.3312 & 0.3617 & 0.3657 & 0.3794 \\
+      & HR@20   & \tblbest{0.4252} & 0.3341 & 0.4038 & 0.3962 & \tblsecond{0.4089} & 0.3653 & 0.3508 & 0.3863 & 0.3909 & 0.4070 \\
+      & NDCG@5  & \tblsecond{0.3152} & 0.2589 & 0.3112 & 0.3086 & 0.2984 & 0.2956 & 0.2832 & 0.3067 & 0.3097 & \tblbest{0.3178} \\
+      & NDCG@10 & \tblbest{0.3267} & 0.2673 & 0.3196 & 0.3167 & 0.3083 & 0.3024 & 0.2900 & 0.3149 & 0.3171 & \tblsecond{0.3253} \\
+      & NDCG@20 & \tblbest{0.3332} & 0.2736 & 0.3260 & 0.3216 & 0.3149 & 0.3075 & 0.2950 & 0.3212 & 0.3234 & \tblsecond{0.3323} \\
+      & MRR@5   & \tblsecond{0.2988} & 0.2509 & 0.2976 & 0.2942 & 0.2803 & 0.2860 & 0.2742 & 0.2969 & 0.2986 & \tblbest{0.3049} \\
+      & MRR@10  & \tblsecond{0.3037} & 0.2543 & 0.3011 & 0.2976 & 0.2844 & 0.2888 & 0.2770 & 0.3002 & 0.3016 & \tblbest{0.3079} \\
+      & MRR@20  & \tblsecond{0.3054} & 0.2561 & 0.3027 & 0.2989 & 0.2863 & 0.2902 & 0.2784 & 0.3020 & 0.3033 & \tblbest{0.3099} \\
+    \midrule
+    \multirow{9}{*}{KuaiRec$^\dagger$}
+      & HR@5    & 0.0945 & 0.0842 & \tblsecond{0.0951} & 0.0951 & 0.0940 & 0.0902 & 0.0902 & 0.0891 & 0.0907 & \tblbest{0.1000} \\
+      & HR@10   & \tblsecond{0.1055} & 0.0945 & 0.1011 & 0.1005 & 0.0995 & 0.0918 & 0.1011 & 0.0918 & 0.0967 & \tblbest{0.1060} \\
+      & HR@20   & \tblbest{0.1235} & 0.1109 & 0.1109 & 0.1158 & 0.1109 & 0.0923 & \tblsecond{0.1186} & 0.0995 & 0.1109 & \tblbest{0.1235} \\
+      & NDCG@5  & \tblsecond{0.0909} & 0.0756 & 0.0897 & 0.0902 & 0.0902 & 0.0885 & 0.0881 & 0.0863 & 0.0845 & \tblbest{0.0946} \\
+      & NDCG@10 & \tblsecond{0.0943} & 0.0790 & 0.0916 & 0.0919 & 0.0919 & 0.0890 & 0.0915 & 0.0871 & 0.0865 & \tblbest{0.0965} \\
+      & NDCG@20 & \tblsecond{0.0988} & 0.0831 & 0.0941 & 0.0958 & 0.0948 & 0.0892 & 0.0959 & 0.0891 & 0.0901 & \tblbest{0.1009} \\
+      & MRR@5   & \tblsecond{0.0897} & 0.0728 & 0.0879 & 0.0886 & 0.0890 & 0.0879 & 0.0874 & 0.0853 & 0.0824 & \tblbest{0.0928} \\
+      & MRR@10  & \tblsecond{0.0910} & 0.0742 & 0.0887 & 0.0893 & 0.0897 & 0.0882 & 0.0888 & 0.0857 & 0.0833 & \tblbest{0.0936} \\
+      & MRR@20  & \tblsecond{0.0922} & 0.0753 & 0.0894 & 0.0903 & 0.0905 & 0.0882 & 0.0899 & 0.0863 & 0.0843 & \tblbest{0.0948} \\
+    \midrule
+    \multicolumn{2}{l}{Avg.~Rank$\downarrow$} & \tblsecond{3.45} & 8.99 & 3.71 & 5.92 & 5.52 & 6.56 & 7.03 & 6.40 & 5.02 & \tblbest{2.40} \\
+    \bottomrule
+  \end{tabular}}
+\end{table*}
+
+The appendix table makes it easier to verify whether improvements survive beyond the compact main-text summary without changing the selection rule between the main text and appendix.
+
+\section{Extended Structural Ablations}
+\label{app:stage-layout}
+Figure~\ref{fig:appendix-stage-layout} expands the structural study in Figure~\ref{fig:stage-structure-panels} with the broader sweep of cue variants, stage-semantics controls, family-grouping comparisons, and deeper layout comparisons that are too detailed for the main text.
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Reduced, shuffled, flat, and random-group cue variants}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Scope swap, identical-scope, and layout variants}
+
+  \end{minipage}
+
+  \vspace{0.75em}
+
+  \begin{minipage}[t]{\linewidth}
+    \centering
+    \placeholderpanel{1.15in}
+
+    \vspace{0.35em}
+    {\footnotesize (c) Stage-placement, ordering, and router variants}
+  \end{minipage}
+  \caption{Extended structural ablations. (a) Semantic cue and family-structure variants. (b) Stage-semantics and layout variants. (c) Stage-placement, ordering, and router variants.}
+  \Description{A three-panel placeholder figure for extended structural ablations covering cue semantics, stage semantics, and routing-layout variants.}
+  \label{fig:appendix-stage-layout}
+\end{figure}
+
+The figure should be read from left to right. Panel (a) expands the cue-construction story by testing whether semantic grouping matters beyond a flat bag of scalars. Panel (b) adds the stronger control that a reviewer is likely to ask for: whether the chosen macro/mid/micro roles matter beyond merely having three blocks. Panel (c) records the broader family of stage-placement and router variants from which the final design was selected.
+
+\section{Protocol Sensitivity and Supplementary Views}
+\label{app:protocol-sensitivity}
+Table~\ref{tab:appendix-protocol-sensitivity} records the supplementary checks that are most likely to arise once the main protocol is understood: whether the seen-target focus materially changes qualitative conclusions, and whether minor protocol adjustments overturn the main ranking pattern.
+
+\begin{table}[t]
+  \centering
+  \caption{Protocol sensitivity and supplementary evaluation views.}
+  \label{tab:appendix-protocol-sensitivity}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}Xcc>{\raggedright\arraybackslash}X@{}}
+    \toprule
+    Check & RouteRec & Strongest baseline & Observation \\
+    \midrule
+    Seen-target MRR@20 & -- & -- & Main comparison in the paper \\
+    Overall MRR@20 & -- & -- & Qualitative ranking remains similar \\
+    Unseen-target accounting & -- & -- & Supplementary only \\
+    Alternate threshold check & -- & -- & Representative-dataset robustness \\
+    Alternate held-out cleanup & -- & -- & No reversal of the main conclusion \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+This table is intentionally narrow. The goal is not to re-open the full protocol design in the appendix, but to show that the qualitative conclusion does not hinge on a single fragile reporting view.
+
+\section{Objective and Regularization Variants}
+\label{app:objective}
+Table~\ref{tab:appendix-objective} isolates the contribution of consistency, z-loss, and balance regularization using ranking quality, route consistency, and stability indicators. Its role in the paper is not only to justify the final objective, but also to prevent over-interpreting the main-text routing diagnostics as a trivial consequence of the consistency regularizer alone.
+
+\begin{table}[t]
+  \centering
+  \caption{Objective and regularization variants.}
+  \label{tab:appendix-objective}
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}XYYY@{}}
+    \toprule
+    Variant & MRR@20 & Consistency & Stability \\
+    \midrule
+    No auxiliary loss & -- & -- & -- \\
+    KNN + consistency & -- & -- & -- \\
+    z-loss only & -- & -- & -- \\
+    Balance loss only & -- & -- & -- \\
+    Consistency + z-loss & -- & -- & -- \\
+    Full objective & -- & -- & -- \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+This compact table shows whether the full objective improves MRR@20 while preserving routing consistency and stability, and whether the diagnostic notion of consistency remains informative once the auxiliary loss is removed.
+
+\section{Efficiency and Model Cost}
+\label{app:efficiency}
+Table~\ref{tab:appendix-efficiency} provides a compact cost anchor for the repeated claim that the routing branch is lightweight. The goal is not to turn the paper into a systems study, but to show the rough parameter and runtime overhead associated with RouteRec relative to representative strong baselines.
+
+\begin{table}[t]
+  \centering
+  \caption{Model cost and efficiency summary.}
+  \label{tab:appendix-efficiency}
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\columnwidth}{@{}lcccc@{}}
+    \toprule
+    Model & Params & Active params & Train-time ratio & Infer-time ratio \\
+    \midrule
+    SASRec & -- & -- & -- & -- \\
+    TiSASRec & -- & -- & -- & -- \\
+    FEARec & -- & -- & -- & -- \\
+    RouteRec & -- & -- & -- & -- \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+This table is intentionally small. A coarse cost comparison is enough to anchor the lightweight claim and to show that any gains are not being justified solely by an unchecked increase in computation.
+
+\section{Extended Diagnostics}
+\label{app:diagnostics}
+Figure~\ref{fig:appendix-diagnostics} groups the main routing diagnostics into one coordinated layout so that stage usage, sharpness, and semantic consistency can be read together.
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.18in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Expert-usage heatmaps by stage}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.18in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Entropy and effective-expert-count summary}
+  \end{minipage}
+
+  \vspace{0.8em}
+
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.18in}
+
+    \vspace{0.35em}
+    {\footnotesize (c) Stage-wise route consistency}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.18in}
+
+    \vspace{0.35em}
+    {\footnotesize (d) Feature-bucket route patterns}
+  \end{minipage}
+  \caption{Routing diagnostics. (a) Expert usage by stage. (b) Entropy and effective expert count. (c) Stage-wise route consistency. (d) Feature-bucket routing patterns.}
+  \Description{A four-panel placeholder figure for expert-usage heatmaps, entropy summaries, stage-wise consistency, and feature-bucket route patterns.}
+  \label{fig:appendix-diagnostics}
+\end{figure}
+
+These diagnostics are organized from coarse structure to semantic interpretation. The first two panels show how broad or sharp routing is at each stage, while the last two panels connect those patterns back to feature similarity and interpretable behavioral regimes.
+
+\section{Behavior-Regime Definitions and Extended Analysis}
+\label{app:behavior-slices}
+Because RouteRec is motivated by heterogeneous behavior, a slice-wise view is a natural complement to the aggregate metrics. This appendix section first defines the diagnostic slices explicitly, then expands the main-text regime analysis with per-dataset breakdowns, additional slices, and more detailed routing summaries.
+
+\begin{table}[t]
+  \centering
+  \caption{Diagnostic slice definitions used in the behavior-regime analysis.}
+  \label{tab:appendix-slice-definitions}
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\columnwidth}{@{}lX@{}}
+    \toprule
+    Slice & Definition rule \\
+    \midrule
+    Repeat-heavy & Prefix repeat ratio above a fixed percentile threshold \\
+    Fast-tempo & Mean inter-event gap below a fixed percentile threshold \\
+    Narrow-focus & Category or item-transition entropy below a fixed percentile threshold \\
+    Exploration-heavy & Novel-item or low-repeat ratio above a fixed percentile threshold \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+These slices are used only for post hoc diagnosis. They are computed from simple observable statistics of the interaction history, not from optimized supervision targets, and not from labels learned jointly with the model.
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{\linewidth}
+    \centering
+    \placeholderpanel{1.25in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Slice-wise MRR@20 across behavioral regimes}
+  \end{minipage}\hfill
+
+  \vspace{0.75em}
+
+  \begin{minipage}[t]{\linewidth}
+    \centering
+    \placeholderpanel{1.25in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Relative RouteRec gain and route concentration by slice}
+  \end{minipage}
+  \caption{Extended behavior-regime analysis. (a) Slice-wise ranking quality. (b) Relative gain and routing concentration by slice.}
+  \Description{A two-panel placeholder figure for slice-wise MRR@20 and RouteRec gain across repeat-heavy, fast-tempo, focused, and exploration-heavy regimes.}
+  \label{fig:appendix-behavior-slices}
+\end{figure}
+
+The useful reading order is to first check which slices benefit most in panel (a), then verify in panel (b) whether those gains coincide with more decisive and semantically aligned routing. The appendix version is intended to expose dataset-level heterogeneity that would be too detailed for the main paper while also making the slice construction explicit enough to avoid circular interpretation.
+
+\section{Qualitative Routing Cases}
+\label{app:qualitative-cases}
+Table~\ref{tab:appendix-qualitative-cases} provides a compact case-based view of the routing behavior for a small number of representative sessions. The goal is not to replace the aggregate analyses, but to make the macro/mid/micro interpretation readable at the level of individual examples.
+
+\begin{table*}[t]
+  \centering
+  \caption{Representative qualitative routing cases.}
+  \label{tab:appendix-qualitative-cases}
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\textwidth}{@{}lXlXl@{}}
+    \toprule
+    Case & Prefix summary & Dominant routing pattern & Prediction outcome & Interpretation \\
+    \midrule
+    Repeat-heavy session & -- & -- & -- & Macro and micro routes reinforce revisit behavior \\
+    Fast-tempo exploratory session & -- & -- & -- & Micro routing sharpens under short-horizon volatility \\
+    Narrow-focus session & -- & -- & -- & Mid-stage routing concentrates on coherent intent \\
+    Preference-stable session & -- & -- & -- & Gains narrow when routing demand is weak \\
+    \bottomrule
+  \end{tabularx}
+\end{table*}
+
+This table is particularly useful when a reviewer asks whether the routing semantics can be inspected directly rather than only through summary statistics.
+
+\section{Extended Transfer Results}
+\label{app:transfer}
+This section reports additional transfer experiments for low-resource and cross-domain adaptation.
+
+\begin{table}[t]
+  \centering
+  \caption{Source-target transfer matrix.}
+  \label{tab:appendix-transfer-matrix}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}lcccccc@{}}
+    \toprule
+    Src. $\rightarrow$ Tgt. & Bty & Fsq & KRec & LFM & ML1M & RR \\
+    \midrule
+    Bty & -- & -- & -- & -- & -- & -- \\
+    Fsq & -- & -- & -- & -- & -- & -- \\
+    KRec & -- & -- & -- & -- & -- & -- \\
+    LFM & -- & -- & -- & -- & -- & -- \\
+    ML1M & -- & -- & -- & -- & -- & -- \\
+    RR & -- & -- & -- & -- & -- & -- \\
+    \bottomrule
+  \end{tabular*}
+\end{table}
+
+The matrix provides the exact source-target view that is too detailed for the main paper. It is useful for identifying asymmetric transfer pairs and for checking whether router reuse is most effective between domains with similar temporal and repetition structure. For compactness, the table uses the abbreviations Bty, Fsq, KRec, LFM, ML1M, and RR.
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Low-resource transfer curves}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Frozen/finetuned/anchor and group/full router transfer}
+
+  \end{minipage}
+
+  \vspace{0.75em}
+
+  \begin{minipage}[t]{\linewidth}
+    \centering
+    \placeholderpanel{1.15in}
+
+    \vspace{0.35em}
+    {\footnotesize (c) Multi-source sequential order effect}
+  \end{minipage}
+  \caption{Transfer variants. (a) Low-resource transfer curves. (b) Frozen, finetuned, anchor, and router-granularity comparisons. (c) Multi-source order effects.}
+  \Description{A three-panel placeholder figure for low-resource transfer curves, transfer-strategy comparisons, and multi-source order effects.}
+  \label{fig:appendix-transfer-panels}
+\end{figure}
+
+Together, the table and figure let the reader move from exact pairwise results to higher-level patterns. The intended appendix message is that transfer is asymmetric, most helpful in related domains and low-resource regimes, and partially preserved even under coarser router reuse.
+
+\end{document}

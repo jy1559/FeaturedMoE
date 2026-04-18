@@ -1,0 +1,103 @@
+[N4_CORE_GLOBAL_QUEUE_SETTING_HEADER]
+run_phase=P4B_KUAIRECLARGESTRICTPOSV2_0_2_B02_S07_H10_LEN25_F24_ST_05_S1 exp_brief=A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5 phase_id=P4B axis_id=N4ABLB setting_id=ST-05 hparam_id= seed=1
+desc=single_stage_mid
+dataset=KuaiRecLargeStrictPosV2_0.2 gpu=1 order=84
+max_evals=10 tune_epochs=100 tune_patience=10
+seed=426196
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --search-algo random --max-evals 10 --tune-epochs 100 --tune-patience 10 --seed 426196 --run-group fmoe_n4 --run-axis ablation_dualset_core_global_queue_v1 --run-phase P4B_KUAIRECLARGESTRICTPOSV2_0_2_B02_S07_H10_LEN25_F24_ST_05_S1 model=featured_moe_n3_tune dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=1 use_gpu=true enable_tf32=true log_wandb=false fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A12" ++fmoe_architecture_key="A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5" ++fmoe_hparam_id="H10" ++fmoe_phase="P4B" train_batch_size=3072 eval_batch_size=4096 ++phase_run_type="stage_structure" ++phase_axis_id="N4ABLB" ++phase_axis_desc="stage_structure_dualset" ++phase_setting_id="ST-05" ++phase_setting_key="SINGLE_STAGE_MID" ++phase_hparam_id="H10" ++phase_seed_id=1 ++phase_run_id="KUAIRECLARGESTRICTPOSV2_0_2_B02_S07_H10_LEN25_F24_ST_05_S1" ++layer_layout=["attn","mid_ffn"] ++stage_compute_mode={macro:"none",mid:"moe",micro:"none"} ++stage_router_mode={macro:"none",mid:"learned",micro:"none"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0001 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.00025 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w5_exd",mid:"w5_exd",micro:"w5_exd"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++macro_history_window=5 ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++bias_mode="none" ++stage_family_dropout_prob={macro:0.02,mid:0.02,micro:0.02} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++embedding_size=192 ++d_ff=384 ++d_expert_hidden=192 ++d_router_hidden=96 ++MAX_ITEM_LIST_LENGTH=25 ++d_feat_emb=24 ++expert_scale=3 ++lr_scheduler_type="warmup_cosine" ++num_heads=4 ++attn_dropout_prob=0.06 ++hidden_dropout_prob=0.12 ++weight_decay=4e-07 ++search.learning_rate=[0.000326551096,0.000382531284,0.000419851409,0.000447841503,0.000466501566,0.000485161628,0.000513151722,0.000550471847,0.000606452035] ++search_space_type_overrides.learning_rate=choice
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1538784 ts=2026-04-17T11:21:07
+[Info] Finite choice-only space has 9 unique combos; capping max_evals 10 -> 9
+[UniqueChoice] enabled: dedupe/remap duplicates across 9 finite combos
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x KuaiRecLargeStrictPosV2_0.2
+  max_evals=9  epochs=100  patience=10  wandb=off
+  search_algo=random
+  batch_size(train/valid/test)=3072/4096/4096
+  track=fmoe_n4  axis=ablation_dualset_core_global_queue_v1  phase=P4B_KUAIRECLARGESTRICTPOSV2_0_2_B02_S07_H10_LEN25_F24_ST_05_S1
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~9 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.000326551096, 0.000382531284, 0.000419851409, 0.000447841503, 0.000466501566, 0.000485161628, 0.000513151722, 0.000550471847, 0.000606452035]  -> choice
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/9] learning_rate=0.0004852
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.018000  best=0.018000  (early_stop@17, trial=2.4min, avg=2.7min/trial, total=2.7min, ETA=21.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.018000 cur_best_hr10=0.034900 cur_test_mrr20=0.338500 cur_test_hr10=0.358300 avg_epoch_time_sec=8.4248 test_eval_time_sec=0.1046 test_eval_batches_per_sec=9.5565 test_eval_targets_per_sec=25859.8543 run_best_mrr20=0.018000 run_best_hr10=0.034900 run_test_mrr20=0.338500 run_test_hr10=0.358300
+
+[2/9] learning_rate=0.0003266
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.017900  best=0.018000  (early_stop@31, trial=4.1min, avg=3.4min/trial, total=6.7min, ETA=23.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.017900 cur_best_hr10=0.033700 cur_test_mrr20=0.336500 cur_test_hr10=0.348300 avg_epoch_time_sec=7.8631 test_eval_time_sec=0.1038 test_eval_batches_per_sec=9.6300 test_eval_targets_per_sec=26058.8749 run_best_mrr20=0.018000 run_best_hr10=0.034900 run_test_mrr20=0.338500 run_test_hr10=0.358300
+[UniqueChoice] remap duplicate suggestion -> {'learning_rate': 0.000382531284}
+
+[3/9] learning_rate=0.0003825
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.017800  best=0.018000  (early_stop@25, trial=3.5min, avg=3.4min/trial, total=10.2min, ETA=20.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.017800 cur_best_hr10=0.036800 cur_test_mrr20=0.336300 cur_test_hr10=0.351600 avg_epoch_time_sec=8.3456 test_eval_time_sec=0.1089 test_eval_batches_per_sec=9.1831 test_eval_targets_per_sec=24849.3393 run_best_mrr20=0.018000 run_best_hr10=0.034900 run_test_mrr20=0.338500 run_test_hr10=0.358300
+[UniqueChoice] remap duplicate suggestion -> {'learning_rate': 0.000419851409}
+
+[4/9] learning_rate=0.0004199
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.018000  best=0.018000  (early_stop@17, trial=2.4min, avg=3.1min/trial, total=12.6min, ETA=15.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.018000 cur_best_hr10=0.033000 cur_test_mrr20=0.338500 cur_test_hr10=0.358300 avg_epoch_time_sec=8.2986 test_eval_time_sec=0.1034 test_eval_batches_per_sec=9.6733 test_eval_targets_per_sec=26176.0090 run_best_mrr20=0.018000 run_best_hr10=0.033000 run_test_mrr20=0.338500 run_test_hr10=0.358300
+
+[5/9] learning_rate=0.0005505
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.018200  best=0.018200  (early_stop@16, trial=2.1min, avg=2.9min/trial, total=14.7min, ETA=11.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.018200 cur_best_hr10=0.035200 cur_test_mrr20=0.337400 cur_test_hr10=0.359500 avg_epoch_time_sec=7.9091 test_eval_time_sec=0.1054 test_eval_batches_per_sec=9.4872 test_eval_targets_per_sec=25672.3259 run_best_mrr20=0.018200 run_best_hr10=0.035200 run_test_mrr20=0.337400 run_test_hr10=0.359500
+[UniqueChoice] remap duplicate suggestion -> {'learning_rate': 0.000447841503}
+
+[6/9] learning_rate=0.0004478
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.017900  best=0.018200  (early_stop@17, trial=2.2min, avg=2.8min/trial, total=16.9min, ETA=8.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.017900 cur_best_hr10=0.033300 cur_test_mrr20=0.338600 cur_test_hr10=0.358300 avg_epoch_time_sec=7.7950 test_eval_time_sec=0.1045 test_eval_batches_per_sec=9.5722 test_eval_targets_per_sec=25902.3466 run_best_mrr20=0.018200 run_best_hr10=0.035200 run_test_mrr20=0.337400 run_test_hr10=0.359500
+
+[7/9] learning_rate=0.0004665
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.018000  best=0.018200  (early_stop@25, trial=3.4min, avg=2.9min/trial, total=20.3min, ETA=5.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.018000 cur_best_hr10=0.035200 cur_test_mrr20=0.336400 cur_test_hr10=0.349400 avg_epoch_time_sec=8.1194 test_eval_time_sec=0.1055 test_eval_batches_per_sec=9.4767 test_eval_targets_per_sec=25644.0196 run_best_mrr20=0.018200 run_best_hr10=0.035200 run_test_mrr20=0.337400 run_test_hr10=0.359500
+[UniqueChoice] remap duplicate suggestion -> {'learning_rate': 0.000513151722}
+
+[8/9] learning_rate=0.0005132
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.018200  best=0.018200  (early_stop@17, trial=2.4min, avg=2.8min/trial, total=22.7min, ETA=2.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.018200 cur_best_hr10=0.034900 cur_test_mrr20=0.338400 cur_test_hr10=0.358300 avg_epoch_time_sec=8.3329 test_eval_time_sec=0.1126 test_eval_batches_per_sec=8.8790 test_eval_targets_per_sec=24026.5602 run_best_mrr20=0.018200 run_best_hr10=0.034900 run_test_mrr20=0.338400 run_test_hr10=0.358300
+[UniqueChoice] remap duplicate suggestion -> {'learning_rate': 0.000606452035}
+
+[9/9] learning_rate=0.0006065
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+  -> MRR@20=0.018200  best=0.018200  (early_stop@21, trial=2.8min, avg=2.8min/trial, total=25.5min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.018200 cur_best_hr10=0.037500 cur_test_mrr20=0.337800 cur_test_hr10=0.350500 avg_epoch_time_sec=7.9446 test_eval_time_sec=0.1042 test_eval_batches_per_sec=9.5937 test_eval_targets_per_sec=25960.5863 run_best_mrr20=0.018200 run_best_hr10=0.037500 run_test_mrr20=0.337800 run_test_hr10=0.350500
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=25 (anchor len=50 only)
+[1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 7.46 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 1/1 [00:01<00:00,  1.30s/it, [1;33mGPU RAM: 7.46 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/1 [00:00<?, ?it/s, [1;33mGPU RAM: 7.46 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 1/1 [00:00<00:00,  1.14it/s, [1;33mGPU RAM: 7.46 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/1 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/1 [00:01<?, ?it/s, [1;33mGPU RAM: 7.46 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 1/1 [00:01<00:00,  1.26s/it, [1;33mGPU RAM: 7.46 G/23.52 G[0m][0m                                                                                                    
+=================================================================
+  DONE  |  FeaturedMoE_N3 x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.018200  |  9/9 trials OK
+  Best HR@10  = 0.035200
+  Test MRR@20 = 0.337400  (best-valid checkpoint)
+  Test HR@10  = 0.359500  (best-valid checkpoint)
+  Avg epoch time = 7.909 sec/epoch
+  Final test eval = 0.105 sec | batches/s=9.487 | targets/s=25672.326
+[RUN_METRICS] best_valid_mrr20=0.018200 best_valid_hr10=0.035200 test_mrr20=0.337400 test_hr10=0.359500 avg_epoch_time_sec=7.9091 test_eval_time_sec=0.1054 test_eval_batches_per_sec=9.4872 test_eval_targets_per_sec=25672.3259
+  Total time: 25.6 min
+  Best params:
+    learning_rate: 0.000550472
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n4/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4b_kuaireclargestrictposv2_0_2_b02_s07_h10_len25_f24_st_05_s1_20260417_112107_563281_pid1538784.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n4/normal/ablation_dualset_core_global_queue_v1/P4B/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4b_kuaireclargestrictposv2_0_2_b02_s07_h10_len25_f24_st_05_s1_20260417_112107_563281_pid1538784.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_n4/special/ablation_dualset_core_global_queue_v1/P4B/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4b_kuaireclargestrictposv2_0_2_b02_s07_h10_len25_f24_st_05_s1_20260417_112107_563281_pid1538784_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/fmoe_n4/special/ablation_dualset_core_global_queue_v1/P4B/KuaiRecLargeStrictPosV2_0.2/FMoEN3/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_p4b_kuaireclargestrictposv2_0_2_b02_s07_h10_len25_f24_st_05_s1_20260417_112107_563281_pid1538784_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1538784 start=2026-04-17T11:21:07 end=2026-04-17T11:46:42

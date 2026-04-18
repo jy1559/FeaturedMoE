@@ -5,9 +5,9 @@
 - run_group: fmoe_n4
 - run_axis: ablation_dualset_core_global_queue_v1
 - run_phase: P4D_BEAUTY_B02_B17_HYP_MIDAUX_LOWAUX_H3_OBJ_07_S1
-- best_mrr@20: 0.0819
-- test_mrr@20: 0.0488
-- test_hr@10: 0.1117
+- best_mrr@20: 0.082
+- test_mrr@20: 0.0456
+- test_hr@10: 0.1146
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4D/beauty_FeaturedMoE_N3_p4d_beauty_b02_b17_hyp_midaux_lowaux_h3_obj_07_s1_20260417_104107_775470_pid1528504/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4D/beauty_FeaturedMoE_N3_p4d_beauty_b02_b17_hyp_midaux_lowaux_h3_obj_07_s1_20260417_104107_775470_pid1528504/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4D/beauty_FeaturedMoE_N3_p4d_beauty_b02_b17_hyp_midaux_lowaux_h3_obj_07_s1_20260417_104107_775470_pid1528504/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4D/beauty_FeaturedMoE_N3_p4d_beauty_b02_b17_hyp_midaux_lowaux_h3_obj_07_s1_20260417_104107_775470_pid1528504/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4D/beauty_FeaturedMoE_N3_p4d_beauty_b02_b17_hyp_midaux_lowaux_h3_obj_07_s1_20260417_104107_775470_pid1528504/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4D/beauty_FeaturedMoE_N3_p4d_beauty_b02_b17_hyp_midaux_lowaux_h3_obj_07_s1_20260417_104107_775470_pid1528504/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/fmoe_n4/beauty/P4D/beauty_FeaturedMoE_N3_p4d_beauty_b02_b17_hyp_midaux_lowaux_h3_obj_07_s1_20260417_104107_775470_pid1528504/diag/raw/epoch_trace.csv
 - feature_ablation: 

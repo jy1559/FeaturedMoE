@@ -1,0 +1,294 @@
+RouteRec main table tuning 계획 및 정당화 메모
+
+목표
+- main result table의 신뢰성을 “우리가 적당히 돌려본 결과”가 아니라, “사전에 정의한 탐색 공간 안에서 모든 모델을 동일 원칙으로 튜닝했고, 그 안에서 최고 validation 성능 구성을 보고했다”로 바꾸기.
+- sessionized temporal protocol 아래에서 baseline ranking이 raw-sequence leaderboard와 다를 수 있다는 점을 prior work로 방어하기.
+- Codex에게는 “구현 가능한 공정한 탐색 프로토콜”을 넘기고, 논문에는 그 프로토콜을 간결하지만 방어 가능하게 적기.
+
+--------------------------------------------------
+1. 왜 지금 표의 결과 패턴이 아주 이상한 것은 아닌가
+--------------------------------------------------
+
+핵심 메시지
+1) 지금 benchmark는 canonical raw-sequence seqrec leaderboard가 아니라, sessionized temporal protocol이다.
+2) 이런 setting에서는 model ranking이 바뀌는 것이 이상하지 않다.
+3) simple / older baseline이 강하게 나오는 것도 문헌상 충분히 있는 일이다.
+4) 그래서 더 중요한 것은 “누가 최신이냐”가 아니라 “같은 protocol 아래에서 얼마나 공정하게 튜닝했느냐”다.
+
+문헌 포인트
+A. Session-aware recommendation: A Surprising Quest for the State-of-the-Art (Latifi et al., 2021)
+- session-aware benchmark를 common framework로 다시 비교했더니, simple heuristic / non-neural / older session-based techniques가 recent neural models를 자주 이긴다고 보고.
+- 논문의 핵심 메시지 자체가 “new methods are often compared to weak baselines or insufficiently optimized baselines”에 가깝다.
+- 따라서 “옛날 모델인데 왜 세지?”는 오히려 benchmark/tuning 문제를 점검해야 한다는 방향으로 읽는 게 맞다.
+- 링크: https://doi.org/10.1016/j.ins.2021.05.048
+
+B. Sequential recommendation: A study on transformers, nearest neighbors and sampled metrics (Latifi, Jannach, Ferraro, 2022)
+- sequential recommendation에서도 simpler methods가 transformer-based model(BERT4Rec)보다 comparable or better on some datasets라고 보고.
+- deep model superiority가 dataset size / evaluation setting에 민감하다는 점을 강조.
+- 즉 “Transformer/최근 모델이 항상 압도”라는 가정이 애초에 안전하지 않다.
+- 링크: https://doi.org/10.1016/j.ins.2022.07.079
+
+C. A Critical Study on Data Leakage in Recommender System Offline Evaluation (Ji et al., 2023)
+- split construction이 결과를 materially affect할 수 있고, chronology를 무시하면 leakage가 생길 수 있다고 정리.
+- 네 실험처럼 sessionized temporal split을 쓰면 raw benchmark와 ranking이 달라져도 이상하지 않다. 오히려 protocol을 더 명시해야 한다는 쪽.
+- 링크: https://doi.org/10.1145/3569930
+
+D. Time to Split: Exploring Data Splitting Strategies for Offline Evaluation of Sequential Recommenders (Gusak et al., 2025)
+- sequential recommenders에서 split strategy가 offline conclusions를 바꿀 수 있음을 정리.
+- main table에서 model ranking이 들쭉날쭉한 이유를 “모델 불안정”만이 아니라 “task/split sensitivity”로도 이해할 수 있다.
+- 링크: https://doi.org/10.48550/arXiv.2507.16289
+
+E. Session-Based Recommender Systems (Jannach et al., Handbook chapter, 2022)
+- session-based / session-aware setting은 원래 current short session, session reconstruction, heuristic sessionization을 전제로 다루는 경우가 많다.
+- 네 세팅은 long raw history benchmark를 그대로 쓰는 것보다, session-aware benchmark를 재구성한 문제로 보는 것이 더 맞다.
+- 링크: https://doi.org/10.1007/978-1-0716-2197-4_8
+
+F. SSE4Rec: Sequential recommendation with subsequence extraction (Deng & Hu, 2024)
+- user behavior sequence를 단일 homogeneous sequence로 보는 것의 위험을 지적하고, subsequence extraction을 제안.
+- 네 논문과 정확히 같지는 않지만, “behavior sequence는 하나의 긴 문장처럼 다루기 어렵고, shorter/intention-aware decomposition이 의미 있을 수 있다”는 보조 논리로 사용 가능.
+- 링크: https://doi.org/10.1016/j.knosys.2023.111364
+
+논문에 넣을 수 있는 방어 문장 예시
+- “Because our benchmark is a sessionized temporal protocol rather than a canonical raw-sequence leaderboard, model rankings need not mirror those reported in standard sequential recommendation settings.”
+- “Prior benchmark studies have shown that simpler or earlier sequential/session-aware baselines can remain highly competitive once methods are re-evaluated under a common framework and carefully controlled protocol.”
+- “We therefore treat fair model selection under the shared protocol as a first-order experimental requirement.”
+
+--------------------------------------------------
+2. 지금 논문에서 부족한 부분
+--------------------------------------------------
+
+현재 본문은 이미 아래 정도는 말하고 있음.
+- same processed files
+- matched early-stopping rules
+- comparable capacity ranges
+- best validation-selected configuration reported
+
+하지만 아직 부족한 것
+- search space가 안 보임
+- model별로 어떤 하이퍼파라미터를 얼마나 탐색했는지 안 보임
+- trial budget이 안 보임
+- baseline마다 tuning effort가 대충 비슷했는지 안 보임
+- RouteRec만 더 많이 찾아본 것 아니냐는 의심을 막기 어려움
+
+즉 지금 문구만으로는
+“그래서 정확히 어떻게 best를 뽑았는데요?”
+라는 질문에 약하다.
+
+--------------------------------------------------
+3. 추천하는 튜닝 원칙
+--------------------------------------------------
+
+핵심 원칙: “discrete reference grid + Bayesian/TPE search on that grid”
+- 논문에는 grid-style predefined search space라고 쓴다.
+- 실제 실행은 hyperopt/TPE를 써도 된다.
+- 즉 탐색 방식은 adaptive지만, 탐색 가능한 값의 집합은 사전에 고정한다.
+- 이렇게 하면 “grid search spirit”와 “실행 효율”을 동시에 가져갈 수 있다.
+
+추천 프로토콜
+1) 각 모델에 대해 사전 정의된 discrete search space를 둔다.
+2) 이 search space는
+   - original paper defaults / appendix,
+   - RecBole reference ranges,
+   - current codebase에서 이미 쓰던 합리적 범위
+   를 섞어서 만든다.
+3) 같은 dataset에서 같은 model family는 동일 trial budget을 쓴다.
+4) 모든 모델은 동일 validation selection rule을 쓴다.
+5) 최종 test report는 validation-best config로 한 번만 본다.
+6) 가능하면 최종 best config는 3 seeds 정도 재실행해서 mean±std를 appendix에 둔다.
+
+--------------------------------------------------
+4. 논문에 적기 좋은 튜닝 서술 방식
+--------------------------------------------------
+
+본문용 짧은 버전 예시
+“We tuned every baseline and RouteRec within a predefined model-specific search space rather than relying on paper defaults. Search spaces were fixed before the main comparison and covered optimization hyperparameters together with a small number of architecture-specific controls. To make the search computationally feasible while preserving fairness, we used Bayesian optimization over these discrete candidate sets and selected the final configuration by the same validation criterion for all methods. The full search ranges, trial budgets, and selected configurations are reported in Appendix X.”
+
+조금 더 강한 버전
+“Given that ranking conclusions in sessionized sequential recommendation are sensitive to protocol construction, and that prior benchmark studies have shown strong dependence on baseline optimization, we treat model selection as part of the experimental protocol rather than a secondary implementation detail. Accordingly, all compared methods were tuned within predefined search spaces under the same validation files, early-stopping rule, and model-selection criterion.”
+
+appendix용 버전
+“We define model-specific but budget-controlled search spaces. These spaces are derived from (i) ranges reported in the original papers when available, (ii) RecBole sequential-model reference ranges, and (iii) small protocol-aware adjustments needed for our sessionized setting. Bayesian optimization is run only over these predeclared candidate sets, so the practical search remains efficient while the comparison preserves the logic of a grid-based fair search.”
+
+--------------------------------------------------
+5. Codex에게 줄 실제 실험 계획
+--------------------------------------------------
+
+A. 공통 튜닝 대상
+공통 hp
+- learning rate
+- weight decay / reg_weight
+- dropout
+- hidden size / embedding size (가능하면 공정하게 좁은 범위)
+- num layers (모델이 허용하면)
+- batch size (너무 크게 건드리면 메모리/throughput 효과 섞이니 1~2개 정도만)
+
+모델별 hp
+- SASRec / TiSASRec / FEARec / FDSA: n_layers, attention/dropout, heads(필요시 고정), specific regularizer params
+- GRU4Rec: num_layers, hidden size, dropout 류
+- DuoRec / BSARec / FAME / DIF-SR: 논문/코드에서 성능 민감한 핵심 hp 1~3개 추가
+- RouteRec: num experts / group structure / tau / lambda_cons / lambda_z / feature projection size 정도
+
+B. 탐색 공간 설계 원칙
+- 각 모델 search space는 “작지만 방어 가능한 범위”로 잡기.
+- 너무 넓으면 RouteRec에 유리하게 해석될 수 있고, 너무 좁으면 baseline 과소튜닝 비판을 받음.
+- 따라서 original/RecBole reference 범위를 바탕으로 3~5개 discrete 값만 두는 식이 좋음.
+
+예시 스타일
+- lr: [1e-4, 3e-4, 5e-4, 1e-3, 3e-3]
+- wd: [0, 1e-6, 1e-5, 1e-4]
+- dropout: [0.1, 0.2, 0.3, 0.5]
+- hidden/embedding: [64, 128] 또는 [64, 128, 256] (공정성/예산 따라)
+- n_layers: [1, 2]
+- batch_size: [256, 512] 정도
+
+C. 탐색 예산
+추천 방식
+- stage 1: cheap search
+  - model x dataset당 TPE 20~30 trials
+- stage 2: refine / rerun top-k
+  - 상위 3 config를 seed 2~3개로 재평가
+- stage 3: final report
+  - best mean validation config 1개 선택, test 보고
+
+예산이 아주 빡세면
+- baseline은 20 trials
+- RouteRec은 30 trials
+- 대신 appendix에 “RouteRec includes additional routing-specific hyperparameters, so we allocate a slightly larger search budget while keeping the total search space documented”라고 솔직히 쓰기
+
+더 깔끔한 방식
+- parameter count가 비슷한 model family별로 동일 trial budget
+- RouteRec만 extra hp가 많으면 “same two-stage protocol, slightly expanded second-stage refinement” 정도로 제한
+
+D. selection rule
+현재 논문과 맞추려면
+- validation mean over the nine reported metrics
+
+다만 appendix supplementary로 넣으면 좋은 것
+- MRR@20-only selection으로도 qualitative ranking이 크게 안 바뀌는지
+- seen-target only 기준에서 selection했을 때 vs broader validation view에서 selection했을 때
+
+--------------------------------------------------
+6. 논문/appendix에 추가하면 좋은 표
+--------------------------------------------------
+
+필수
+Table X. Hyperparameter search spaces
+- row: model
+- columns: tuned hp / candidate values / search budget / source of range(original, RecBole, ours)
+
+Table Y. Selected configurations
+- dataset x model 별 최종 선택 hp 요약
+- 너무 길면 RouteRec + 대표 baseline 몇 개만 main appendix, full table은 supplementary material
+
+Table Z. Sensitivity of selection rule
+- primary selection rule vs MRR@20-only selection
+- qualitative conclusion 유지 여부만 compact하게
+
+있으면 좋은 것
+Table W. Trial budget summary
+- model family / #trials / #final reruns / #seeds
+
+--------------------------------------------------
+7. 논문 본문에 넣을 문장 뼈대
+--------------------------------------------------
+
+실험 설정 마지막에 추가하기 좋은 문단 예시
+“To reduce the risk of under-tuned baselines, we do not rely on paper defaults. Instead, each compared model is tuned within a predefined model-specific discrete search space covering standard optimization hyperparameters and a small number of architecture-specific controls. These ranges are derived from the original papers, RecBole reference ranges for sequential recommenders, and small adjustments required by our sessionized protocol. We use Bayesian optimization over these discrete candidate sets for computational efficiency, but the admissible values are fixed in advance, making the procedure equivalent in spirit to a controlled grid search. The exact spaces, trial budgets, and selected configurations are reported in Appendix X.”
+
+main table 아래나 결과 해석에서 추가하기 좋은 문장
+“Because our benchmark is built on sessionized temporal splits, the goal of Table 1 is not to reproduce raw-sequence leaderboard ordering, but to compare models after fair re-tuning under the shared protocol. Prior work has shown that both preprocessing/splitting choices and baseline optimization quality can materially change the observed ranking.”
+
+--------------------------------------------------
+8. reference로 직접 쓰기 좋은 핵심 논문 목록
+--------------------------------------------------
+
+1) Latifi, Mauro, Jannach. 2021.
+Session-aware Recommendation: A Surprising Quest for the State-of-the-Art.
+- simple baselines can outperform newer neural methods
+- common framework, reproducibility, hyperparameter optimization importance
+- DOI: 10.1016/j.ins.2021.05.048
+
+2) Latifi, Jannach, Ferraro. 2022.
+Sequential recommendation: A study on transformers, nearest neighbors and sampled metrics.
+- newer transformer not always dominant; simpler methods competitive on some datasets
+- larger datasets favor deep models more clearly
+- DOI: 10.1016/j.ins.2022.07.079
+
+3) Ji et al. 2023.
+A Critical Study on Data Leakage in Recommender System Offline Evaluation.
+- split construction matters; chronology matters
+- DOI: 10.1145/3569930
+
+4) Gusak et al. 2025.
+Time to Split: Exploring Data Splitting Strategies for Offline Evaluation of Sequential Recommenders.
+- split strategy changes offline conclusions
+- DOI: 10.48550/arXiv.2507.16289
+
+5) Jannach, Quadrana, Cremonesi. 2022.
+Session-Based Recommender Systems.
+- session reconstruction / session-aware framing general reference
+- DOI: 10.1007/978-1-0716-2197-4_8
+
+6) Deng & Hu. 2024.
+SSE4Rec: Sequential recommendation with subsequence extraction.
+- one long behavior sequence may mix multiple intentions; shorter/subsequence views can be meaningful
+- DOI: 10.1016/j.knosys.2023.111364
+
+7) RecBole Hyper-parameters | Sequential Recommenders
+- official reference table for model-specific search ranges (practical support용)
+- https://recbole.io/hyperparameters/sequential.html
+
+8) Galuzzi et al. 2020.
+Hyperparameter optimization for recommender systems through Bayesian optimization.
+- recommender hyperparameter optimization is noisy, time-consuming, black-box; BO beats defaults/random search on benchmark setting
+- DOI: 10.1007/s10287-020-00376-3
+
+--------------------------------------------------
+9. 내가 추천하는 최종 방향
+--------------------------------------------------
+
+가장 좋은 방향은 다음과 같음.
+
+(1) main paper에는 “fair model selection protocol” 문단을 추가
+(2) appendix에 hyperparameter search space table을 반드시 추가
+(3) Codex한테는 model별 discrete range + trial budget + selection rule 구현시키기
+(4) main result table은 새로 다시 뽑기
+(5) supplementary로 “selection rule 바뀌어도 qualitative conclusion 유지” 정도만 짧게 확인
+
+핵심은 “우리 모델이 최고다”를 먼저 세게 미는 게 아니라,
+“이 protocol에서는 baseline ranking이 충분히 달라질 수 있으니, 우리는 그 대신 튜닝 절차를 명시적으로 통제했다”로 가는 것.
+
+이렇게 가면, 표가 아주 압도적이지 않아도
+“적어도 weak baseline / unfair tuning으로 이긴 건 아니다”
+를 방어하기 훨씬 쉬워진다.
+
+--------------------------------------------------
+10. Codex에게 바로 던질 짧은 지시문 초안
+--------------------------------------------------
+
+현재 RouteRec 논문의 main table을 다시 뽑기 위해, compared models 전체에 대해 공정한 hyperparameter search protocol을 만들고 싶다.
+
+목표:
+- paper defaults에 의존하지 말고, model-specific discrete search space를 정의
+- 실제 실행은 hyperopt/TPE를 써도 되지만, 탐색 가능한 값 집합은 사전 고정
+- 모든 모델은 동일 validation files / same early stopping / same selection rule 사용
+- selection rule은 current paper와 동일하게 “mean validation score over the nine reported metrics”
+- 결과로는
+  1) model별 search space table
+  2) dataset별 selected config table
+  3) main table 재실험 실행 스크립트
+  가 나오면 좋겠다.
+
+원칙:
+- common hp: lr, wd/reg, dropout, hidden/embedding, num_layers(if supported), batch_size(optional)
+- model-specific hp는 1~3개 핵심만 추가
+- RouteRec은 experts/group/tau/lambda_cons/lambda_z 정도 포함
+- search budget은 baseline과 RouteRec 모두 방어 가능하게, 너무 과하지 않게
+- RecBole reference ranges, original paper/code defaults, 현재 코드베이스 관행을 바탕으로 합리적인 discrete values 제안
+- sessionized protocol 특성을 고려해서 너무 긴 sequence 전제 hp가 있으면 조정
+
+출력 원함:
+- model별 search space 제안표
+- 실행 가능한 하이퍼옵트 설정안
+- 결과 저장/selection 방식 제안
+- 논문 appendix에 넣을 수 있는 tuning protocol 문단 초안

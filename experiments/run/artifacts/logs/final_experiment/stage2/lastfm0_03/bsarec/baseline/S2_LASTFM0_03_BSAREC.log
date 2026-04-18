@@ -1,0 +1,111 @@
+# job_id=S2_LASTFM0_03_BSAREC dataset=lastfm0.03 model=bsarec stage=stage2
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_lfm_small --search-algo tpe --max-evals 10 --tune-epochs 60 --tune-patience 6 --seed 710014 --run-group final_experiment --run-axis stage2_focus_search --run-phase S2_LASTFM0_03_BSAREC model=bsarec dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=1 log_wandb=false show_progress=false ++seed=710014 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00012264,0.00019195,0.00030042,0.00047018,0.00073587] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-06,1e-05,5e-05,0.0001] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[30,20,10,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[64,96,128,160] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[160,128,96,64] ++search_space_type_overrides.embedding_size=choice ++search.num_layers=[1,2,3] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,4,2] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.12,0.15,0.1,0.05] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.08,0.1,0.15,0.12] ++search_space_type_overrides.attn_dropout_prob=choice ++search.bsarec_alpha=[0.35,0.5,0.55,0.7] ++search_space_type_overrides.bsarec_alpha=choice ++search.bsarec_c=[2,7,5,3] ++search_space_type_overrides.bsarec_c=choice ++search.inner_size=[256] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1675680 ts=2026-04-18T09:27:15
+[UniqueChoice] enabled: dedupe/remap duplicates across 2949120 finite combos
+
+=================================================================
+  Hyperopt  |  BSARec x lastfm0.03
+  max_evals=10  epochs=60  patience=6  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=2048/4096/4096
+  track=final_experiment  axis=stage2_focus_search  phase=S2_LASTFM0_03_BSAREC
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, bsarec_alpha, bsarec_c, embedding_size, hidden_dropout_prob, hidden_size, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 11  (~2949120 discrete combos)
+Tuned groups: 11
+  [optimization]
+    hidden_dropout_prob             [0.12, 0.15, 0.1, 0.05]                   -> choice
+    learning_rate                   [0.00012264, 0.00019195, 0.00030042, 0.00047018, 0.00073587]  -> choice
+    weight_decay                    [1e-06, 1e-05, 5e-05, 0.0001]             -> choice
+  [model_core]
+    attn_dropout_prob               [0.08, 0.1, 0.15, 0.12]                   -> choice
+    embedding_size                  [160, 128, 96, 64]                        -> choice
+    hidden_size                     [64, 96, 128, 160]                        -> choice
+    num_heads                       [1, 4, 2]                                 -> choice
+    num_layers                      [1, 2, 3]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [30, 20, 10, 50]                          -> choice
+    bsarec_alpha                    [0.35, 0.5, 0.55, 0.7]                    -> choice
+    bsarec_c                        [2, 7, 5, 3]                              -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    dropout_ratio                   0.12                                    
+    inner_size                      256                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.08, bsarec_alpha=0.5, bsarec_c=2, embedding_size=128, hidden_dropout_prob=0.12, hidden_size=96, learning_rate=0.0001226, num_heads=2, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.069400  best=0.069400  (full@60, trial=3.8min, avg=3.9min/trial, total=3.9min, ETA=35.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.069400 cur_best_hr10=0.085600 cur_test_mrr20=0.058700 cur_test_hr10=0.076600 avg_epoch_time_sec=3.7462 test_eval_time_sec=0.0829 test_eval_batches_per_sec=12.0567 test_eval_targets_per_sec=41462.9428 run_best_mrr20=0.069400 run_best_hr10=0.085600 run_test_mrr20=0.058700 run_test_hr10=0.076600
+
+[2/10] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, bsarec_alpha=0.35, bsarec_c=5, embedding_size=128, hidden_dropout_prob=0.12, hidden_size=64, learning_rate=0.0007359, num_heads=2, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.297000  best=0.297000  (early_stop@41, trial=2.3min, avg=3.2min/trial, total=6.4min, ETA=25.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.297000 cur_best_hr10=0.333700 cur_test_mrr20=0.287000 cur_test_hr10=0.334100 avg_epoch_time_sec=3.4087 test_eval_time_sec=0.0791 test_eval_batches_per_sec=12.6445 test_eval_targets_per_sec=43484.4034 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+[3/10] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.08, bsarec_alpha=0.5, bsarec_c=3, embedding_size=96, hidden_dropout_prob=0.12, hidden_size=128, learning_rate=0.0007359, num_heads=4, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.261400  best=0.297000  (full@60, trial=7.0min, avg=4.5min/trial, total=13.6min, ETA=31.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.261400 cur_best_hr10=0.309800 cur_test_mrr20=0.259600 cur_test_hr10=0.312300 avg_epoch_time_sec=6.9809 test_eval_time_sec=0.0972 test_eval_batches_per_sec=10.2829 test_eval_targets_per_sec=35362.9069 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+[4/10] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, bsarec_alpha=0.35, bsarec_c=7, embedding_size=128, hidden_dropout_prob=0.15, hidden_size=128, learning_rate=0.000192, num_heads=1, num_layers=2, weight_decay=5e-05
+  -> MRR@20=0.000100  best=0.297000  (early_stop@7, trial=21s, avg=3.5min/trial, total=13.9min, ETA=20.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.000100 cur_best_hr10=0.000300 cur_test_mrr20=0.000100 cur_test_hr10=0.000700 avg_epoch_time_sec=2.9785 test_eval_time_sec=0.0798 test_eval_batches_per_sec=12.5317 test_eval_targets_per_sec=43096.4561 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+[5/10] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, bsarec_alpha=0.7, bsarec_c=7, embedding_size=128, hidden_dropout_prob=0.05, hidden_size=64, learning_rate=0.0004702, num_heads=1, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.290000  best=0.297000  (early_stop@50, trial=3.5min, avg=3.5min/trial, total=17.5min, ETA=17.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.290000 cur_best_hr10=0.335300 cur_test_mrr20=0.286300 cur_test_hr10=0.331500 avg_epoch_time_sec=4.2157 test_eval_time_sec=0.0789 test_eval_batches_per_sec=12.6817 test_eval_targets_per_sec=43612.4627 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+[6/10] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, bsarec_alpha=0.35, bsarec_c=5, embedding_size=128, hidden_dropout_prob=0.05, hidden_size=64, learning_rate=0.0003004, num_heads=2, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.279100  best=0.297000  (full@60, trial=13.7min, avg=5.2min/trial, total=31.4min, ETA=20.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.279100 cur_best_hr10=0.321100 cur_test_mrr20=0.266800 cur_test_hr10=0.311200 avg_epoch_time_sec=13.7228 test_eval_time_sec=0.0808 test_eval_batches_per_sec=12.3823 test_eval_targets_per_sec=42582.7093 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+[7/10] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, bsarec_alpha=0.7, bsarec_c=2, embedding_size=128, hidden_dropout_prob=0.15, hidden_size=64, learning_rate=0.0001226, num_heads=4, num_layers=3, weight_decay=1e-06
+  -> MRR@20=0.000500  best=0.297000  (early_stop@8, trial=1.8min, avg=4.8min/trial, total=33.4min, ETA=14.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.000500 cur_best_hr10=0.000600 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 avg_epoch_time_sec=13.7952 test_eval_time_sec=0.0845 test_eval_batches_per_sec=11.8413 test_eval_targets_per_sec=40722.3178 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+[8/10] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, bsarec_alpha=0.7, bsarec_c=5, embedding_size=64, hidden_dropout_prob=0.15, hidden_size=160, learning_rate=0.0004702, num_heads=1, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.279100  best=0.297000  (full@60, trial=10.2min, avg=5.4min/trial, total=43.6min, ETA=10.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.279100 cur_best_hr10=0.330800 cur_test_mrr20=0.278000 cur_test_hr10=0.323900 avg_epoch_time_sec=10.1793 test_eval_time_sec=0.0835 test_eval_batches_per_sec=11.9704 test_eval_targets_per_sec=41166.0444 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+[9/10] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, bsarec_alpha=0.7, bsarec_c=5, embedding_size=64, hidden_dropout_prob=0.05, hidden_size=128, learning_rate=0.0003004, num_heads=1, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.144000  best=0.297000  (full@60, trial=10.6min, avg=6.0min/trial, total=54.2min, ETA=6.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.144000 cur_best_hr10=0.177000 cur_test_mrr20=0.137900 cur_test_hr10=0.171800 avg_epoch_time_sec=10.6015 test_eval_time_sec=0.0847 test_eval_batches_per_sec=11.8129 test_eval_targets_per_sec=40624.4866 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+[10/10] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, bsarec_alpha=0.7, bsarec_c=3, embedding_size=64, hidden_dropout_prob=0.05, hidden_size=64, learning_rate=0.0004702, num_heads=4, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.226200  best=0.297000  (full@60, trial=6.3min, avg=6.1min/trial, total=1.01h, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.226200 cur_best_hr10=0.265800 cur_test_mrr20=0.219800 cur_test_hr10=0.257400 avg_epoch_time_sec=6.2862 test_eval_time_sec=0.0770 test_eval_batches_per_sec=12.9879 test_eval_targets_per_sec=44665.2984 run_best_mrr20=0.297000 run_best_hr10=0.333700 run_test_mrr20=0.287000 run_test_hr10=0.334100
+
+=================================================================
+  DONE  |  BSARec x lastfm0.03
+  Best MRR@20 = 0.297000  |  10/10 trials OK
+  Best HR@10  = 0.333700
+  Test MRR@20 = 0.287000  (best-valid checkpoint)
+  Test HR@10  = 0.334100  (best-valid checkpoint)
+  Avg epoch time = 3.409 sec/epoch
+  Final test eval = 0.079 sec | batches/s=12.644 | targets/s=43484.403
+[RUN_METRICS] best_valid_mrr20=0.297000 best_valid_hr10=0.333700 test_mrr20=0.287000 test_hr10=0.334100 avg_epoch_time_sec=3.4087 test_eval_time_sec=0.0791 test_eval_batches_per_sec=12.6445 test_eval_targets_per_sec=43484.4034
+  Total time: 60.6 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 10
+    attn_dropout_prob: 0.15
+    bsarec_alpha: 0.35
+    bsarec_c: 5
+    embedding_size: 128
+    hidden_dropout_prob: 0.12
+    hidden_size: 64
+    learning_rate: 0.00073587
+    num_heads: 2
+    num_layers: 2
+    weight_decay: 1e-05
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/lastfm0.03_BSARec_s2_lastfm0_03_bsarec_20260418_092719_604178_pid1675680.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage2_focus_search/S2/lastfm0.03/BSARec/lastfm0.03_BSARec_s2_lastfm0_03_bsarec_20260418_092719_604178_pid1675680.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage2_focus_search/S2/lastfm0.03/BSARec/lastfm0.03_BSARec_s2_lastfm0_03_bsarec_20260418_092719_604178_pid1675680_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage2_focus_search/S2/lastfm0.03/BSARec/lastfm0.03_BSARec_s2_lastfm0_03_bsarec_20260418_092719_604178_pid1675680_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1675680 start=2026-04-18T09:27:15 end=2026-04-18T10:27:58

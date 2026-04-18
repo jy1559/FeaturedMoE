@@ -1,0 +1,237 @@
+# job_id=S1_RETAIL_ROCKET_SASREC dataset=retail_rocket model=sasrec stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --search-algo tpe --max-evals 24 --tune-epochs 35 --tune-patience 4 --seed 610023 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_RETAIL_ROCKET_SASREC model=sasrec dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=0 log_wandb=false show_progress=false ++seed=610023 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00024152,0.000378,0.00059161,0.00092592,0.00144914] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-06,1e-05,5e-05,0.0001] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[64,96,128,160] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[64,96,128,160] ++search_space_type_overrides.embedding_size=choice ++search.num_layers=[1,2,3] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,2,4] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.attn_dropout_prob=choice ++search.inner_size=[256] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.15] ++search_space_type_overrides.dropout_ratio=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1656448 ts=2026-04-18T06:54:04
+[UniqueChoice] enabled: dedupe/remap duplicates across 184320 finite combos
+
+=================================================================
+  Hyperopt  |  SASRec x retail_rocket
+  max_evals=24  epochs=35  patience=4  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/8192/8192
+  track=final_experiment  axis=stage1_broad_search  phase=S1_RETAIL_ROCKET_SASREC
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, embedding_size, hidden_dropout_prob, hidden_size, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 9  (~184320 discrete combos)
+Tuned groups: 9
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.12, 0.15, 0.2]                    -> choice
+    learning_rate                   [0.00024152, 0.000378, 0.00059161, 0.00092592, 0.00144914]  -> choice
+    weight_decay                    [1e-06, 1e-05, 5e-05, 0.0001]             -> choice
+  [model_core]
+    attn_dropout_prob               [0.1, 0.12, 0.15, 0.2]                    -> choice
+    embedding_size                  [64, 96, 128, 160]                        -> choice
+    hidden_size                     [64, 96, 128, 160]                        -> choice
+    num_heads                       [1, 2, 4]                                 -> choice
+    num_layers                      [1, 2, 3]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30, 50]                          -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    dropout_ratio                   0.15                                    
+    inner_size                      256                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.2, embedding_size=64, hidden_dropout_prob=0.12, hidden_size=64, learning_rate=0.001449, num_heads=4, num_layers=1, weight_decay=5e-05
+  -> MRR@20=0.348700  best=0.348700  (early_stop@25, trial=4.3min, avg=4.6min/trial, total=4.6min, ETA=1.78h)
+[TRIAL_METRICS] cur_best_mrr20=0.348700 cur_best_hr10=0.557600 cur_test_mrr20=0.347900 cur_test_hr10=0.542900 avg_epoch_time_sec=10.3108 test_eval_time_sec=0.5453 test_eval_batches_per_sec=5.5011 test_eval_targets_per_sec=38471.1557 run_best_mrr20=0.348700 run_best_hr10=0.557600 run_test_mrr20=0.347900 run_test_hr10=0.542900
+
+[2/24] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.2, embedding_size=96, hidden_dropout_prob=0.1, hidden_size=64, learning_rate=0.001449, num_heads=2, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.356900  best=0.356900  (early_stop@18, trial=2.9min, avg=3.9min/trial, total=7.8min, ETA=1.43h)
+[TRIAL_METRICS] cur_best_mrr20=0.356900 cur_best_hr10=0.560500 cur_test_mrr20=0.354700 cur_test_hr10=0.548700 avg_epoch_time_sec=9.5940 test_eval_time_sec=0.5260 test_eval_batches_per_sec=5.7031 test_eval_targets_per_sec=39883.5255 run_best_mrr20=0.356900 run_best_hr10=0.560500 run_test_mrr20=0.354700 run_test_hr10=0.548700
+
+[3/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.2, embedding_size=64, hidden_dropout_prob=0.15, hidden_size=128, learning_rate=0.0002415, num_heads=4, num_layers=1, weight_decay=1e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[4/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, embedding_size=64, hidden_dropout_prob=0.1, hidden_size=128, learning_rate=0.0002415, num_heads=1, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.352500  best=0.356900  (full@35, trial=6.8min, avg=3.7min/trial, total=14.8min, ETA=1.24h)
+[TRIAL_METRICS] cur_best_mrr20=0.352500 cur_best_hr10=0.555900 cur_test_mrr20=0.346200 cur_test_hr10=0.539100 avg_epoch_time_sec=11.6072 test_eval_time_sec=0.5579 test_eval_batches_per_sec=5.3774 test_eval_targets_per_sec=37606.0963 run_best_mrr20=0.356900 run_best_hr10=0.560500 run_test_mrr20=0.354700 run_test_hr10=0.548700
+
+[5/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.1, embedding_size=64, hidden_dropout_prob=0.1, hidden_size=128, learning_rate=0.0002415, num_heads=1, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.366400  best=0.366400  (full@35, trial=9.3min, avg=4.9min/trial, total=24.4min, ETA=1.55h)
+[TRIAL_METRICS] cur_best_mrr20=0.366400 cur_best_hr10=0.567800 cur_test_mrr20=0.365000 cur_test_hr10=0.555700 avg_epoch_time_sec=15.9637 test_eval_time_sec=0.5997 test_eval_batches_per_sec=5.0027 test_eval_targets_per_sec=34985.7181 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[6/24] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, embedding_size=96, hidden_dropout_prob=0.1, hidden_size=128, learning_rate=0.000378, num_heads=1, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.350500  best=0.366400  (early_stop@31, trial=5.3min, avg=5.0min/trial, total=30.0min, ETA=1.50h)
+[TRIAL_METRICS] cur_best_mrr20=0.350500 cur_best_hr10=0.558800 cur_test_mrr20=0.346400 cur_test_hr10=0.542400 avg_epoch_time_sec=10.1775 test_eval_time_sec=0.5409 test_eval_batches_per_sec=5.5468 test_eval_targets_per_sec=38790.7122 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[7/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, embedding_size=160, hidden_dropout_prob=0.12, hidden_size=96, learning_rate=0.000378, num_heads=1, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.363100  best=0.366400  (early_stop@33, trial=8.2min, avg=5.5min/trial, total=38.4min, ETA=1.56h)
+[TRIAL_METRICS] cur_best_mrr20=0.363100 cur_best_hr10=0.568300 cur_test_mrr20=0.360400 cur_test_hr10=0.550300 avg_epoch_time_sec=14.8606 test_eval_time_sec=0.5840 test_eval_batches_per_sec=5.1367 test_eval_targets_per_sec=35922.3483 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[8/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.1, embedding_size=128, hidden_dropout_prob=0.2, hidden_size=64, learning_rate=0.0009259, num_heads=1, num_layers=3, weight_decay=0.0001
+  -> MRR@20=0.346800  best=0.366400  (full@35, trial=7.5min, avg=5.7min/trial, total=46.0min, ETA=1.53h)
+[TRIAL_METRICS] cur_best_mrr20=0.346800 cur_best_hr10=0.556600 cur_test_mrr20=0.342600 cur_test_hr10=0.545600 avg_epoch_time_sec=12.8777 test_eval_time_sec=0.5734 test_eval_batches_per_sec=5.2323 test_eval_targets_per_sec=36590.9279 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[9/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.2, embedding_size=160, hidden_dropout_prob=0.15, hidden_size=96, learning_rate=0.000378, num_heads=2, num_layers=2, weight_decay=5e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[10/24] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, embedding_size=128, hidden_dropout_prob=0.2, hidden_size=64, learning_rate=0.0002415, num_heads=1, num_layers=3, weight_decay=1e-06
+  -> MRR@20=0.323300  best=0.366400  (full@35, trial=5.6min, avg=5.2min/trial, total=51.9min, ETA=1.21h)
+[TRIAL_METRICS] cur_best_mrr20=0.323300 cur_best_hr10=0.537700 cur_test_mrr20=0.315100 cur_test_hr10=0.520000 avg_epoch_time_sec=9.6439 test_eval_time_sec=0.5319 test_eval_batches_per_sec=5.6402 test_eval_targets_per_sec=39443.9163 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[11/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, embedding_size=128, hidden_dropout_prob=0.15, hidden_size=128, learning_rate=0.0009259, num_heads=1, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.365500  best=0.366400  (early_stop@12, trial=3.3min, avg=5.0min/trial, total=55.4min, ETA=1.09h)
+[TRIAL_METRICS] cur_best_mrr20=0.365500 cur_best_hr10=0.575600 cur_test_mrr20=0.363800 cur_test_hr10=0.559700 avg_epoch_time_sec=16.1470 test_eval_time_sec=0.6114 test_eval_batches_per_sec=4.9069 test_eval_targets_per_sec=34315.4031 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[12/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, embedding_size=128, hidden_dropout_prob=0.1, hidden_size=96, learning_rate=0.0005916, num_heads=2, num_layers=2, weight_decay=1e-06
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[13/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, embedding_size=160, hidden_dropout_prob=0.15, hidden_size=160, learning_rate=0.0005916, num_heads=2, num_layers=3, weight_decay=5e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[14/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, embedding_size=96, hidden_dropout_prob=0.2, hidden_size=64, learning_rate=0.0002415, num_heads=1, num_layers=3, weight_decay=1e-06
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[15/24] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, embedding_size=128, hidden_dropout_prob=0.1, hidden_size=64, learning_rate=0.0005916, num_heads=4, num_layers=1, weight_decay=0.0001
+  -> MRR@20=0.334300  best=0.366400  (full@35, trial=5.6min, avg=4.1min/trial, total=1.02h, ETA=36.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.334300 cur_best_hr10=0.537600 cur_test_mrr20=0.330600 cur_test_hr10=0.521800 avg_epoch_time_sec=9.5790 test_eval_time_sec=0.5353 test_eval_batches_per_sec=5.6039 test_eval_targets_per_sec=39189.7281 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[16/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, embedding_size=128, hidden_dropout_prob=0.2, hidden_size=96, learning_rate=0.0005916, num_heads=4, num_layers=1, weight_decay=1e-05
+  -> MRR@20=0.364000  best=0.366400  (early_stop@24, trial=5.9min, avg=4.2min/trial, total=1.12h, ETA=33.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.364000 cur_best_hr10=0.573500 cur_test_mrr20=0.360600 cur_test_hr10=0.560700 avg_epoch_time_sec=14.6129 test_eval_time_sec=0.5831 test_eval_batches_per_sec=5.1451 test_eval_targets_per_sec=35981.3372 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[17/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.2, embedding_size=160, hidden_dropout_prob=0.1, hidden_size=64, learning_rate=0.0002415, num_heads=4, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.306900  best=0.366400  (full@35, trial=6.0min, avg=4.3min/trial, total=1.23h, ETA=30.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.306900 cur_best_hr10=0.509900 cur_test_mrr20=0.295100 cur_test_hr10=0.485800 avg_epoch_time_sec=10.2368 test_eval_time_sec=0.5407 test_eval_batches_per_sec=5.5485 test_eval_targets_per_sec=38802.3435 run_best_mrr20=0.366400 run_best_hr10=0.567800 run_test_mrr20=0.365000 run_test_hr10=0.555700
+
+[18/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, embedding_size=128, hidden_dropout_prob=0.12, hidden_size=64, learning_rate=0.001449, num_heads=1, num_layers=2, weight_decay=0.0001
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[19/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, embedding_size=64, hidden_dropout_prob=0.15, hidden_size=160, learning_rate=0.000378, num_heads=4, num_layers=3, weight_decay=1e-06
+  -> MRR@20=0.368700  best=0.368700  (early_stop@20, trial=4.2min, avg=4.1min/trial, total=1.30h, ETA=20.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.368700 cur_best_hr10=0.577100 cur_test_mrr20=0.365300 cur_test_hr10=0.562600 avg_epoch_time_sec=12.6318 test_eval_time_sec=0.5594 test_eval_batches_per_sec=5.3628 test_eval_targets_per_sec=37503.6964 run_best_mrr20=0.368700 run_best_hr10=0.577100 run_test_mrr20=0.365300 run_test_hr10=0.562600
+
+[20/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.2, embedding_size=64, hidden_dropout_prob=0.15, hidden_size=96, learning_rate=0.0005916, num_heads=2, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.353000  best=0.368700  (full@35, trial=8.5min, avg=4.3min/trial, total=1.45h, ETA=17.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.353000 cur_best_hr10=0.559400 cur_test_mrr20=0.347400 cur_test_hr10=0.542500 avg_epoch_time_sec=14.5646 test_eval_time_sec=0.5797 test_eval_batches_per_sec=5.1747 test_eval_targets_per_sec=36188.7226 run_best_mrr20=0.368700 run_best_hr10=0.577100 run_test_mrr20=0.365300 run_test_hr10=0.562600
+
+[21/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, embedding_size=64, hidden_dropout_prob=0.15, hidden_size=160, learning_rate=0.000378, num_heads=4, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.369700  best=0.369700  (early_stop@23, trial=4.9min, avg=4.4min/trial, total=1.53h, ETA=13.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.369700 cur_best_hr10=0.573200 cur_test_mrr20=0.366600 cur_test_hr10=0.559200 avg_epoch_time_sec=12.6529 test_eval_time_sec=0.5602 test_eval_batches_per_sec=5.3552 test_eval_targets_per_sec=37450.4976 run_best_mrr20=0.369700 run_best_hr10=0.573200 run_test_mrr20=0.366600 run_test_hr10=0.559200
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'attn_dropout_prob': 0.1, 'embedding_size': 64, 'hidden_dropout_prob': 0.1, 'hidden_size': 64, 'learning_rate': 0.00024152, 'num_heads': 1, 'num_layers': 1, 'weight_decay': 1e-06}
+
+[22/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, embedding_size=64, hidden_dropout_prob=0.1, hidden_size=64, learning_rate=0.0002415, num_heads=1, num_layers=1, weight_decay=1e-06
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'attn_dropout_prob': 0.1, 'embedding_size': 64, 'hidden_dropout_prob': 0.1, 'hidden_size': 64, 'learning_rate': 0.00024152, 'num_heads': 1, 'num_layers': 1, 'weight_decay': 1e-05}
+
+[23/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, embedding_size=64, hidden_dropout_prob=0.1, hidden_size=64, learning_rate=0.0002415, num_heads=1, num_layers=1, weight_decay=1e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[24/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, embedding_size=64, hidden_dropout_prob=0.15, hidden_size=160, learning_rate=0.000378, num_heads=4, num_layers=3, weight_decay=1e-05
+  -> MRR@20=0.365900  best=0.369700  (early_stop@23, trial=4.9min, avg=4.0min/trial, total=1.61h, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.365900 cur_best_hr10=0.572700 cur_test_mrr20=0.363600 cur_test_hr10=0.557500 avg_epoch_time_sec=12.6208 test_eval_time_sec=0.5640 test_eval_batches_per_sec=5.3194 test_eval_targets_per_sec=37200.2871 run_best_mrr20=0.369700 run_best_hr10=0.573200 run_test_mrr20=0.366600 run_test_hr10=0.559200
+
+=================================================================
+  DONE  |  SASRec x retail_rocket
+  Best MRR@20 = 0.369700  |  16/24 trials OK
+  Best HR@10  = 0.573200
+  Test MRR@20 = 0.366600  (best-valid checkpoint)
+  Test HR@10  = 0.559200  (best-valid checkpoint)
+  Avg epoch time = 12.653 sec/epoch
+  Final test eval = 0.560 sec | batches/s=5.355 | targets/s=37450.498
+[RUN_METRICS] best_valid_mrr20=0.369700 best_valid_hr10=0.573200 test_mrr20=0.366600 test_hr10=0.559200 avg_epoch_time_sec=12.6529 test_eval_time_sec=0.5602 test_eval_batches_per_sec=5.3552 test_eval_targets_per_sec=37450.4976
+  Total time: 96.8 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 30
+    attn_dropout_prob: 0.12
+    embedding_size: 64
+    hidden_dropout_prob: 0.15
+    hidden_size: 160
+    learning_rate: 0.000378
+    num_heads: 4
+    num_layers: 1
+    weight_decay: 1e-06
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/retail_rocket_SASRec_s1_retail_rocket_sasrec_20260418_065404_589355_pid1656448.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage1_broad_search/S1/retail_rocket/SASRec/retail_rocket_SASRec_s1_retail_rocket_sasrec_20260418_065404_589355_pid1656448.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage1_broad_search/S1/retail_rocket/SASRec/retail_rocket_SASRec_s1_retail_rocket_sasrec_20260418_065404_589355_pid1656448_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage1_broad_search/S1/retail_rocket/SASRec/retail_rocket_SASRec_s1_retail_rocket_sasrec_20260418_065404_589355_pid1656448_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1656448 start=2026-04-18T06:54:04 end=2026-04-18T08:30:55

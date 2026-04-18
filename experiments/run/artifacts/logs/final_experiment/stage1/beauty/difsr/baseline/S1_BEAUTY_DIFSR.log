@@ -1,0 +1,266 @@
+# job_id=S1_BEAUTY_DIFSR dataset=beauty model=difsr stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ab --search-algo tpe --max-evals 48 --tune-epochs 35 --tune-patience 4 --seed 610004 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_BEAUTY_DIFSR model=difsr dataset=beauty eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=3 log_wandb=false show_progress=false ++seed=610004 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00016547,0.00025897,0.00040531,0.00063435,0.00099281] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-06,1e-05,5e-05,0.0001] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[96,128,160,192] ++search_space_type_overrides.hidden_size=choice ++search.num_layers=[1,2,3] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,2,4] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.05,0.1,0.12,0.15] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.08,0.1,0.12,0.15] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[96,128,160,192] ++search_space_type_overrides.attribute_hidden_size=choice ++search.fusion_type=["gate","sum","concat"] ++search_space_type_overrides.fusion_type=choice ++search.lambda_attr=[0.08,0.1,0.12,0.14] ++search_space_type_overrides.lambda_attr=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.use_attribute_predictor=[true] ++search_space_type_overrides.use_attribute_predictor=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1646091 ts=2026-04-18T04:31:49
+[UniqueChoice] enabled: dedupe/remap duplicates across 1658880 finite combos
+
+=================================================================
+  Hyperopt  |  DIFSR x beauty
+  max_evals=48  epochs=35  patience=4  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/8192/8192
+  track=final_experiment  axis=stage1_broad_search  phase=S1_BEAUTY_DIFSR
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, attribute_hidden_size, fusion_type, hidden_dropout_prob, hidden_size, lambda_attr, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 11  (~1658880 discrete combos)
+Tuned groups: 11
+  [optimization]
+    hidden_dropout_prob             [0.05, 0.1, 0.12, 0.15]                   -> choice
+    learning_rate                   [0.00016547, 0.00025897, 0.00040531, 0.00063435, 0.00099281]  -> choice
+    weight_decay                    [1e-06, 1e-05, 5e-05, 0.0001]             -> choice
+  [model_core]
+    attn_dropout_prob               [0.08, 0.1, 0.12, 0.15]                   -> choice
+    hidden_size                     [96, 128, 160, 192]                       -> choice
+    num_heads                       [1, 2, 4]                                 -> choice
+    num_layers                      [1, 2, 3]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30]                              -> choice
+    attribute_hidden_size           [96, 128, 160, 192]                       -> choice
+    fusion_type                     ['gate', 'sum', 'concat']                 -> choice
+    lambda_attr                     [0.08, 0.1, 0.12, 0.14]                   -> choice
+Fixed params(singleton/non-list): 4
+Fixed groups: 4
+  [model_core]
+    dropout_ratio                   0.12                                    
+    inner_size                      320                                     
+  [other]
+    selected_features               ['category']                            
+    use_attribute_predictor         True                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.14, learning_rate=0.000259, num_heads=4, num_layers=1, weight_decay=5e-05
+  -> MRR@20=0.000400  best=0.000400  (early_stop@7, trial=2s, avg=4s/trial, total=4s, ETA=3.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.000400 cur_best_hr10=0.000000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 avg_epoch_time_sec=0.2755 test_eval_time_sec=0.0142 test_eval_batches_per_sec=70.3553 test_eval_targets_per_sec=42002.1385 run_best_mrr20=0.000400 run_best_hr10=0.000000 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[2/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=4, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.012500  best=0.012500  (full@35, trial=10s, avg=8s/trial, total=15s, ETA=5.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.012500 cur_best_hr10=0.022100 cur_test_mrr20=0.005800 cur_test_hr10=0.020100 avg_epoch_time_sec=0.2824 test_eval_time_sec=0.0153 test_eval_batches_per_sec=65.2485 test_eval_targets_per_sec=38953.3538 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[3/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, attribute_hidden_size=96, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.14, learning_rate=0.000259, num_heads=1, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.002800  best=0.012500  (early_stop@16, trial=7s, avg=8s/trial, total=23s, ETA=5.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.002800 cur_best_hr10=0.008000 cur_test_mrr20=0.003800 cur_test_hr10=0.005700 avg_epoch_time_sec=0.3925 test_eval_time_sec=0.0142 test_eval_batches_per_sec=70.3801 test_eval_targets_per_sec=42016.9391 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[4/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.08, attribute_hidden_size=160, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=160, lambda_attr=0.1, learning_rate=0.0001655, num_heads=4, num_layers=1, weight_decay=0.0001
+  -> MRR@20=0.000100  best=0.012500  (early_stop@5, trial=2s, avg=6s/trial, total=25s, ETA=4.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.000100 cur_best_hr10=0.000000 cur_test_mrr20=0.000400 cur_test_hr10=0.000000 avg_epoch_time_sec=0.3081 test_eval_time_sec=0.0143 test_eval_batches_per_sec=69.9785 test_eval_targets_per_sec=41777.1909 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[5/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=160, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=160, lambda_attr=0.12, learning_rate=0.0001655, num_heads=4, num_layers=1, weight_decay=5e-05
+  -> MRR@20=0.001500  best=0.012500  (early_stop@8, trial=3s, avg=6s/trial, total=29s, ETA=4.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.001500 cur_best_hr10=0.006000 cur_test_mrr20=0.000100 cur_test_hr10=0.000000 avg_epoch_time_sec=0.3991 test_eval_time_sec=0.0142 test_eval_batches_per_sec=70.1858 test_eval_targets_per_sec=41900.9285 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[6/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=160, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=160, lambda_attr=0.08, learning_rate=0.0009928, num_heads=4, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.004500  best=0.012500  (early_stop@7, trial=4s, avg=6s/trial, total=34s, ETA=3.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.004500 cur_best_hr10=0.016100 cur_test_mrr20=0.002100 cur_test_hr10=0.011500 avg_epoch_time_sec=0.5529 test_eval_time_sec=0.0148 test_eval_batches_per_sec=67.5945 test_eval_targets_per_sec=40353.8942 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[7/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=96, fusion_type=gate, hidden_dropout_prob=0.12, hidden_size=96, lambda_attr=0.12, learning_rate=0.0006343, num_heads=4, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.002400  best=0.012500  (early_stop@8, trial=6s, avg=6s/trial, total=40s, ETA=3.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.002400 cur_best_hr10=0.008000 cur_test_mrr20=0.001400 cur_test_hr10=0.002900 avg_epoch_time_sec=0.7566 test_eval_time_sec=0.0284 test_eval_batches_per_sec=35.2646 test_eval_targets_per_sec=21052.9813 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[8/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.08, attribute_hidden_size=160, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=192, lambda_attr=0.12, learning_rate=0.000259, num_heads=4, num_layers=2, weight_decay=0.0001
+  -> MRR@20=0.000200  best=0.012500  (early_stop@5, trial=3s, avg=5s/trial, total=44s, ETA=3.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.000200 cur_best_hr10=0.002000 cur_test_mrr20=0.001100 cur_test_hr10=0.002900 avg_epoch_time_sec=0.4698 test_eval_time_sec=0.0148 test_eval_batches_per_sec=67.5814 test_eval_targets_per_sec=40346.0917 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[9/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=96, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.12, learning_rate=0.0006343, num_heads=4, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.004000  best=0.012500  (early_stop@7, trial=4s, avg=5s/trial, total=48s, ETA=3.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.004000 cur_best_hr10=0.004000 cur_test_mrr20=0.000800 cur_test_hr10=0.005700 avg_epoch_time_sec=0.5275 test_eval_time_sec=0.0149 test_eval_batches_per_sec=67.2498 test_eval_targets_per_sec=40148.1423 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[10/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=160, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.12, learning_rate=0.0001655, num_heads=4, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.001300  best=0.012500  (early_stop@5, trial=3s, avg=5s/trial, total=52s, ETA=3.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.001300 cur_best_hr10=0.006000 cur_test_mrr20=0.000100 cur_test_hr10=0.000000 avg_epoch_time_sec=0.6460 test_eval_time_sec=0.0152 test_eval_batches_per_sec=65.9337 test_eval_targets_per_sec=39362.3965 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[11/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, attribute_hidden_size=96, fusion_type=gate, hidden_dropout_prob=0.12, hidden_size=96, lambda_attr=0.14, learning_rate=0.0001655, num_heads=2, num_layers=1, weight_decay=5e-05
+  -> MRR@20=0.000500  best=0.012500  (early_stop@5, trial=2s, avg=5s/trial, total=54s, ETA=3.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.000500 cur_best_hr10=0.002000 cur_test_mrr20=0.000500 cur_test_hr10=0.000000 avg_epoch_time_sec=0.2879 test_eval_time_sec=0.0141 test_eval_batches_per_sec=71.0141 test_eval_targets_per_sec=42395.3996 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[12/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=192, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=96, lambda_attr=0.12, learning_rate=0.0009928, num_heads=2, num_layers=1, weight_decay=0.0001
+  -> MRR@20=0.000700  best=0.012500  (early_stop@5, trial=2s, avg=5s/trial, total=57s, ETA=2.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.000700 cur_best_hr10=0.004000 cur_test_mrr20=0.000300 cur_test_hr10=0.002900 avg_epoch_time_sec=0.3468 test_eval_time_sec=0.0141 test_eval_batches_per_sec=71.1200 test_eval_targets_per_sec=42458.6602 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[13/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, attribute_hidden_size=192, fusion_type=gate, hidden_dropout_prob=0.12, hidden_size=96, lambda_attr=0.14, learning_rate=0.0004053, num_heads=4, num_layers=3, weight_decay=1e-05
+  -> MRR@20=0.000300  best=0.012500  (early_stop@5, trial=4s, avg=5s/trial, total=1.0min, ETA=2.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.000300 cur_best_hr10=0.002000 cur_test_mrr20=0.000300 cur_test_hr10=0.002900 avg_epoch_time_sec=0.6653 test_eval_time_sec=0.0161 test_eval_batches_per_sec=62.2531 test_eval_targets_per_sec=37165.1130 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[14/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=128, lambda_attr=0.14, learning_rate=0.0001655, num_heads=2, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.001200  best=0.012500  (early_stop@5, trial=3s, avg=5s/trial, total=1.1min, ETA=2.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.001200 cur_best_hr10=0.002000 cur_test_mrr20=0.000300 cur_test_hr10=0.000000 avg_epoch_time_sec=0.5177 test_eval_time_sec=0.0148 test_eval_batches_per_sec=67.3589 test_eval_targets_per_sec=40213.2634 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[15/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=96, lambda_attr=0.08, learning_rate=0.0009928, num_heads=1, num_layers=1, weight_decay=0.0001
+  -> MRR@20=0.000400  best=0.012500  (early_stop@5, trial=2s, avg=4s/trial, total=1.1min, ETA=2.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.000400 cur_best_hr10=0.002000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 avg_epoch_time_sec=0.3570 test_eval_time_sec=0.0140 test_eval_batches_per_sec=71.6669 test_eval_targets_per_sec=42785.1258 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[16/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.08, attribute_hidden_size=96, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.14, learning_rate=0.0001655, num_heads=1, num_layers=1, weight_decay=1e-05
+  -> MRR@20=0.001000  best=0.012500  (early_stop@5, trial=2s, avg=4s/trial, total=1.2min, ETA=2.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.001000 cur_best_hr10=0.006000 cur_test_mrr20=0.000500 cur_test_hr10=0.000000 avg_epoch_time_sec=0.3482 test_eval_time_sec=0.0136 test_eval_batches_per_sec=73.6192 test_eval_targets_per_sec=43950.6343 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[17/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.14, learning_rate=0.0001655, num_heads=2, num_layers=1, weight_decay=5e-05
+  -> MRR@20=0.000100  best=0.012500  (early_stop@5, trial=2s, avg=4s/trial, total=1.2min, ETA=2.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.000100 cur_best_hr10=0.000000 cur_test_mrr20=0.000700 cur_test_hr10=0.002900 avg_epoch_time_sec=0.3197 test_eval_time_sec=0.0140 test_eval_batches_per_sec=71.2384 test_eval_targets_per_sec=42529.3321 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[18/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=160, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=160, lambda_attr=0.1, learning_rate=0.0001655, num_heads=2, num_layers=3, weight_decay=1e-06
+  -> MRR@20=0.000400  best=0.012500  (early_stop@5, trial=4s, avg=4s/trial, total=1.3min, ETA=2.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.000400 cur_best_hr10=0.002000 cur_test_mrr20=0.000200 cur_test_hr10=0.000000 avg_epoch_time_sec=0.8349 test_eval_time_sec=0.0159 test_eval_batches_per_sec=62.7749 test_eval_targets_per_sec=37476.6069 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[19/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=96, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.08, learning_rate=0.0006343, num_heads=2, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.002500  best=0.012500  (early_stop@5, trial=2s, avg=4s/trial, total=1.3min, ETA=2.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.002500 cur_best_hr10=0.006000 cur_test_mrr20=0.000400 cur_test_hr10=0.002900 avg_epoch_time_sec=0.3404 test_eval_time_sec=0.0139 test_eval_batches_per_sec=72.1626 test_eval_targets_per_sec=43081.0434 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[20/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=192, fusion_type=concat, hidden_dropout_prob=0.15, hidden_size=128, lambda_attr=0.1, learning_rate=0.0001655, num_heads=2, num_layers=3, weight_decay=1e-06
+  -> MRR@20=0.000600  best=0.012500  (early_stop@11, trial=10s, avg=5s/trial, total=1.5min, ETA=2.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.000600 cur_best_hr10=0.002000 cur_test_mrr20=0.000300 cur_test_hr10=0.002900 avg_epoch_time_sec=0.8634 test_eval_time_sec=0.0163 test_eval_batches_per_sec=61.2093 test_eval_targets_per_sec=36541.9340 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[21/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=160, lambda_attr=0.08, learning_rate=0.0009928, num_heads=4, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.002000  best=0.012500  (early_stop@6, trial=4s, avg=5s/trial, total=1.6min, ETA=2.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.002000 cur_best_hr10=0.008000 cur_test_mrr20=0.002200 cur_test_hr10=0.008600 avg_epoch_time_sec=0.5593 test_eval_time_sec=0.0152 test_eval_batches_per_sec=65.7188 test_eval_targets_per_sec=39234.1119 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[22/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=4, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.009600  best=0.012500  (early_stop@18, trial=11s, avg=5s/trial, total=1.8min, ETA=2.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.009600 cur_best_hr10=0.020100 cur_test_mrr20=0.008100 cur_test_hr10=0.011500 avg_epoch_time_sec=0.5777 test_eval_time_sec=0.0150 test_eval_batches_per_sec=66.8692 test_eval_targets_per_sec=39920.9152 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[23/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=4, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.005700  best=0.012500  (early_stop@10, trial=6s, avg=5s/trial, total=1.9min, ETA=2.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.005700 cur_best_hr10=0.008000 cur_test_mrr20=0.000400 cur_test_hr10=0.000000 avg_epoch_time_sec=0.6124 test_eval_time_sec=0.0155 test_eval_batches_per_sec=64.3940 test_eval_targets_per_sec=38443.2254 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[24/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.12, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=1, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.001700  best=0.012500  (early_stop@7, trial=4s, avg=5s/trial, total=2.0min, ETA=2.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.001700 cur_best_hr10=0.006000 cur_test_mrr20=0.002300 cur_test_hr10=0.005700 avg_epoch_time_sec=0.5492 test_eval_time_sec=0.0150 test_eval_batches_per_sec=66.8096 test_eval_targets_per_sec=39885.3056 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[25/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=4, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.002000  best=0.012500  (early_stop@10, trial=7s, avg=5s/trial, total=2.1min, ETA=1.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.002000 cur_best_hr10=0.002000 cur_test_mrr20=0.003400 cur_test_hr10=0.005700 avg_epoch_time_sec=0.6972 test_eval_time_sec=0.0149 test_eval_batches_per_sec=67.2908 test_eval_targets_per_sec=40172.6186 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[26/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.12, attribute_hidden_size=128, fusion_type=concat, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0004053, num_heads=4, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.006800  best=0.012500  (early_stop@11, trial=7s, avg=5s/trial, total=2.2min, ETA=1.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.006800 cur_best_hr10=0.012000 cur_test_mrr20=0.005100 cur_test_hr10=0.011500 avg_epoch_time_sec=0.5890 test_eval_time_sec=0.0152 test_eval_batches_per_sec=65.9969 test_eval_targets_per_sec=39400.1776 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[27/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=4, num_layers=3, weight_decay=1e-06
+  -> MRR@20=0.003000  best=0.012500  (early_stop@12, trial=13s, avg=5s/trial, total=2.4min, ETA=1.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.003000 cur_best_hr10=0.008000 cur_test_mrr20=0.003600 cur_test_hr10=0.005700 avg_epoch_time_sec=1.0373 test_eval_time_sec=0.0166 test_eval_batches_per_sec=60.2751 test_eval_targets_per_sec=35984.2423 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[28/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=1, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.001000  best=0.012500  (early_stop@6, trial=2s, avg=5s/trial, total=2.5min, ETA=1.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.001000 cur_best_hr10=0.004000 cur_test_mrr20=0.000200 cur_test_hr10=0.000000 avg_epoch_time_sec=0.3411 test_eval_time_sec=0.0137 test_eval_batches_per_sec=72.9965 test_eval_targets_per_sec=43578.8908 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[29/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0004053, num_heads=4, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.000600  best=0.012500  (early_stop@5, trial=4s, avg=5s/trial, total=2.6min, ETA=1.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.000600 cur_best_hr10=0.002000 cur_test_mrr20=0.000200 cur_test_hr10=0.000000 avg_epoch_time_sec=0.7241 test_eval_time_sec=0.0156 test_eval_batches_per_sec=64.1135 test_eval_targets_per_sec=38275.7488 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[30/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=4, num_layers=1, weight_decay=0.0001
+  -> MRR@20=0.000600  best=0.012500  (early_stop@7, trial=3s, avg=5s/trial, total=2.6min, ETA=1.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.000600 cur_best_hr10=0.002000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 avg_epoch_time_sec=0.4617 test_eval_time_sec=0.0141 test_eval_batches_per_sec=71.0502 test_eval_targets_per_sec=42416.9446 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[31/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=192, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.000259, num_heads=4, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.000400  best=0.012500  (early_stop@5, trial=2s, avg=5s/trial, total=2.7min, ETA=1.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.000400 cur_best_hr10=0.000000 cur_test_mrr20=0.001700 cur_test_hr10=0.005700 avg_epoch_time_sec=0.3596 test_eval_time_sec=0.0140 test_eval_batches_per_sec=71.5410 test_eval_targets_per_sec=42709.9592 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[32/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, num_heads=1, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.002000  best=0.012500  (early_stop@10, trial=6s, avg=5s/trial, total=2.8min, ETA=1.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.002000 cur_best_hr10=0.002000 cur_test_mrr20=0.003600 cur_test_hr10=0.008600 avg_epoch_time_sec=0.5959 test_eval_time_sec=0.0146 test_eval_batches_per_sec=68.3289 test_eval_targets_per_sec=40792.3806 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[33/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=concat, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.1, learning_rate=0.000259, num_heads=4, num_layers=1, weight_decay=5e-05
+  -> MRR@20=0.000300  best=0.012500  (early_stop@6, trial=2s, avg=5s/trial, total=2.8min, ETA=1.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.000300 cur_best_hr10=0.000000 cur_test_mrr20=0.000700 cur_test_hr10=0.002900 avg_epoch_time_sec=0.3772 test_eval_time_sec=0.0139 test_eval_batches_per_sec=72.1427 test_eval_targets_per_sec=43069.1874 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[34/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.08, learning_rate=0.0006343, num_heads=4, num_layers=3, weight_decay=1e-06
+  -> MRR@20=0.002800  best=0.012500  (early_stop@6, trial=6s, avg=5s/trial, total=2.9min, ETA=1.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.002800 cur_best_hr10=0.006000 cur_test_mrr20=0.000500 cur_test_hr10=0.002900 avg_epoch_time_sec=0.9067 test_eval_time_sec=0.0157 test_eval_batches_per_sec=63.6726 test_eval_targets_per_sec=38012.5315 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[35/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=192, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=160, lambda_attr=0.1, learning_rate=0.0006343, num_heads=4, num_layers=1, weight_decay=1e-05
+  -> MRR@20=0.002000  best=0.012500  (early_stop@10, trial=4s, avg=5s/trial, total=3.0min, ETA=1.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.002000 cur_best_hr10=0.002000 cur_test_mrr20=0.000700 cur_test_hr10=0.002900 avg_epoch_time_sec=0.3668 test_eval_time_sec=0.0140 test_eval_batches_per_sec=71.4715 test_eval_targets_per_sec=42668.4756 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[36/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.1, learning_rate=0.0004053, num_heads=4, num_layers=2, weight_decay=0.0001
+  -> MRR@20=0.000200  best=0.012500  (early_stop@5, trial=3s, avg=5s/trial, total=3.1min, ETA=1.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.000200 cur_best_hr10=0.000000 cur_test_mrr20=0.001000 cur_test_hr10=0.002900 avg_epoch_time_sec=0.4764 test_eval_time_sec=0.0148 test_eval_batches_per_sec=67.4977 test_eval_targets_per_sec=40296.0973 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[37/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.12, hidden_size=160, lambda_attr=0.1, learning_rate=0.000259, num_heads=1, num_layers=1, weight_decay=5e-05
+  -> MRR@20=0.003600  best=0.012500  (early_stop@15, trial=6s, avg=5s/trial, total=3.2min, ETA=57s)
+[TRIAL_METRICS] cur_best_mrr20=0.003600 cur_best_hr10=0.012000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 avg_epoch_time_sec=0.4105 test_eval_time_sec=0.0142 test_eval_batches_per_sec=70.4534 test_eval_targets_per_sec=42060.6972 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[38/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.08, attribute_hidden_size=96, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.12, learning_rate=0.0006343, num_heads=4, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.001400  best=0.012500  (early_stop@9, trial=6s, avg=5s/trial, total=3.3min, ETA=52s)
+[TRIAL_METRICS] cur_best_mrr20=0.001400 cur_best_hr10=0.006000 cur_test_mrr20=0.000800 cur_test_hr10=0.002900 avg_epoch_time_sec=0.6705 test_eval_time_sec=0.0147 test_eval_batches_per_sec=67.8240 test_eval_targets_per_sec=40490.9282 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[39/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, attribute_hidden_size=160, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=96, lambda_attr=0.08, learning_rate=0.0006343, num_heads=4, num_layers=3, weight_decay=1e-05
+  -> MRR@20=0.004000  best=0.012500  (early_stop@14, trial=10s, avg=5s/trial, total=3.5min, ETA=48s)
+[TRIAL_METRICS] cur_best_mrr20=0.004000 cur_best_hr10=0.004000 cur_test_mrr20=0.000300 cur_test_hr10=0.000000 avg_epoch_time_sec=0.6686 test_eval_time_sec=0.0159 test_eval_batches_per_sec=62.7815 test_eval_targets_per_sec=37480.5336 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[40/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=192, lambda_attr=0.12, learning_rate=0.0009928, num_heads=4, num_layers=2, weight_decay=5e-05
+  -> MRR@20=0.007900  best=0.012500  (early_stop@18, trial=10s, avg=5s/trial, total=3.6min, ETA=44s)
+[TRIAL_METRICS] cur_best_mrr20=0.007900 cur_best_hr10=0.018100 cur_test_mrr20=0.003900 cur_test_hr10=0.011500 avg_epoch_time_sec=0.5664 test_eval_time_sec=0.0147 test_eval_batches_per_sec=67.9284 test_eval_targets_per_sec=40553.2259 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[41/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=192, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=160, lambda_attr=0.1, learning_rate=0.000259, num_heads=4, num_layers=1, weight_decay=0.0001
+  -> MRR@20=0.000800  best=0.012500  (early_stop@8, trial=4s, avg=5s/trial, total=3.7min, ETA=38s)
+[TRIAL_METRICS] cur_best_mrr20=0.000800 cur_best_hr10=0.002000 cur_test_mrr20=0.000600 cur_test_hr10=0.002900 avg_epoch_time_sec=0.4642 test_eval_time_sec=0.0146 test_eval_batches_per_sec=68.3891 test_eval_targets_per_sec=40828.2975 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[42/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, attribute_hidden_size=96, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=96, lambda_attr=0.14, learning_rate=0.0006343, num_heads=4, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.001100  best=0.012500  (early_stop@8, trial=5s, avg=5s/trial, total=3.8min, ETA=33s)
+[TRIAL_METRICS] cur_best_mrr20=0.001100 cur_best_hr10=0.004000 cur_test_mrr20=0.001900 cur_test_hr10=0.002900 avg_epoch_time_sec=0.5724 test_eval_time_sec=0.0149 test_eval_batches_per_sec=67.2984 test_eval_targets_per_sec=40177.1306 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[43/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.12, hidden_size=192, lambda_attr=0.12, learning_rate=0.0004053, num_heads=1, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.000300  best=0.012500  (early_stop@9, trial=4s, avg=5s/trial, total=3.9min, ETA=27s)
+[TRIAL_METRICS] cur_best_mrr20=0.000300 cur_best_hr10=0.000000 cur_test_mrr20=0.001900 cur_test_hr10=0.002900 avg_epoch_time_sec=0.4435 test_eval_time_sec=0.0140 test_eval_batches_per_sec=71.6240 test_eval_targets_per_sec=42759.5541 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[44/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.08, attribute_hidden_size=128, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.1, learning_rate=0.0009928, num_heads=4, num_layers=3, weight_decay=1e-05
+  -> MRR@20=0.004000  best=0.012500  (early_stop@15, trial=14s, avg=6s/trial, total=4.2min, ETA=23s)
+[TRIAL_METRICS] cur_best_mrr20=0.004000 cur_best_hr10=0.010000 cur_test_mrr20=0.000800 cur_test_hr10=0.002900 avg_epoch_time_sec=0.9320 test_eval_time_sec=0.0160 test_eval_batches_per_sec=62.4952 test_eval_targets_per_sec=37309.6446 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[45/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.14, learning_rate=0.0006343, num_heads=2, num_layers=1, weight_decay=0.0001
+  -> MRR@20=0.000500  best=0.012500  (early_stop@10, trial=4s, avg=6s/trial, total=4.3min, ETA=17s)
+[TRIAL_METRICS] cur_best_mrr20=0.000500 cur_best_hr10=0.004000 cur_test_mrr20=0.000400 cur_test_hr10=0.002900 avg_epoch_time_sec=0.3550 test_eval_time_sec=0.0137 test_eval_batches_per_sec=73.1926 test_eval_targets_per_sec=43696.0036 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[46/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=96, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.08, learning_rate=0.0006343, num_heads=4, num_layers=2, weight_decay=5e-05
+  -> MRR@20=0.002500  best=0.012500  (early_stop@7, trial=4s, avg=6s/trial, total=4.3min, ETA=11s)
+[TRIAL_METRICS] cur_best_mrr20=0.002500 cur_best_hr10=0.006000 cur_test_mrr20=0.000500 cur_test_hr10=0.002900 avg_epoch_time_sec=0.6001 test_eval_time_sec=0.0152 test_eval_batches_per_sec=65.8819 test_eval_targets_per_sec=39331.4823 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[47/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.08, attribute_hidden_size=160, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=128, lambda_attr=0.12, learning_rate=0.000259, num_heads=2, num_layers=1, weight_decay=1e-06
+  -> MRR@20=0.001100  best=0.012500  (early_stop@5, trial=2s, avg=6s/trial, total=4.4min, ETA=6s)
+[TRIAL_METRICS] cur_best_mrr20=0.001100 cur_best_hr10=0.004000 cur_test_mrr20=0.000300 cur_test_hr10=0.000000 avg_epoch_time_sec=0.3597 test_eval_time_sec=0.0139 test_eval_batches_per_sec=71.8867 test_eval_targets_per_sec=42916.3865 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+[48/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=192, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=160, lambda_attr=0.1, learning_rate=0.0009928, num_heads=1, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.001500  best=0.012500  (early_stop@10, trial=6s, avg=6s/trial, total=4.5min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.001500 cur_best_hr10=0.004000 cur_test_mrr20=0.000300 cur_test_hr10=0.000000 avg_epoch_time_sec=0.6214 test_eval_time_sec=0.0151 test_eval_batches_per_sec=66.0479 test_eval_targets_per_sec=39430.5790 run_best_mrr20=0.012500 run_best_hr10=0.022100 run_test_mrr20=0.005800 run_test_hr10=0.020100
+
+=================================================================
+  DONE  |  DIFSR x beauty
+  Best MRR@20 = 0.012500  |  48/48 trials OK
+  Best HR@10  = 0.022100
+  Test MRR@20 = 0.005800  (best-valid checkpoint)
+  Test HR@10  = 0.020100  (best-valid checkpoint)
+  Avg epoch time = 0.282 sec/epoch
+  Final test eval = 0.015 sec | batches/s=65.248 | targets/s=38953.354
+[RUN_METRICS] best_valid_mrr20=0.012500 best_valid_hr10=0.022100 test_mrr20=0.005800 test_hr10=0.020100 avg_epoch_time_sec=0.2824 test_eval_time_sec=0.0153 test_eval_batches_per_sec=65.2485 test_eval_targets_per_sec=38953.3538
+  Total time: 4.5 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 30
+    attn_dropout_prob: 0.15
+    attribute_hidden_size: 128
+    fusion_type: gate
+    hidden_dropout_prob: 0.05
+    hidden_size: 192
+    lambda_attr: 0.1
+    learning_rate: 0.00063435
+    num_heads: 4
+    num_layers: 1
+    weight_decay: 1e-06
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/beauty_DIFSR_s1_beauty_difsr_20260418_043151_969449_pid1646091.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage1_broad_search/S1/beauty/DIFSR/beauty_DIFSR_s1_beauty_difsr_20260418_043151_969449_pid1646091.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage1_broad_search/S1/beauty/DIFSR/beauty_DIFSR_s1_beauty_difsr_20260418_043151_969449_pid1646091_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage1_broad_search/S1/beauty/DIFSR/beauty_DIFSR_s1_beauty_difsr_20260418_043151_969449_pid1646091_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1646091 start=2026-04-18T04:31:49 end=2026-04-18T04:36:22

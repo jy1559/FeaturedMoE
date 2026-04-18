@@ -1,0 +1,367 @@
+RouteRec v4 final revision memo
+================================
+
+Goal
+----
+Use v4 as the base draft, but absorb the strongest clarity/organization gains from v3.
+The target is not a hybrid for its own sake. The target is:
+1) keep v4's stronger experiment spine,
+2) import v3's cleaner method phrasing and appendix organization,
+3) remove all draft / placeholder traces.
+
+Bottom line
+-----------
+Do NOT switch the base to v3 wholesale.
+Instead:
+- keep v4's main experiment framing, especially Q3 as the three-axis validation question,
+- pull selected wording/organization from v3 where it improves clarity without weakening the experiment logic.
+
+Why v4 should remain the base
+-----------------------------
+1. v4 has the stronger experiment-centered story.
+   Its biggest advantage is Q3: it directly validates the three design axes from the method:
+   - semantic cue design,
+   - stage semantics,
+   - router composition.
+   This is the closest match to the paper's central promise: the method proposes three axes, and the main text should validate all three in the main experiment section.
+
+2. v4 better preserves the "method -> experiment" contract.
+   Reviewer-facing question:
+   "Did the paper really test why this structure is necessary?"
+   v4 answers this more directly than a stage-only framing.
+
+3. v4 better supports the paper's core novelty claim.
+   The claim is not only "staged routing helps."
+   The claim is:
+   - compact portable cues matter,
+   - temporal scope decomposition matters,
+   - behavior-guided allocation matters.
+   v4's Q3 leaves room for all three in the main text.
+
+What to import from v3
+----------------------
+The following are genuine strengths of v3 and should be imported into v4.
+
+A. Framework vs. paper-instantiation distinction
+------------------------------------------------
+v3 is better at separating the general RouteRec design from the fixed paper instantiation.
+
+Action:
+- In Method 3.1, adopt v3's stance explicitly:
+  "We first describe RouteRec as a design framework and refer to the fixed paper instantiation only when concrete implementation choices matter."
+- Keep that distinction visible in 3.1 and 3.2.
+- Avoid sounding like every implementation detail is part of the core concept.
+
+Why:
+This reduces reviewer resistance to hand-designed implementation choices and makes the paper read as a method paper rather than a one-off engineering report.
+
+B. More precise feature-definition language
+-------------------------------------------
+v3 is more careful about feature-source wording:
+- "optional coarse item-group labels"
+- "coarsest item-group proxy available"
+This is better than vague "category/theme-like" wording.
+
+Action:
+- Replace v4's looser wording in 3.2 with v3-style precise language.
+- Keep the definition general enough for cross-dataset portability:
+  use "coarsest item-group proxy available in the dataset" as the canonical phrase.
+- Then keep v4's portability logic:
+  if such a field is unavailable, fall back to a documented missing-signal rule / sequence-derived proxy policy.
+- Be explicit once, then stay consistent.
+
+Best combined formulation:
+"Focus captures concentration and switching behavior over the coarsest item-group proxy available in the dataset. When such grouping fields are unavailable, the corresponding cues are handled by the fixed missing-signal rule documented in Appendix A (or by documented sequence-derived fallback proxies, if that is truly what the implementation does)."
+
+Important:
+Do NOT overclaim fallback behavior if the actual implementation simply omits those cues.
+The wording must match code reality.
+
+C. Cleaner z-loss / notation presentation
+-----------------------------------------
+v3's training-objective phrasing is cleaner and more explicit about using pre-softmax expert logits.
+
+Action:
+- In 3.5, revise the z-loss notation using the clearer v3 form.
+- Make sure the notation for the logit tensor is explicit and consistent with the rest of the section.
+- Remove any notation ambiguity around q / a / router logits.
+
+D. More explicit setup language
+-------------------------------
+v3 explains the sessionized evaluation unit and held-out cleanup more concretely.
+
+Action:
+Use v3-style clarity in 4.1 for:
+- why sessions are the evaluation unit,
+- what is removed in held-out cleanup,
+- why unseen non-target rows are removed,
+- why unseen targets are supplementary rather than main-table results,
+- why this is not meant to claim direct comparability to canonical raw-sequence leaderboards.
+
+This is one of the places where reviewers will probe hardest.
+Make this section direct and procedural, not abstract.
+
+E. Better appendix sectioning
+-----------------------------
+v3's appendix organization is cleaner and should be adopted in v4.
+
+Recommended appendix structure:
+- Appendix A: Method Details and Design Rationale
+- Appendix B: Dataset, Evaluation, and Full Results
+- Appendix C: Extended Structural Ablations
+- Appendix D: Protocol Sensitivity and Supplementary Views
+- Appendix E: Objective and Regularization Variants
+- Appendix F: Efficiency and Model Cost
+- Appendix G: Extended Diagnostics
+- Appendix H: Behavior-Slice Analysis
+- Appendix I: Extended Transfer Results
+
+Why:
+This separation is easier for reviewers to navigate and reduces the impression that the appendix is a dumping ground.
+
+What to keep from v4 without weakening
+--------------------------------------
+1. Keep Q3 exactly as the three-part design question.
+   Do NOT regress Q3 into a narrower "staged structure only" framing.
+   The point of Q3 is to validate the three method axes in the main text.
+
+2. Keep the stronger portability narrative.
+   The paper's philosophy is not just "we use features."
+   It is:
+   "we use compact, portable, behavior-grounded cues as a control interface."
+   Preserve that line consistently in abstract, intro, method, and Q4.
+
+3. Keep the challenge-to-design-axis logic in the intro/method backbone.
+   The intro should continue to move from:
+   - shared computation mismatch,
+   - temporal-scope mismatch,
+   - opaque hidden-state routing,
+   to:
+   - portable behavioral cues,
+   - coarse-to-fine multi-stage routing,
+   - behavior-guided expert allocation.
+
+How to revise the main text
+---------------------------
+1. Introduction
+---------------
+Keep v4's stronger experimental/problem-driven tone, but import selected v3 clarity.
+
+Recommended edits:
+- Preserve the current challenge framing.
+- Tighten any sentence that sounds too meta or repetitive.
+- One useful v3-style improvement: make the "why routing / why temporal scope / why interpretable control" questions read slightly more directly and less rhetorically inflated.
+- Keep the contributions list compact and reviewer-readable.
+
+2. Related Work
+---------------
+Use the tighter v3-style wording where it improves distinction.
+Especially in 2.3:
+- emphasize that prior MoE specialization is often latent/task/facet-driven,
+- RouteRec instead specializes through observable behavior cues tied to temporal behavioral regimes,
+- make the representation-vs-routing role separation explicit.
+
+3. Method
+---------
+3.1 RouteRec Overview
+- Start with the design-framework framing from v3.
+- Then transition to the fixed paper instantiation only when needed.
+
+3.2 Portable Behavioral Cues
+- Use v3's more precise item-group proxy wording.
+- Keep the cue-family taxonomy.
+- Be careful that portability claims match implementation reality.
+- End the section with one sentence linking cue-family contribution to the experiment section.
+
+3.3 Coarse-to-Fine Multi-Stage Routing
+- Keep v4's structural logic.
+- Use v3's more concise rationale where it improves readability.
+- Explicitly keep the idea that stages differ by evidence scope, routing granularity, and placement.
+
+3.4 Behavior-Guided Expert Allocation
+- Keep the v4 framing because it better matches the paper's core novelty.
+- But polish with v3's simpler explanatory phrasing:
+  first select a family-level control view, then allocate capacity within that view.
+- Keep the "semantic prior, not hard assignment" clarification.
+
+3.5 Training Objective
+- Adopt v3's cleaner notation and wording.
+- Ensure the objective paragraph ends with a direct statement of why no load-balancing term is used in the selected runs:
+  not uniform usage for its own sake, but stable behavior-aligned specialization.
+
+How to revise the experiments
+-----------------------------
+4.1 Experimental Setup
+----------------------
+This section should become:
+- procedural,
+- explicit,
+- non-defensive,
+- auditable.
+
+Must-do edits:
+- remove "placeholder" language entirely,
+- remove any future-tense "intend to report" language,
+- make the sessionized protocol steps explicit,
+- state the seen-target view clearly and once,
+- clarify held-out cleanup precisely,
+- clarify why same processed files / same criterion / same early stopping are used.
+
+Borrow from v3:
+- the explanation of session-level split,
+- the explanation of unseen non-target row removal,
+- the explanation of why seen-target is the main view.
+
+4.2 Q1
+-------
+v4 structure is fine.
+Possible improvement:
+- keep the purpose narrow and explicit:
+  Q1 is only to establish overall competitiveness under the shared protocol.
+- Do not overinterpret mixed results.
+
+4.3 Q2
+-------
+Keep v4 framing, but add the v3-style reviewer signpost:
+"This addresses Challenge 3 and supports the behavior-guided expert-allocation axis."
+A short signpost like this helps.
+
+4.4 Q3
+-------
+Keep v4's three-axis framing. This is the main reason to keep v4 as the base.
+
+Recommended opening:
+"Figure 4 directly mirrors the three design axes introduced in the method section."
+Then keep:
+- panel (a): semantic cue design,
+- panel (b): stage semantics,
+- panel (c): router composition.
+
+Possible v3-inspired improvement:
+After the paragraph, add one clean sentence:
+"This addresses whether RouteRec's benefit comes from one isolated trick or from the interaction of cue semantics, temporal scope decomposition, and behavior-guided allocation."
+
+4.5 Q4
+-------
+Keep v4's portability framing.
+This section should remain clearly distinct from Q3:
+- Q3 = is the design internally meaningful?
+- Q4 = does the method remain useful with limited cue availability?
+
+4.6 Q5
+-------
+Keep the non-circularity defense explicit.
+v3's "simple externally computed statistics" wording is useful here.
+Be concrete:
+- repeat ratio,
+- inter-event gap,
+- concentration entropy,
+- novelty / switching rate.
+Then say thresholds are in the appendix.
+
+One thing to improve:
+Explicitly say that slices are post hoc diagnostics, not training supervision and not optimized labels.
+
+Challenge-mapping signposts
+---------------------------
+Import this habit from v3.
+At the end of Q2/Q3/Q4, add one sentence mapping the subsection back to the challenge/design-axis story.
+
+Recommended mapping:
+- Q2 -> Challenge 3 / behavior-guided expert allocation
+- Q3 -> Challenge 2 + overall structural coherence across all three axes
+- Q4 -> Challenge 1 / portable behavioral cues
+
+This is small but valuable reviewer guidance.
+
+Appendix clean-up priorities
+----------------------------
+Highest priority: remove all unfinished traces.
+
+Must remove / replace:
+- "placeholder search ranges"
+- "intend to report"
+- "Table ??"
+- "-" dummy entries in selected-config tables
+- any empty subsection that has a heading but no content
+- any caption or paragraph that still reads like planning notes
+
+Appendix-specific recommendations
+---------------------------------
+Appendix A
+- keep design rationale + implementation controls
+- make sure Table 3 is no longer a vague placeholder
+- either:
+  (a) make it a real "implementation-level controls used in selected paper track" table, or
+  (b) if exact values are not fixed globally, rename it clearly and say which values vary by dataset
+
+Appendix B
+- keep dataset protocol and full results
+- if tuning protocol is still unfinished, either fully finalize it here or move it to a separate appendix subsection cleanly
+- do not leave half-finalized search-space prose
+
+Appendix C
+- extended structural ablations should clearly extend Q3, not duplicate it
+- this appendix is where extra cue-structure and stage-layout controls belong
+
+Appendix D / E / F / G / H / I
+- keep them functionally separated as in v3
+- this improves navigation and lowers reviewer frustration
+
+Non-negotiable clean-up list
+----------------------------
+1. Remove all placeholder/future-tense draft language.
+2. Make table numbering and appendix references consistent.
+3. Ensure section names in the main text match appendix references exactly.
+4. Make sure every appendix promised in the main text actually exists and contains real content.
+5. Ensure references to Appendix D/E/F/G/H/I still match the final appendix structure after reorganization.
+
+Recommended final workflow
+--------------------------
+Step 1.
+Use v4 as the active source file.
+
+Step 2.
+Patch in selected v3 text at the following points:
+- 3.1 first framing paragraph,
+- 3.2 cue-source wording,
+- 3.5 z-loss wording/notation,
+- 4.1 setup explanation,
+- challenge-mapping signposts in Q2/Q3/Q4,
+- appendix title/section reorganization.
+
+Step 3.
+Do a brutal draft-clean pass:
+- no placeholders,
+- no future-tense reporting language,
+- no empty appendix subsections,
+- no "summary template" tables unless real values are inserted.
+
+Short version for execution
+---------------------------
+Keep from v4:
+- overall experiment spine,
+- Q3 as the three-axis validation question,
+- portability narrative,
+- challenge -> design-axis logic.
+
+Import from v3:
+- framework vs instantiation distinction,
+- precise "coarsest item-group proxy available" wording,
+- clearer z-loss notation,
+- more explicit setup / held-out cleanup explanation,
+- cleaner appendix organization,
+- challenge-mapping signposts.
+
+Do NOT:
+- downgrade Q3 into a narrower stage-only question,
+- keep placeholder/future-tense draft language,
+- overclaim missing-signal fallback if the implementation does not actually do it.
+
+Desired final result
+--------------------
+A v4-based paper that:
+- keeps the stronger experiment logic,
+- reads with v3-level precision in the method,
+- has a cleaner appendix,
+- and no longer looks like a partially planned draft.

@@ -1,0 +1,438 @@
+RouteRec experiment question 재설계 및 main/appendix 보완 계획
+
+[총평]
+지금 본문 5.2~5.5의 Q 흐름은 이미 꽤 괜찮다.
+현재 실험 본문은 대략 아래 질문들에 대응한다.
+- Q1. Does behavior-guided routing help overall?
+- Q2. What should control routing?
+- Q3. Why is the staged structure effective?
+- Q4. Are lightweight cues enough?
+
+이 4개 자체는 나쁘지 않다. 다만 reviewer 관점에서 보면, 지금 가장 강하게 남는 의문은 아래 둘이다.
+1) "정말 이 routing이 네가 말하는 behavioral regimes를 반영하냐?"
+2) "method의 세 축(feature, stage, routing composition) 중 뭐가 핵심이고, 셋 다 필요한가?"
+
+즉 지금의 Q1~Q4는 accuracy / design / portability는 보지만,
+- semantic validity
+- method three-part justification
+이 조금 약하다.
+
+따라서 가장 추천하는 방향은
+- Q1~Q4를 완전히 버리기보다,
+- Q3를 method의 3축 정당화로 더 강하게 바꾸고,
+- Q5를 새로 추가해서 routing semantics를 본문으로 올리는 것
+이다.
+
+==================================================
+1. reviewer가 method를 읽으면서 실제로 드는 의문
+==================================================
+
+method를 읽는 reviewer의 머릿속 질문은 대체로 아래 순서로 생긴다.
+
+(1) "그래서 성능은 진짜 오르나?"
+-> Q1 overall performance 필요.
+
+(2) "hidden-state router보다 behavior cue router가 왜 더 낫다는 거지?"
+-> Q2 control-source comparison 필요.
+
+(3) "macro/mid/micro를 왜 셋으로 나눴지? 아무 expert insertion이면 안 되나?"
+-> stage/layout ablation 필요.
+
+(4) "Tempo / Focus / Memory / Exposure 같은 cue family가 진짜 의미 있나?"
+-> cue-family ablation 필요.
+
+(5) "근데 그 routing이 정말 semantic한지 어떻게 아나? 그냥 성능이 좋아졌을 뿐 아니냐?"
+-> 이 질문이 지금 가장 중요함.
+-> feature bucket / slice / case study / route concentration 같은 분석이 본문에 하나는 있어야 함.
+
+(6) "이 논문의 핵심은 feature construction, stage decomposition, routing composition인데, 셋 다 필요한가?"
+-> method의 3파트를 직접 대응시키는 structural figure/table이 있으면 매우 좋음.
+
+(7) "objective(CE + consistency + z-loss)는 왜 이런 조합이지?"
+-> 이건 appendix로 충분하지만, 최소한 objective variant table은 있어야 함.
+
+(8) "이 결과가 특정 protocol/sessionization에만 묶인 건 아닌가?"
+-> appendix에서 protocol sensitivity 또는 seen-target/all-target 보조 결과가 있으면 좋음.
+
+==================================================
+2. 추천하는 새로운 main-text 질문 세트
+==================================================
+
+[추천안 A: 가장 균형이 좋음]
+
+Q1. Does RouteRec improve recommendation quality under the shared sessionized temporal protocol?
+Q2. What should control routing: hidden states, behavior cues, or both?
+Q3. Why is RouteRec’s three-part structure effective?
+Q4. Are lightweight cues sufficient for practical routing?
+Q5. Do the learned routing patterns actually align with behavioral regimes?
+
+이 5개가 제일 좋다.
+이유는 아래와 같다.
+- Q1: 성능
+- Q2: decoupling claim
+- Q3: method의 세 축 정당화
+- Q4: portability claim
+- Q5: interpretability / semantics claim
+
+즉 abstract/introduction/method/experiment의 주장축이 가장 잘 맞는다.
+
+
+[추천안 B: 더 간결한 4Q 체계]
+
+Q1. Does behavior-guided routing help overall?
+Q2. What should control routing?
+Q3. Why are the three design choices of RouteRec necessary?
+Q4. Do lightweight cues yield behavior-aligned routing?
+
+이 버전은 더 compact하지만, Q3가 넓고 Q4가 약간 무거워진다.
+페이지가 아주 빡빡하면 가능.
+
+==================================================
+3. Q3를 어떻게 바꿔야 하나: method의 3축과 직접 연결
+==================================================
+
+현재 Figure 4는 mainly stage/layout 쪽이다.
+그런데 미팅에서 말한 "method의 3가지 구조 정당화"를 진짜 살리려면,
+Q3 자체를 아래처럼 재정의하는 게 좋다.
+
+Q3. Why is RouteRec’s three-part design effective?
+  Q3-a. Feature construction: why should routing use compact behavioral cues?
+  Q3-b. Stage decomposition: why macro/mid/micro instead of one shared routing scope?
+  Q3-c. Routing composition: why the chosen scalar-group conditional composition?
+
+이렇게 되면 method 섹션의 3개 큰 파트와 experiment가 1:1로 맞물린다.
+reviewer 입장에서도 "아 이 저자들은 method의 각 설계 choice를 실험으로 확인하려는구나"가 보인다.
+
+[이때 중요한 점]
+Q2와 Q3-a가 겹치지 않게 해야 한다.
+- Q2는 router input source 비교: hidden-only vs behavior-only vs mixed.
+- Q3-a는 behavior feature 설계 자체 비교: full cues vs seq-only vs shuffled/corrupted cues vs family removal.
+
+즉
+- Q2 = 무엇으로 routing할 것인가?
+- Q3-a = behavior cue를 어떻게 구성해야 하는가?
+로 역할을 분리하면 된다.
+
+==================================================
+4. main paper에서 추천하는 실험 구성
+==================================================
+
+[권장 main body structure]
+
+5.2 Overall Performance (Q1)
+5.3 What Should Control Routing? (Q2)
+5.4 Why Is RouteRec’s Three-Part Structure Effective? (Q3)
+5.5 Are Lightweight Cues Enough? (Q4)
+5.6 Do Routing Patterns Align with Behavioral Regimes? (Q5)
+
+페이지가 부족하면 5.5와 5.6을 합쳐도 된다.
+
+--------------------------------------------------
+4.1 Q1. overall performance
+--------------------------------------------------
+
+이미 충분히 괜찮다.
+지금 Table 1 + Avg Rank 구조는 유지해도 좋다.
+
+다만 Q1에서 너무 "wins on most datasets" 식으로 세게 말하지 말고,
+현재처럼
+- Beauty / KuaiRec에서 명확한 개선
+- Retail Rocket competitive
+- Foursquare / LastFM close
+- ML-1M weaker
+정도로 정직하게 가는 것이 맞다.
+
+추가로 있으면 좋은 것:
+- optional: one tiny summary line saying
+  "gains concentrate on more behaviorally dynamic settings"
+
+--------------------------------------------------
+4.2 Q2. what should control routing?
+--------------------------------------------------
+
+이건 현재 Figure 3 방향이 맞다.
+비교축도 좋다.
+- shared FFN
+- hidden-only
+- mixed
+- behavior-guided
+
+다만 right panel을 단순 route-consistency로만 두기보다,
+아래 둘 중 하나를 같이 보여주면 더 강해진다.
+
+Option A: consistency + ranking gain scatter
+- x축: route consistency
+- y축: Avg MRR@20
+- 점: router variants
+장점: "semantic consistency and performance are related"를 한 그림으로 보여줌
+
+Option B: feature-bucket route overlap
+- feature similarity bucket별 route similarity
+장점: 지금 주장과 직접 연결됨
+
+현재는 B가 더 논문 톤에는 맞는다.
+
+--------------------------------------------------
+4.3 Q3. three-part structure justification
+--------------------------------------------------
+
+이게 본문에서 가장 보강 가치가 크다.
+
+가장 추천하는 방식은 "3-panel structural figure"다.
+각 panel이 method의 3축을 직접 받쳐야 한다.
+
+[Figure X: Three-part structural justification]
+Panel (a) Feature construction
+- hidden-only / behavior-only / mixed
+- full cue / seq-only / shuffled cue / family removal summary
+- message: explicit compact behavior cues are useful, but cue quality matters
+
+Panel (b) Stage decomposition
+- macro removed / mid removed / micro removed
+- 1-stage / 2-stage / 3-stage
+- dense FFN replacement vs staged routing
+- message: multiple temporal scopes matter; dense expert insertion alone is insufficient
+
+Panel (c) Router composition
+- flat expert softmax
+- grouped-only
+- scalar-group conditional product (final)
+- optional: no grouping / no conditional branch / stage-specific ad hoc variants
+- message: final routing composition is not arbitrary
+
+이렇게 하면 reviewer가 method 읽으면서 드는 핵심 질문 3개를 한 번에 해소할 수 있다.
+
+[핵심]
+현재 Figure 4는 mostly stage/layout이므로,
+- routing composition ablation을 명확히 끌어올리거나,
+- feature-construction ablation을 한 panel로 넣는 방식
+둘 중 하나가 꼭 있으면 좋다.
+
+--------------------------------------------------
+4.4 Q4. are lightweight cues enough?
+--------------------------------------------------
+
+현재 Figure 5 방향은 좋다.
+이건 유지 가능.
+
+다만 단순 cue removal만으로 끝내지 말고,
+"얼마나 남는가"를 더 직관적으로 보여주면 좋다.
+
+추천 표현:
+- full cue gain 대비 retention ratio
+- sequence-only retained X% of the full gain
+
+그리고 가능하면 panel annotation으로
+- remove category
+- remove time
+- sequence-only
+- cue-shuffled
+정도까지 있으면 더 설득력 있다.
+
+cue-shuffled는 특히 좋다.
+이유:
+- reviewer가 "그냥 parameter noise 효과 아냐?"라고 생각할 수 있는데,
+- cue-shuffled / corrupted feature에서 성능이 무너지면 cue semantics가 중요하다는 걸 보여줄 수 있음.
+
+--------------------------------------------------
+4.5 Q5. routing patterns align with behavioral regimes?
+--------------------------------------------------
+
+이건 지금 본문에 꼭 하나 있었으면 좋다.
+현재 appendix D/E의 진단들이 좋은데, 그중 하나를 본문으로 올리는 것을 추천.
+
+가장 좋은 후보는 아래 둘 중 하나.
+
+Option A: behavior-slice analysis
+- slices: repeat-heavy, high-tempo, narrow-focus, exploration-heavy
+- left: slice-wise MRR@20
+- right: RouteRec gain + route concentration
+장점:
+  - "어디서 이득이 나는가"를 바로 보여줌
+  - Figure 1 / intro와도 연결이 좋음
+
+Option B: feature-bucket routing pattern heatmap
+- rows: feature bucket (tempo low/high, repeat low/high 등)
+- cols: experts or groups
+- separate panels for macro/mid/micro
+장점:
+  - semantic alignment 자체를 직접 보여줌
+  - routing이 정말 interpretable하다는 claim에 더 직접적
+
+[추천]
+본문에는 A를, appendix에는 B를 두는 게 가장 균형이 좋다.
+왜냐하면 본문에서는 "성능 + 어디서 유효한가"가 더 읽기 쉽고,
+appendix에서는 더 detailed한 routing semantic map을 보여줄 수 있기 때문이다.
+
+==================================================
+5. 본문에 넣으면 좋은 figure/table 아이디어 (main metric 외)
+==================================================
+
+아래는 main metric table 외에 본문에 있으면 좋은 시각화들이다.
+
+(1) Structural justification figure (강력 추천)
+- method 3축 대응
+- 가장 우선순위 높음
+
+(2) Behavior-slice figure (강력 추천)
+- Figure 1의 regime intuition과 직접 연결
+- reviewer가 "진짜 어디서 도움되는데?"라는 질문에 답함
+
+(3) One qualitative case study panel (선택)
+- 사용자/session 2~3개 예시
+- macro/mid/micro feature summary
+- selected expert/group weights
+- corresponding recommendation outcome
+장점: interpretability를 인간이 읽을 수 있게 보여줌
+단점: 페이지를 먹고, 과도하면 paper가 demo처럼 보일 수 있음
+-> appendix로 보내는 게 보통 더 안전
+
+(4) Claim-to-evidence table (선택)
+- row: claim
+- col: supporting section/figure
+예시:
+  - behavior cues outperform hidden-only routing -> Fig. 3
+  - staged routing matters -> Fig. 4
+  - lightweight cues suffice -> Fig. 5
+  - gains localize to behavior regimes -> Fig. X
+장점: reviewer 친화적
+단점: 지면 대비 효율이 아주 높진 않음
+
+==================================================
+6. appendix에서 꼭 있으면 좋은 것
+==================================================
+
+appendix는 "본문 claim을 더 단단하게 만드는 증거 저장소"로 쓰는 게 좋다.
+우선순위별로 정리하면 아래와 같다.
+
+[우선순위 A: 거의 필수]
+
+A1. Objective and regularization variants
+- CE only
+- +consistency
+- +z-loss
+- +both (final)
+- optional: load balancing or entropy regularizer baseline
+보여줄 metric:
+- MRR@20 or Avg Rank
+- route consistency
+- entropy / effective expert count
+목적:
+- 왜 이 objective가 필요한지 설명
+
+A2. Extended stage/layout ablations
+- 지금 appendix B 유지
+- 단, route composition variant가 있으면 더 좋음
+
+A3. Routing diagnostics
+- expert usage heatmap by stage
+- entropy and effective expert count
+- stage-wise route consistency
+- feature-bucket route pattern
+지금 appendix D 방향이 매우 좋음
+
+A4. Behavior-slice analysis (full version)
+- dataset별 full slice plot
+- 본문엔 compact 버전, appendix엔 full version
+
+[우선순위 B: 있으면 강함]
+
+B1. Protocol sensitivity / evaluation view sensitivity
+- seen-target vs all-target or supplementary unseen-target view
+- optional: one dataset에서 threshold sensitivity small check
+목적:
+- 네 protocol이 완전히 brittle하지 않음을 보여줌
+주의:
+- 이것 때문에 main story가 protocol defense로 흐르지 않게 appendix에 두는 게 좋음
+
+B2. Router composition variants
+- flat router
+- grouped router
+- final scalar-group conditional
+- maybe stage-specific bespoke router
+이건 구조 정당화에 꽤 좋음
+
+B3. Qualitative case studies
+- 2~4 representative sessions
+- feature summaries + stage-wise routing + prediction outcome
+좋은 경우:
+- repeat-heavy
+- exploration-heavy
+- high-tempo
+- stable preference
+
+[우선순위 C: optional]
+
+C1. Seed stability / significance
+- dataset별 mean±std or win count over seeds
+장점: reviewer 방어에 도움
+단점: 실험량 증가
+
+C2. Efficiency / complexity summary
+- params
+- training time relative to SASRec
+- inference overhead rough number
+네 paper가 "lightweight"를 주장하니 있으면 좋지만, 지금은 최우선은 아님
+
+C3. Transfer results
+- 이미 appendix F로 계획되어 있음
+- 있으면 nice bonus, 없어도 paper core는 유지됨
+
+==================================================
+7. 본문에서 무엇을 빼고 무엇을 올릴지
+==================================================
+
+페이지가 빡빡하면 아래 조합을 추천.
+
+[가장 추천]
+본문:
+- Table 1 overall
+- Fig 3 routing control
+- Fig 4 three-part structural justification
+- Fig 5 behavior-slice or lightweight-cue + semantics hybrid
+
+appendix:
+- full cutoffs
+- full cue ablation details
+- full diagnostics
+- objective variants
+- transfer
+
+즉 현재 본문의 "lightweight cues" 그림을 약간 더 semantic한 방향으로 바꾸고,
+자세한 cue-family numbers는 appendix로 내리는 방법도 좋다.
+
+반대로 portability claim을 꼭 main에 두고 싶으면,
+- 본문 Fig 5는 그대로 유지
+- behavior-slice figure를 Fig 6으로 새로 추가
+하는 방식도 가능.
+
+==================================================
+8. 내가 추천하는 최종 질문 세트 (최종안)
+==================================================
+
+[최종안]
+Q1. Does RouteRec improve ranking quality under the shared sessionized temporal protocol?
+Q2. What should control routing: hidden states, behavior cues, or both?
+Q3. Why is RouteRec’s three-part design effective?
+  - Q3-a. Why behavior cue construction?
+  - Q3-b. Why macro/mid/micro staging?
+  - Q3-c. Why the chosen router composition?
+Q4. Are lightweight cues sufficient for practical routing?
+Q5. Do RouteRec’s routing patterns align with behavioral regimes, and do gains appear where they should?
+
+이 5개가 가장 reviewer-oriented이고,
+method의 3파트와 experiment가 제일 잘 맞는다.
+
+==================================================
+9. 한 줄 결론
+==================================================
+
+지금 Q1~Q4는 기본 뼈대는 좋다.
+하지만 본문을 더 강하게 만들려면,
+- Q3를 "method 3축 정당화"로 재설계하고,
+- Q5로 "semantic alignment"를 본문에 하나 올리는 것
+이 가장 효과적이다.
+
+즉 다음 단계의 핵심은
+"성능이 오른다"를 더 말하는 게 아니라,
+"왜 이 구조여야 하고, 그 routing이 정말 의미 있는가"를 보여주는 것이다.

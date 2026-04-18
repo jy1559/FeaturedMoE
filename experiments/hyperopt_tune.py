@@ -303,6 +303,15 @@ def _sync_model_dimensions(cfg_dict: dict) -> None:
     """Synchronize hidden/embedding size according to model family policy."""
     model_name = _normalize_model_name(cfg_dict.get("model", ""))
 
+    if model_name in {"difsr", "tisasrec"}:
+        if "hidden_size" in cfg_dict:
+            hid = int(cfg_dict["hidden_size"])
+            cfg_dict["embedding_size"] = hid
+        elif "embedding_size" in cfg_dict:
+            emb = int(cfg_dict["embedding_size"])
+            cfg_dict["hidden_size"] = emb
+        return
+
     # v2 uses embedding_size as primary; keep hidden_size aligned for RecBole internals.
     if model_name in _FEATURED_MOE_V2_MODELS:
         if "embedding_size" in cfg_dict:
@@ -664,6 +673,8 @@ def _make_data_cache_key(cfg_dict: dict) -> str:
             "dataset": cfg_dict.get("dataset"),
             "source_tag": _resolve_cache_source_tag(cfg_dict),
             "MAX_ITEM_LIST_LENGTH": _resolve_cache_max_len(cfg_dict),
+            "train_batch_size": _normalize_batch_size_value(cfg_dict.get("train_batch_size")),
+            "eval_batch_size": _normalize_batch_size_value(cfg_dict.get("eval_batch_size")),
             "eval_args": cfg_dict.get("eval_args"),
             "data_path": cfg_dict.get("data_path"),
             "load_col": cfg_dict.get("load_col"),
@@ -722,6 +733,14 @@ def get_args():
         help="Number of hyperopt trials (default: 50)",
     )
     parser.add_argument(
+        "--max-run-hours", dest="max_run_hours", type=float, default=0.0,
+        help="Optional wall-clock cap for one hyperopt run. After the current trial finishes, no new trials are started (default: disabled).",
+    )
+    parser.add_argument(
+        "--oom-retry-limit", dest="oom_retry_limit", type=int, default=5,
+        help="Retry the same trial on OOM by halving train/eval batch size. Value 2 means original -> 1/2 -> 1/4 (default: disabled).",
+    )
+    parser.add_argument(
         "--tune-epochs", dest="tune_epochs", type=int, default=None,
         help="Override epoch count for tuning (default: use config value)",
     )
@@ -774,6 +793,10 @@ def get_args():
             continue
         if tok.startswith("max_evals="):
             args.max_evals = int(tok.split("=", 1)[1])
+        elif tok.startswith("max_run_hours="):
+            args.max_run_hours = float(tok.split("=", 1)[1])
+        elif tok.startswith("oom_retry_limit="):
+            args.oom_retry_limit = int(tok.split("=", 1)[1])
         elif tok.startswith("tune_epochs="):
             args.tune_epochs = int(tok.split("=", 1)[1])
         elif tok.startswith("tune_patience="):
@@ -1231,6 +1254,71 @@ def _apply_runtime_param(cfg: dict, key: str, value):
         return
 
     _set_nested_value(cfg, key_str, value)
+
+
+def _exception_messages(exc: BaseException) -> list[str]:
+    messages: list[str] = []
+    cursor: BaseException | None = exc
+    seen: set[int] = set()
+    while cursor is not None and id(cursor) not in seen:
+        seen.add(id(cursor))
+        text = str(cursor).strip()
+        if text:
+            messages.append(text)
+        cursor = cursor.__cause__ or cursor.__context__
+    return messages
+
+
+def _is_oom_error(exc: BaseException) -> bool:
+    for text in _exception_messages(exc):
+        lowered = text.lower()
+        if (
+            "out of memory" in lowered
+            or "cuda error: out of memory" in lowered
+            or "cuda out of memory" in lowered
+            or "cublas_status_alloc_failed" in lowered
+            or "cudnn_status_alloc_failed" in lowered
+            or "hip out of memory" in lowered
+        ):
+            return True
+    return False
+
+
+def _normalize_batch_size_value(value) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _current_runtime_batch_sizes(cfg: dict) -> tuple[int | None, int | None]:
+    train_bs = _normalize_batch_size_value(cfg.get("train_batch_size"))
+    eval_bs = _normalize_batch_size_value(cfg.get("eval_batch_size"))
+    return train_bs, eval_bs
+
+
+def _halve_batch_sizes_for_retry(cfg: dict) -> dict | None:
+    train_bs, eval_bs = _current_runtime_batch_sizes(cfg)
+    anchor = train_bs if train_bs is not None else eval_bs
+    if anchor is None:
+        return None
+    if train_bs is None:
+        train_bs = anchor
+    if eval_bs is None:
+        eval_bs = anchor
+    new_train_bs = max(1, int(train_bs) // 2)
+    new_eval_bs = max(1, int(eval_bs) // 2)
+    if new_train_bs >= int(train_bs) and new_eval_bs >= int(eval_bs):
+        return None
+    cfg["train_batch_size"] = int(new_train_bs)
+    cfg["eval_batch_size"] = int(new_eval_bs)
+    return {
+        "train_before": int(train_bs),
+        "eval_before": int(eval_bs),
+        "train_after": int(new_train_bs),
+        "eval_after": int(new_eval_bs),
+    }
 
 
 def _safe_slug(raw: str) -> str:
@@ -3278,6 +3366,10 @@ def _save_results(
     interrupted_at=None,
     best_checkpoint_file="",
     probe_checkpoint_file="",
+    time_budget_hours=0.0,
+    time_budget_reached=False,
+    time_budget_reached_at_sec=None,
+    stop_reason="",
 ):
     path = Path(path)
     dataset_canonical = _canonical_dataset_name(dataset)
@@ -3303,6 +3395,7 @@ def _save_results(
         "dataset": dataset_canonical,
         "dataset_raw": dataset,
         "max_evals": args.max_evals,
+        "oom_retry_limit": int(args.oom_retry_limit or 0),
         "tune_epochs": args.tune_epochs,
         "n_completed": completed_trials,
         "n_recorded_trials": len(normalized_trials),
@@ -3336,6 +3429,14 @@ def _save_results(
         "parent_result": parent_result,
         "interrupted": bool(interrupted),
         "interrupted_at": interrupted_at,
+        "time_budget_hours": float(time_budget_hours or 0.0),
+        "time_budget_reached": bool(time_budget_reached),
+        "time_budget_reached_at_sec": (
+            float(time_budget_reached_at_sec)
+            if isinstance(time_budget_reached_at_sec, (int, float))
+            else None
+        ),
+        "stop_reason": str(stop_reason or ""),
     }
     if tuned_search is not None:
         data["tuned_search"] = tuned_search
@@ -4120,6 +4221,10 @@ def main():
     print(f"  max_evals={args.max_evals}  epochs={cfg.get('epochs')}  "
           f"patience={cfg.get('stopping_step')}  wandb={'ON' if log_wandb else 'off'}")
     print(f"  search_algo={str(args.search_algo).lower()}")
+    if float(args.max_run_hours or 0.0) > 0.0:
+        print(f"  max_run_hours={float(args.max_run_hours):.3f}  (stop launching new trials after current trial)")
+    if int(args.oom_retry_limit or 0) > 0:
+        print(f"  oom_retry_limit={int(args.oom_retry_limit)}  (halve train/eval batch size on OOM)")
     train_bs = cfg.get("train_batch_size", "?")
     eval_bs = cfg.get("eval_batch_size", "?")
     print(f"  batch_size(train/valid/test)={train_bs}/{eval_bs}/{eval_bs}")
@@ -4155,6 +4260,8 @@ def main():
         "space_yaml": str(args.space_yaml) if args.space_yaml else "",
         "space_type_overrides": {k: str(v) for k, v in space_type_overrides.items()},
         "search_algo": str(args.search_algo).lower(),
+        "max_run_hours": float(args.max_run_hours or 0.0),
+        "oom_retry_limit": int(args.oom_retry_limit or 0),
     }
 
     # Wandb (per-trial run mode)
@@ -4202,6 +4309,7 @@ def main():
     trials = Trials()
     all_trials_data: list[dict] = []
     global_t0 = time.time()
+    max_run_seconds = max(0.0, float(args.max_run_hours or 0.0) * 3600.0)
     best_so_far = float("-inf")
     tuned_search_ser = {k: _ser(v) for k, v in tuned_search.items()}
     fixed_search_ser = {k: _ser(v) for k, v in fixed_search.items()}
@@ -4209,6 +4317,9 @@ def main():
     parent_result = str(args.parent_result or "").strip()
     interrupted = False
     interrupted_at = None
+    time_budget_reached = False
+    time_budget_reached_at_sec = None
+    stop_reason = ""
     artifact_paths = {
         "result_file": str(result_file.resolve()),
         "normal_result_mirror_file": "",
@@ -4284,8 +4395,60 @@ def main():
                 }
             )
 
+        oom_retry_count = 0
+        oom_retry_history: list[dict] = []
+        effective_train_bs, effective_eval_bs = _current_runtime_batch_sizes(cfg_trial)
         try:
-            result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+            while True:
+                try:
+                    result = train_and_evaluate(
+                        cfg_trial,
+                        trial_num=trial_num,
+                        progress_cb=_wandb_log_live if log_wandb else None,
+                    )
+                    effective_train_bs, effective_eval_bs = _current_runtime_batch_sizes(cfg_trial)
+                    break
+                except Exception as e:
+                    if not _is_oom_error(e):
+                        raise
+                    if oom_retry_count >= int(args.oom_retry_limit or 0):
+                        print(
+                            f"[OOM_RETRY] trial={trial_num} exhausted retries "
+                            f"after {oom_retry_count} reductions. last_error={str(e)[:240]}",
+                            flush=True,
+                        )
+                        raise
+                    reduction = _halve_batch_sizes_for_retry(cfg_trial)
+                    if reduction is None:
+                        print(
+                            f"[OOM_RETRY] trial={trial_num} hit OOM but batch size cannot be reduced further. "
+                            f"last_error={str(e)[:240]}",
+                            flush=True,
+                        )
+                        raise
+                    oom_retry_count += 1
+                    effective_train_bs = int(reduction["train_after"])
+                    effective_eval_bs = int(reduction["eval_after"])
+                    sampled_params["train_batch_size"] = effective_train_bs
+                    sampled_params["eval_batch_size"] = effective_eval_bs
+                    retry_note = {
+                        "retry_idx": int(oom_retry_count),
+                        "train_before": int(reduction["train_before"]),
+                        "eval_before": int(reduction["eval_before"]),
+                        "train_after": int(reduction["train_after"]),
+                        "eval_after": int(reduction["eval_after"]),
+                    }
+                    oom_retry_history.append(retry_note)
+                    print(
+                        "[OOM_RETRY] "
+                        f"trial={trial_num} retry={oom_retry_count}/{int(args.oom_retry_limit or 0)} "
+                        f"train_batch_size {reduction['train_before']} -> {reduction['train_after']} "
+                        f"eval_batch_size {reduction['eval_before']} -> {reduction['eval_after']}",
+                        flush=True,
+                    )
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    time.sleep(0.5)
             mrr20 = result["mrr@20"]
             if mrr20 > best_so_far:
                 best_so_far = mrr20
@@ -4399,6 +4562,10 @@ def main():
                 "test_eval_targets": result.get("test_eval_targets"),
                 "test_eval_batches_per_sec": result.get("test_eval_batches_per_sec"),
                 "test_eval_targets_per_sec": result.get("test_eval_targets_per_sec"),
+                "oom_retry_count": int(oom_retry_count),
+                "oom_retry_history": [dict(item) for item in oom_retry_history],
+                "effective_train_batch_size": effective_train_bs,
+                "effective_eval_batch_size": effective_eval_bs,
                 "status": "ok",
                 "artifact_best_checkpoint": current_artifact_best,
                 "artifact_probe_checkpoint": current_artifact_probe,
@@ -4472,6 +4639,10 @@ def main():
             all_trials_data.append({
                 "trial": trial_num,
                 "params": {k: _ser(v) for k, v in sampled_params.items()},
+                "oom_retry_count": int(oom_retry_count),
+                "oom_retry_history": [dict(item) for item in oom_retry_history],
+                "effective_train_batch_size": effective_train_bs,
+                "effective_eval_batch_size": effective_eval_bs,
                 "status": "interrupted",
                 "error": "KeyboardInterrupt",
             })
@@ -4521,6 +4692,10 @@ def main():
                 "trial": trial_num,
                 "params": {k: _ser(v) for k, v in sampled_params.items()},
                 "mrr@20": 0.0,
+                "oom_retry_count": int(oom_retry_count),
+                "oom_retry_history": [dict(item) for item in oom_retry_history],
+                "effective_train_batch_size": effective_train_bs,
+                "effective_eval_batch_size": effective_eval_bs,
                 "status": "fail",
                 "error": str(e),
             })
@@ -4550,15 +4725,44 @@ def main():
     try:
         algo_name = str(args.search_algo).strip().lower()
         algo_fn = rand.suggest if algo_name == "random" else tpe.suggest
-        best = fmin(
-            fn=objective,
-            space=space,
-            algo=algo_fn,
-            max_evals=args.max_evals,
-            trials=trials,
-            rstate=np.random.default_rng(args.seed),
-            show_progressbar=False,
-        )
+        search_rng = np.random.default_rng(args.seed)
+        best = {}
+        if max_run_seconds > 0.0:
+            while len(trials.trials) < int(args.max_evals):
+                next_eval_target = min(int(args.max_evals), len(trials.trials) + 1)
+                best = fmin(
+                    fn=objective,
+                    space=space,
+                    algo=algo_fn,
+                    max_evals=next_eval_target,
+                    trials=trials,
+                    rstate=search_rng,
+                    show_progressbar=False,
+                )
+                elapsed_total = time.time() - global_t0
+                if elapsed_total >= max_run_seconds:
+                    time_budget_reached = True
+                    time_budget_reached_at_sec = float(elapsed_total)
+                    stop_reason = "time_budget_reached"
+                    print(
+                        "[TIME_BUDGET] "
+                        f"reached limit={float(args.max_run_hours):.3f}h "
+                        f"after {len(trials.trials)}/{int(args.max_evals)} trials "
+                        f"(elapsed={_format_duration(elapsed_total)}). "
+                        "Stopping new trials and finalizing current best.",
+                        flush=True,
+                    )
+                    break
+        else:
+            best = fmin(
+                fn=objective,
+                space=space,
+                algo=algo_fn,
+                max_evals=args.max_evals,
+                trials=trials,
+                rstate=search_rng,
+                show_progressbar=False,
+            )
         best_params = space_eval(space, best)
         if "__single_run__" in best_params:
             best_params.pop("__single_run__", None)
@@ -4584,7 +4788,9 @@ def main():
     best_test_eval_time_sec = float((best_trial or {}).get("test_eval_time_sec", 0.0) or 0.0)
     best_test_eval_batches_per_sec = float((best_trial or {}).get("test_eval_batches_per_sec", 0.0) or 0.0)
     best_test_eval_targets_per_sec = float((best_trial or {}).get("test_eval_targets_per_sec", 0.0) or 0.0)
-    if not best_params and ok_trials:
+    if best_trial and isinstance(best_trial.get("params"), dict):
+        best_params = dict(best_trial.get("params") or {})
+    elif not best_params and ok_trials:
         best_params = max(ok_trials, key=lambda x: x["mrr@20"]).get("params", {})
 
     should_collect_deferred_artifacts = bool(
@@ -4662,6 +4868,11 @@ def main():
     print(f"  Best HR@10  = {best_hr10:.6f}")
     print(f"  Test MRR@20 = {test_mrr20:.6f}  (best-valid checkpoint)")
     print(f"  Test HR@10  = {test_hr10:.6f}  (best-valid checkpoint)")
+    if time_budget_reached:
+        print(
+            f"  Stop reason = time_budget({float(args.max_run_hours):.3f}h)"
+            f" reached at {_format_duration(float(time_budget_reached_at_sec or total_time))}"
+        )
     if best_avg_epoch_time_sec > 0.0:
         print(f"  Avg epoch time = {best_avg_epoch_time_sec:.3f} sec/epoch")
     if best_test_eval_time_sec > 0.0:
@@ -4704,6 +4915,10 @@ def main():
         interrupted_at=interrupted_at,
         best_checkpoint_file=exported_best_checkpoint,
         probe_checkpoint_file=exported_probe_checkpoint,
+        time_budget_hours=float(args.max_run_hours or 0.0),
+        time_budget_reached=time_budget_reached,
+        time_budget_reached_at_sec=time_budget_reached_at_sec,
+        stop_reason=stop_reason,
     )
     print(f"  Results -> {result_file}")
     if artifact_paths.get("normal_result_mirror_file"):
