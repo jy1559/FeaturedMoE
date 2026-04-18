@@ -5,9 +5,9 @@
 - run_group: fmoe_n4
 - run_axis: ablation_dualset_core_global_queue_v1
 - run_phase: P4C_BEAUTY_B01_B25_LR_H8_SEEN_ANCHOR_CF_18_S1
-- best_mrr@20: 0.0922
-- test_mrr@20: 0.0772
-- test_hr@10: 0.1519
+- best_mrr@20: 0.0952
+- test_mrr@20: 0.0786
+- test_hr@10: 0.1576
 
 ## Artifacts
 
