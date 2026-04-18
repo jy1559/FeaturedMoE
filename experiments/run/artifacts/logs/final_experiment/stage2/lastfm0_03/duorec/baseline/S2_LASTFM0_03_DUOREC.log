@@ -1,0 +1,91 @@
+# job_id=S2_LASTFM0_03_DUOREC dataset=lastfm0.03 model=duorec stage=stage2
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_lfm_small --search-algo tpe --max-evals 10 --tune-epochs 60 --tune-patience 6 --seed 710017 --run-group final_experiment --run-axis stage2_focus_search --run-phase S2_LASTFM0_03_DUOREC model=duorec dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=2 log_wandb=false show_progress=false ++seed=710017 --max-run-hours 2 --oom-retry-limit 2 ++search.learning_rate=[0.00012372,0.00017497,0.00024744,0.00034993,0.00049488] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[0.00015,0.0001,1e-05,5e-05] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[50,30,10,20] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[64,112,96,128] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[64,112,128,96] ++search_space_type_overrides.embedding_size=choice ++search.n_layers=[3,2,1] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[1,4,2] ++search_space_type_overrides.n_heads=choice ++search.hidden_dropout_prob=[0.1,0.15,0.05,0.12] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.12,0.15,0.1,0.08] ++search_space_type_overrides.attn_dropout_prob=choice ++search.tau=[0.18,0.16,0.2,0.22] ++search_space_type_overrides.tau=choice ++search.lmd=[0.03,0.04,0.06,0.05] ++search_space_type_overrides.lmd=choice ++search.lmd_sem=[0.0,0.05,0.08,0.1] ++search_space_type_overrides.lmd_sem=choice ++search.inner_size=[224] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.1] ++search_space_type_overrides.dropout_ratio=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=566938 ts=2026-04-18T07:17:24
+[UniqueChoice] disabled: finite choice-only space has 11796480 combos, exceeding enumeration cap 200000
+
+=================================================================
+  Hyperopt  |  DuoRec x lastfm0.03
+  max_evals=10  epochs=60  patience=6  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=2  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=2048/4096/4096
+  track=final_experiment  axis=stage2_focus_search  phase=S2_LASTFM0_03_DUOREC
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, embedding_size, hidden_dropout_prob, hidden_size, learning_rate, lmd, lmd_sem, n_heads, n_layers, tau, weight_decay
+Tuned params(len>1): 12  (~11796480 discrete combos)
+Tuned groups: 12
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.15, 0.05, 0.12]                   -> choice
+    learning_rate                   [0.00012372, 0.00017497, 0.00024744, 0.00034993, 0.00049488]  -> choice
+    weight_decay                    [0.00015, 0.0001, 1e-05, 5e-05]           -> choice
+  [model_core]
+    attn_dropout_prob               [0.12, 0.15, 0.1, 0.08]                   -> choice
+    embedding_size                  [64, 112, 128, 96]                        -> choice
+    hidden_size                     [64, 112, 96, 128]                        -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [50, 30, 10, 20]                          -> choice
+    lmd                             [0.03, 0.04, 0.06, 0.05]                  -> choice
+    lmd_sem                         [0.0, 0.05, 0.08, 0.1]                    -> choice
+    n_heads                         [1, 4, 2]                                 -> choice
+    n_layers                        [3, 2, 1]                                 -> choice
+    tau                             [0.18, 0.16, 0.2, 0.22]                   -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    dropout_ratio                   0.1                                     
+    inner_size                      224                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, embedding_size=96, hidden_dropout_prob=0.15, hidden_size=112, learning_rate=0.0004949, lmd=0.06, lmd_sem=0.08, n_heads=2, n_layers=3, tau=0.2, weight_decay=0.0001
+  -> MRR@20=0.198100  best=0.198100  (full@60, trial=26.4min, avg=26.6min/trial, total=26.6min, ETA=4.00h)
+[TRIAL_METRICS] cur_best_mrr20=0.198100 cur_best_hr10=0.260600 cur_test_mrr20=0.198600 cur_test_hr10=0.257800 avg_epoch_time_sec=26.4261 test_eval_time_sec=0.1109 test_eval_batches_per_sec=9.0144 test_eval_targets_per_sec=31000.4760 run_best_mrr20=0.198100 run_best_hr10=0.260600 run_test_mrr20=0.198600 run_test_hr10=0.257800
+
+[2/10] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, embedding_size=112, hidden_dropout_prob=0.05, hidden_size=96, learning_rate=0.0001237, lmd=0.05, lmd_sem=0, n_heads=1, n_layers=1, tau=0.2, weight_decay=0.00015
+  -> MRR@20=0.232900  best=0.232900  (full@60, trial=24.9min, avg=25.9min/trial, total=51.8min, ETA=3.45h)
+[TRIAL_METRICS] cur_best_mrr20=0.232900 cur_best_hr10=0.363900 cur_test_mrr20=0.234200 cur_test_hr10=0.375100 avg_epoch_time_sec=24.9414 test_eval_time_sec=0.0988 test_eval_batches_per_sec=10.1232 test_eval_targets_per_sec=34813.7608 run_best_mrr20=0.232900 run_best_hr10=0.363900 run_test_mrr20=0.234200 run_test_hr10=0.375100
+
+[3/10] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, embedding_size=96, hidden_dropout_prob=0.1, hidden_size=64, learning_rate=0.0003499, lmd=0.04, lmd_sem=0.08, n_heads=4, n_layers=3, tau=0.22, weight_decay=0.00015
+  -> MRR@20=0.133200  best=0.232900  (full@60, trial=50.2min, avg=34.1min/trial, total=1.70h, ETA=3.97h)
+[TRIAL_METRICS] cur_best_mrr20=0.133200 cur_best_hr10=0.178900 cur_test_mrr20=0.134500 cur_test_hr10=0.191400 avg_epoch_time_sec=50.2242 test_eval_time_sec=0.1073 test_eval_batches_per_sec=9.3221 test_eval_targets_per_sec=32058.8614 run_best_mrr20=0.232900 run_best_hr10=0.363900 run_test_mrr20=0.234200 run_test_hr10=0.375100
+
+[4/10] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, embedding_size=64, hidden_dropout_prob=0.05, hidden_size=128, learning_rate=0.0004949, lmd=0.05, lmd_sem=0.1, n_heads=4, n_layers=2, tau=0.22, weight_decay=5e-05
+  -> MRR@20=0.240700  best=0.240700  (full@60, trial=38.3min, avg=35.2min/trial, total=2.34h, ETA=3.52h)
+[TRIAL_METRICS] cur_best_mrr20=0.240700 cur_best_hr10=0.305000 cur_test_mrr20=0.233000 cur_test_hr10=0.290800 avg_epoch_time_sec=38.2430 test_eval_time_sec=0.1086 test_eval_batches_per_sec=9.2112 test_eval_targets_per_sec=31677.1966 run_best_mrr20=0.240700 run_best_hr10=0.305000 run_test_mrr20=0.233000 run_test_hr10=0.290800
+[TIME_BUDGET] reached limit=2.000h after 4/10 trials (elapsed=2.34h). Stopping new trials and finalizing current best.
+
+=================================================================
+  DONE  |  DuoRec x lastfm0.03
+  Best MRR@20 = 0.240700  |  4/10 trials OK
+  Best HR@10  = 0.305000
+  Test MRR@20 = 0.233000  (best-valid checkpoint)
+  Test HR@10  = 0.290800  (best-valid checkpoint)
+  Stop reason = time_budget(2.000h) reached at 2.34h
+  Avg epoch time = 38.243 sec/epoch
+  Final test eval = 0.109 sec | batches/s=9.211 | targets/s=31677.197
+[RUN_METRICS] best_valid_mrr20=0.240700 best_valid_hr10=0.305000 test_mrr20=0.233000 test_hr10=0.290800 avg_epoch_time_sec=38.2430 test_eval_time_sec=0.1086 test_eval_batches_per_sec=9.2112 test_eval_targets_per_sec=31677.1966
+  Total time: 140.6 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 20
+    attn_dropout_prob: 0.15
+    embedding_size: 64
+    hidden_dropout_prob: 0.05
+    hidden_size: 128
+    learning_rate: 0.00049488
+    lmd: 0.05
+    lmd_sem: 0.1
+    n_heads: 4
+    n_layers: 2
+    tau: 0.22
+    weight_decay: 5e-05
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/lastfm0.03_DuoRec_s2_lastfm0_03_duorec_20260418_071725_051549_pid566938.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage2_focus_search/S2/lastfm0.03/DuoRec/lastfm0.03_DuoRec_s2_lastfm0_03_duorec_20260418_071725_051549_pid566938.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage2_focus_search/S2/lastfm0.03/DuoRec/lastfm0.03_DuoRec_s2_lastfm0_03_duorec_20260418_071725_051549_pid566938_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage2_focus_search/S2/lastfm0.03/DuoRec/lastfm0.03_DuoRec_s2_lastfm0_03_duorec_20260418_071725_051549_pid566938_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=566938 start=2026-04-18T07:17:24 end=2026-04-18T09:38:02

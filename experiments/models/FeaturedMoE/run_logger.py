@@ -415,7 +415,11 @@ class RunLogger:
 
         payload = {
             "valid": (valid_special_metrics or {}).get("overall", {}),
+            "valid_overall_seen_target": (valid_special_metrics or {}).get("overall_seen_target", {}),
+            "valid_overall_unseen_target": (valid_special_metrics or {}).get("overall_unseen_target", {}),
             "test": (test_special_metrics or {}).get("overall", {}),
+            "test_overall_seen_target": (test_special_metrics or {}).get("overall_seen_target", {}),
+            "test_overall_unseen_target": (test_special_metrics or {}).get("overall_unseen_target", {}),
             "slice_metrics": {
                 "valid": (valid_special_metrics or {}).get("slices", {}),
                 "test": (test_special_metrics or {}).get("slices", {}),
@@ -424,6 +428,11 @@ class RunLogger:
                 "valid": (valid_special_metrics or {}).get("counts", {}),
                 "test": (test_special_metrics or {}).get("counts", {}),
             },
+            "full_payload": {
+                "valid": _make_serializable(valid_special_metrics or {}),
+                "test": _make_serializable(test_special_metrics or {}),
+            },
+            "selection_rule_default": "overall_seen_target",
             "config_snapshot": _make_serializable(config_snapshot),
         }
 

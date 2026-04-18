@@ -1,0 +1,69 @@
+# job_id=S3_FOURSQUARE_FDSA_C1_SEED1 dataset=foursquare model=fdsa stage=stage3
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_fs --search-algo tpe --max-evals 1 --tune-epochs 100 --tune-patience 10 --seed 810049 --run-group final_experiment --run-axis stage3_seed_confirm --run-phase S3_FOURSQUARE_FDSA_C1_SEED1 model=fdsa dataset=foursquare eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=7 log_wandb=false show_progress=false ++seed=810049 --max-run-hours 2 --oom-retry-limit 2 ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.selected_features=["category"] ++search_space_type_overrides.selected_features=choice ++search.pooling_mode=["mean"] ++search_space_type_overrides.pooling_mode=choice ++search.MAX_ITEM_LIST_LENGTH=[50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.attn_dropout_prob=[0.15] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[144] ++search_space_type_overrides.attribute_hidden_size=choice ++search.embedding_size=[160] ++search_space_type_overrides.embedding_size=choice ++search.hidden_dropout_prob=[0.12] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.hidden_size=[160] ++search_space_type_overrides.hidden_size=choice ++search.lambda_attr=[0.1] ++search_space_type_overrides.lambda_attr=choice ++search.learning_rate=[0.00019668] ++search_space_type_overrides.learning_rate=choice ++search.n_heads=[8] ++search_space_type_overrides.n_heads=choice ++search.n_layers=[4] ++search_space_type_overrides.n_layers=choice ++search.weight_decay=[0.0] ++search_space_type_overrides.weight_decay=choice ++search.train_batch_size=[2048] ++search_space_type_overrides.train_batch_size=choice ++search.eval_batch_size=[2048] ++search_space_type_overrides.eval_batch_size=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=631241 ts=2026-04-18T13:04:07
+
+=================================================================
+  Hyperopt  |  FDSA x foursquare
+  max_evals=1  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=2  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=2048/2048/2048
+  track=final_experiment  axis=stage3_seed_confirm  phase=S3_FOURSQUARE_FDSA_C1_SEED1
+  search.train_batch_size=[2048]
+  search.eval_batch_size=[2048]
+=================================================================
+Changed knobs: (none; single-run mode)
+Tuned params(len>1): 0  (~1 discrete combos)
+Tuned groups: 0
+  (none)
+Fixed params(singleton/non-list): 17
+Fixed groups: 17
+  [optimization]
+    eval_batch_size                 2048                                    
+    hidden_dropout_prob             0.12                                    
+    learning_rate                   0.00019668                              
+    train_batch_size                2048                                    
+    weight_decay                    0.0                                     
+  [model_core]
+    attn_dropout_prob               0.15                                    
+    dropout_ratio                   0.12                                    
+    embedding_size                  160                                     
+    hidden_size                     160                                     
+    inner_size                      320                                     
+  [other]
+    MAX_ITEM_LIST_LENGTH            50                                      
+    attribute_hidden_size           144                                     
+    lambda_attr                     0.1                                     
+    n_heads                         8                                       
+    n_layers                        4                                       
+    pooling_mode                    mean                                    
+    selected_features               category                                
+
+[Wandb] disabled for this hyperopt run
+
+[1/1] (fixed-only run)
+  -> MRR@20=0.209900  best=0.209900  (early_stop@44, trial=8.9min, avg=9.0min/trial, total=9.0min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.209900 cur_best_hr10=0.343100 cur_test_mrr20=0.167500 cur_test_hr10=0.294600 avg_epoch_time_sec=12.1003 test_eval_time_sec=0.2336 test_eval_batches_per_sec=8.5606 test_eval_targets_per_sec=15242.0687 run_best_mrr20=0.209900 run_best_hr10=0.343100 run_test_mrr20=0.167500 run_test_hr10=0.294600
+
+=================================================================
+  DONE  |  FDSA x foursquare
+  Best MRR@20 = 0.209900  |  1/1 trials OK
+  Best HR@10  = 0.343100
+  Test MRR@20 = 0.167500  (best-valid checkpoint)
+  Test HR@10  = 0.294600  (best-valid checkpoint)
+  Avg epoch time = 12.100 sec/epoch
+  Final test eval = 0.234 sec | batches/s=8.561 | targets/s=15242.069
+[RUN_METRICS] best_valid_mrr20=0.209900 best_valid_hr10=0.343100 test_mrr20=0.167500 test_hr10=0.294600 avg_epoch_time_sec=12.1003 test_eval_time_sec=0.2336 test_eval_batches_per_sec=8.5606 test_eval_targets_per_sec=15242.0687
+  Total time: 9.0 min
+  Best params:
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/foursquare_FDSA_s3_foursquare_fdsa_c1_seed1_20260418_130407_657828_pid631241.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage3_seed_confirm/S3/foursquare/FDSA/foursquare_FDSA_s3_foursquare_fdsa_c1_seed1_20260418_130407_657828_pid631241.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage3_seed_confirm/S3/foursquare/FDSA/foursquare_FDSA_s3_foursquare_fdsa_c1_seed1_20260418_130407_657828_pid631241_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage3_seed_confirm/S3/foursquare/FDSA/foursquare_FDSA_s3_foursquare_fdsa_c1_seed1_20260418_130407_657828_pid631241_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=631241 start=2026-04-18T13:04:07 end=2026-04-18T13:13:06

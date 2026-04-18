@@ -1,0 +1,315 @@
+RouteRec integration plan (method + experiments + appendix + refs)
+Date: 2026-04-17
+
+0. Source status
+- PDF version check: RouteRec__Behavior_Guided_Expert_Routing_for_Sequential_Recommendation (9).pdf and (10).pdf are byte-identical. Treat them as one document, not two divergent branches.
+- Therefore, integration should be done as “one current manuscript + one experiment/appendix-focused revision mindset”, not as a true line-by-line merge of competing PDFs.
+- Reference files: refs_40 is effectively a superset of refs_30, but a few keys differ or are replaced by updated / broader evaluation references.
+
+1. Overall judgment before merging
+The current manuscript is already much closer to the meeting direction than the earlier versions:
+- 3 challenge / 3 solution front-half is in place.
+- Method is now aligned with the introduction: Portable Behavioral Cues -> Coarse-to-Fine Multi-Stage Routing -> Behavior-Guided Expert Allocation.
+- Main experiment table now exposes processed subsets directly in the caption/rows (KuaiRec†, LastFM†), which was one of the meeting-critical transparency points.
+- Experiment text starts to justify where RouteRec helps more and why.
+
+That said, the remaining integration work is not “add more content everywhere.”
+It is mostly about tightening role separation and making the paper read like one coherent argument:
+- Introduction defines the 3 challenges.
+- Method proposes 3 aligned design axes.
+- Experiments answer whether each axis matters.
+- Appendix supports transparency, reproducibility, and reviewer objections without repeating the main text.
+
+2. Main integration principle
+Use the current PDF as the base manuscript.
+Then integrate experiment/appendix edits under the following rule:
+- Keep anything that strengthens transparency, protocol justification, or challenge-to-evidence mapping.
+- Remove anything that repeats the same claim in a weaker or more editorial way.
+- Push detailed but non-load-bearing implementation specifics to appendix tables.
+- Keep the main text focused on the “why this design / why this evidence” story.
+
+3. How to align with the original meeting points
+The meeting had a few recurring priorities. The merged version should explicitly satisfy them:
+
+3.1 Three big ideas must remain visible throughout
+Keep the paper organized around:
+1) Portable Behavioral Cues
+2) Coarse-to-Fine Multi-Stage Routing
+3) Behavior-Guided Expert Allocation
+
+Do not allow the experiment/app appendix material to drift into a different framing such as:
+- “we tried many variants and this one works”
+- “the architecture sweep found this”
+without reconnecting it to the 3-axis story.
+
+Every major experiment subsection should answer one of the axes:
+- 4.2 Overall performance: Does the whole design help in a fair, transparent setup?
+- 4.3 Routing control: Why behavior-guided routing instead of hidden-only or mixed?
+- 4.4 Staged structure: Why multi-stage scope separation instead of generic FFN replacement?
+- 4.5 Cue sufficiency: Are lightweight portable cues enough?
+
+This is already mostly present; preserve it.
+
+3.2 Transparency of setting must stay explicit
+Keep these visible in the merged version:
+- subset disclosure in the main table and appendix dataset table
+- sessionization thresholds by dataset
+- held-out splitting / cleanup explanation
+- same validation-selection rule for baselines and RouteRec
+
+Do not move subset disclosure only to appendix. It belongs in the main table and experimental setup.
+
+3.3 Session split / protocol justification should be framed as deliberate, not accidental
+The meeting concern was not just “state the setting,” but “make it look justified and defensible.”
+So keep the current protocol explanation in 4.1 / Appendix B, but strengthen it with the logic:
+- sessions are the unit of evaluation because the paper studies session-aware behavioral routing
+- the split keeps temporal order at the session level
+- cleanup preserves held-out realism while avoiding uncontrolled leakage from unseen non-target rows
+
+This should read as a methodological choice, not a workaround.
+
+3.4 Feature contribution must stay central
+The meeting emphasized that feature design itself is a major contribution.
+So when integrating appendix and experiment edits, do not let Portable Behavioral Cues become “just one method subsection.”
+Give it support in three places:
+- main method section (concept and design rationale)
+- cue-family ablation in main experiments
+- representative cue bank table in appendix
+
+This triad should stay intact.
+
+4. What to keep in main text vs appendix
+This is the biggest integration issue.
+There is already some overlap between method, experiments, and appendix. The merge should reduce duplication by function.
+
+4.1 Main text should keep only what is needed to carry the argument
+Method main text should keep:
+- the common stage interface
+- stage windows / cue-family idea
+- serial layout logic
+- router composition logic
+- objective logic
+
+Method main text should NOT become a configuration dump.
+Table 2 / Table 3 / Table 4 should carry the more implementation-oriented details.
+
+4.2 Appendix A should be reproducibility- and rationale-oriented
+Appendix A should contain:
+- fixed main configuration summary
+- implementation specification table
+- representative cue bank
+
+But it should not repeat the same conceptual sentences already said in 3.1–3.4 unless the appendix version adds reproducibility value.
+
+Concretely:
+- A.1 Main Paper Configuration: keep, because it explains why the two-attention placement and macro-mid adjacency are the selected design.
+- A.2 Implementation Specification: currently empty / placeholder-like. This must either be populated or removed.
+- A.3 Representative Behavioral Cue Families: keep, because it supports the feature contribution.
+
+Recommendation:
+Fold Table 3 directly into A.2 and add 2–4 sentences explaining how to read it. That will make Appendix A feel intentional rather than partially unfinished.
+
+4.3 Appendix B should remain the protocol appendix
+Appendix B is the right place for:
+- final processed dataset statistics
+- why subset statistics differ from raw dataset sizes
+- evaluation split mechanics
+- full cutoff grid
+
+Do not re-explain all of this in the main text. The main text only needs the short defensible protocol summary; Appendix B carries the exact operational details.
+
+4.4 Appendix C / D / E / F / G should each answer one reviewer need
+Keep the appendix sections, but make their roles sharper:
+- C = architecture and stage/layout ablations
+- D = objective and regularization variants
+- E = routing diagnostics
+- F = behavior-slice analysis
+- G = transfer results
+
+Right now these sections are directionally good, but some parts still read like “what the appendix is intended to show.”
+Replace editorial intention sentences with concrete observation-oriented framing when final results are ready.
+
+5. Specific merge recommendations by section
+
+5.1 Abstract / Introduction / Related Work
+Base: current version.
+Do not rewrite unless method/experiment changes force it.
+Only minor updates after the final merge:
+- make sure the “improves on several datasets while remaining competitive on others” tone still matches the final tables
+- if transfer stays appendix-only, do not oversell it in the front-half
+- if objective-variant results become stronger, one phrase about “stable, behavior-aligned specialization” can be reinforced
+
+5.2 Method
+Keep the current method body as the base.
+It is already cleaner than before.
+What to improve during merge:
+- keep framework vs paper-instantiation separation crisp
+- use Appendix A to absorb exact implementation details
+- make A.2 real (not empty)
+- if exact selected values are available, prefer exact values over search ranges in Table 3 wherever possible
+
+Concrete method-side merge rule:
+- if a detail explains “why this design exists,” keep it in the main text
+- if it explains “what exact value/range was used,” move it to Table 2 / Table 3 / A.2 unless absolutely required in the main narrative
+
+5.3 Experiments
+Use the current experiment narrative as the backbone.
+It already has the right question-based structure.
+The merge goal is not to add more paragraphs, but to strengthen the bridge from method claims to empirical evidence.
+
+Best structure to keep:
+- 4.1 Experimental Setup
+- 4.2 Overall Performance: Does Behavior-Guided Routing Help?
+- 4.3 What Should Control Routing?
+- 4.4 Why Is the Staged RouteRec Structure Effective?
+- 4.5 Are Lightweight Cues Enough?
+
+Add one short bridge sentence at the end of each subsection linking it back to the corresponding challenge/axis:
+- 4.3 -> Challenge 3 / Behavior-Guided Expert Allocation
+- 4.4 -> Challenge 2 / Multi-Stage Routing
+- 4.5 -> Challenge 1 / Portable Behavioral Cues
+
+This makes the whole paper feel deliberately structured instead of just “a list of ablations.”
+
+6. Main text–appendix linking: how to connect method and experiment better
+This is one of the most important remaining improvements.
+The current paper already has the right ingredients, but the links can be made more explicit.
+
+6.1 Connect 3.2 Portable Behavioral Cues -> 4.5 cue-family ablations -> Table 4
+Suggested pattern:
+- Method says the cue bank is compact, interpretable, and portable.
+- Experiment 4.5 tests whether those cues are actually sufficient.
+- Appendix Table 4 gives representative examples so the reader knows what the families concretely mean.
+
+Add a short forward reference at the end of 3.2, e.g.:
+“The contribution of these cue families is tested directly in Sec. 4.5, while representative stage-wise summaries are listed in Table 4.”
+
+6.2 Connect 3.3 Multi-Stage Routing -> 4.4 stage/layout ablations -> Appendix C
+Suggested pattern:
+- Method explains why macro/mid/micro differ by evidence scope and granularity.
+- Main experiment tests whether these stages matter and whether dense replacement alone is enough.
+- Appendix C carries the broader sweep / additional order variants.
+
+Add a short forward reference near the end of 3.3, e.g.:
+“The role of stage placement, removal, and ordering is evaluated in Sec. 4.4 and expanded in Appendix C.”
+
+6.3 Connect 3.4 / 3.5 -> 4.3 routing control + Appendix D/E
+Suggested pattern:
+- Method defines behavior-guided allocation and route consistency + z-loss.
+- Main experiment 4.3 tests whether behavior-based routing is better than hidden-only or mixed routing.
+- Appendix D shows whether the selected objective terms actually help.
+- Appendix E shows routing diagnostics to support the inspectability claim.
+
+Add two references:
+- near the end of 3.4: “Alternative routing controls are compared in Sec. 4.3.”
+- near the end of 3.5: “Objective variants and routing diagnostics are reported in Appendices D and E.”
+
+This will make the method feel empirically anchored.
+
+7. What to do about overlapping appendix content
+There are a few places where appendix sections partially overlap conceptually. Here is the clean split.
+
+A vs C
+- A = selected design and reproducibility summary
+- C = ablation evidence about why that design was selected
+Do not restate ablation conclusions in A beyond one sentence.
+
+B vs main 4.1
+- Main 4.1 = compact protocol summary
+- B = exact dataset statistics + extended protocol explanation + full k results
+Avoid copying long preprocessing paragraphs into both places.
+
+D vs E
+- D = objective terms and whether each regularizer helps
+- E = what the learned routes look like
+D is causal / variant-focused; E is descriptive / diagnostic-focused.
+Keep them separate.
+
+F vs 4.2
+- 4.2 = overall aggregate performance and high-level interpretation
+- F = where gains localize in behavioral slices
+So 4.2 should mention slices only lightly, and leave the detailed localization to F.
+
+G vs conclusion/future work
+- G is evidence for transfer potential
+- conclusion should mention transfer as future extension only if the appendix evidence is genuinely stable enough
+If transfer remains mixed or exploratory, keep it appendix-level and avoid making it sound like a central contribution.
+
+8. Reference integration strategy
+8.1 Base decision
+Use refs_40 as the base bibliography.
+Reason:
+- It contains the seqrec core set from refs_30.
+- It adds evaluation/protocol references that directly support the revised experiments section.
+- It already matches the current PDF’s reference numbering style better.
+
+8.2 Entries in refs_40 that are especially useful for the merged paper
+For experimental justification / protocol:
+- jannach2022sessions
+- latifi2021sessionaware
+- latifi2022seqstudy
+- ji2023leakage
+- galuzzi2020bayesopt
+- ludewig2021empirical (present in refs_30, should be retained if not already present under another key)
+- gusak2025timesplit (use carefully; only if you are comfortable citing a recent arXiv preprint for split strategy discussion)
+
+For method / MoE justification:
+- jacobs1991adaptive
+- jordan1994hme
+- shazeer2017moe
+- fedus2022switch
+- expert-choice / ST-MoE style references already cited in the current PDF (zhou2022expertchoice / zoph2022sparse, depending on key naming)
+
+For feature/session-aware / multi-scope framing:
+- bauer2023hybridsession
+- quadrana2017hrrn
+- hierarchical gating / multi-interest / long-short style papers already in the set
+
+8.3 How to reconcile refs_30 and refs_40
+Keep refs_40 as the main file, then add back the following if they are missing or preferred under your own key naming:
+- ludewig2021empirical
+
+Also standardize naming conflicts / year consistency, for example:
+- Bauer & Jannach hybrid session-aware paper should use one key and one year convention consistently throughout.
+
+9. Immediate technical clean-up items before final merge
+These are small but important.
+- PDFs (9) and (10) are identical, so do not waste time trying to manually diff them.
+- Remove or fill “Table ??” in Appendix D.
+- Populate or delete empty Appendix A.2.
+- Ensure Table 1 and Table 5 both keep subset markers (†) consistently.
+- If exact selected values are available, replace search-range style reporting in Table 3 with exact selected values where possible.
+- Keep the transparent reporting line in 4.1 that the comparison protocol follows controlled session-based evaluation recommendations.
+
+10. Recommended final manuscript flow after integration
+Main paper:
+1 Introduction
+2 Related Work
+3 Method
+  3.1 Overview
+  3.2 Portable Behavioral Cues
+  3.3 Coarse-to-Fine Multi-Stage Routing
+  3.4 Behavior-Guided Expert Allocation
+  3.5 Training Objective
+4 Experiments
+  4.1 Experimental Setup
+  4.2 Overall Performance
+  4.3 What Should Control Routing?
+  4.4 Why Is the Staged Structure Effective?
+  4.5 Are Lightweight Cues Enough?
+5 Conclusion
+
+Appendix:
+A Method Details and Design Rationale
+  A.1 Main Paper Configuration
+  A.2 Implementation Specification  <- make this real
+  A.3 Representative Behavioral Cue Families
+B Dataset, Evaluation, and Full Results
+C Extended Stage and Layout Ablations
+D Objective and Regularization Variants
+E Extended Diagnostics
+F Behavior-Slice Analysis
+G Extended Transfer Results
+
+11. One-sentence decision summary
+Treat the current manuscript as the base, keep the question-driven experiments structure, use the appendix to absorb reproducibility and extended evidence rather than repeating the main text, and adopt refs_40 as the base bibliography with minor cleanup and one or two add-backs from refs_30.

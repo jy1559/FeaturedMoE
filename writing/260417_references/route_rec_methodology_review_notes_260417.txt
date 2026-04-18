@@ -1,0 +1,370 @@
+RouteRec methodology 비판적 리뷰 및 수정 가이드
+=========================================
+
+대상 파일
+- RouteRec__Behavior_Guided_Expert_Routing_for_Sequential_Recommendation (5).pdf
+
+전체 평가
+---------
+이번 버전은 방향이 분명히 좋아졌다. introduction의 3 challenge와 method의 3 axis가 실제로 연결되고,
+Figure 2와 Appendix의 Table 2, Table 3가 그 연결을 받쳐주기 시작했다.
+리뷰어가 abstract부터 methodology까지 읽었을 때 “이 논문이 뭘 하려는지 모르겠다”는 반응은 거의 나오지 않을 수준이다.
+
+다만 꼼꼼히 읽는 리뷰어 관점에서는 아직
+1) 개념 설명과 고정 구현 설명이 조금 섞여 있고,
+2) serial architecture를 notation이 충분히 표현하지 못하며,
+3) 몇몇 수식/표현이 실제 구현 의도와 완전히 맞물려 보이지 않고,
+4) appendix가 설계 의도는 잘 보여주지만 재현성 문서로는 아직 약한 상태다.
+
+즉, 현재 버전은 “개념 논문으로는 잘 읽히지만, 구현 논문으로는 아직 조금 더 다듬어야 하는 상태”라고 볼 수 있다.
+
+
+1. 큰 장점
+---------
+1) introduction -> methodology 연결이 훨씬 좋아졌다.
+- 3 challenge를 introduction에서 명시하고,
+- Portable Behavioral Cues / Coarse-to-Fine Multi-Stage Routing / Behavior-Guided Expert Allocation으로 바로 대응시키는 구조가 잘 보인다.
+- reviewer가 methodology에서 무엇을 기대해야 하는지가 명확하다.
+
+2) method section 자체의 분할은 적절하다.
+- 3.1 Overview
+- 3.2 Portable Behavioral Cues
+- 3.3 Coarse-to-Fine Multi-Stage Routing
+- 3.4 Behavior-Guided Expert Allocation
+- 3.5 Training Objective
+이 순서는 reader가 이해하기 쉬운 편이다.
+
+3) appendix가 이전보다 훨씬 도움된다.
+- Table 2의 fixed main configuration은 매우 유용하다.
+- Table 3의 representative cue summaries도 3.2의 추상성을 줄여준다.
+- main text에서 너무 세세하게 풀면 지저분해질 구현 디테일을 appendix로 보낸 결정은 전반적으로 맞다.
+
+
+2. 가장 먼저 고쳐야 할 핵심 문제
+------------------------------
+2.1. 개념(RouteRec framework)과 고정 논문 버전(main paper configuration)이 아직 섞여 보인다
+
+문제
+- method 전반에 “main paper configuration”이라는 표현이 자주 등장한다.
+- 3.1에서 fixed serial layout,
+- 3.2에서 16-dimensional cue bank,
+- 3.3에서 attention placement,
+- 3.4에서 dense mixture,
+- 3.5에서 no load balancing
+같은 내용이 반복되면서,
+reader가 “이게 RouteRec의 개념인지, 아니면 이번 논문에서 고정한 한 instantiation인지”를 계속 구분해야 한다.
+
+리뷰어가 느낄 수 있는 점
+- RouteRec이라는 framework가 있는 건지,
+- 아니면 현재 serial layout 자체가 RouteRec의 정의인지,
+- dense mixing / H=5 / w=5 / 16-d cue bank / no balancing이 방법론인지 세팅인지 헷갈릴 수 있다.
+
+수정 방향
+- method 초반에 framework와 instantiation을 한 번만 분리해서 선언하는 문장을 넣는 것이 좋다.
+- 예:
+  “We first describe RouteRec as a design framework, and then specify the fixed paper instantiation where concrete implementation choices matter.”
+- 이후 각 subsection에서는 개념 설명을 먼저 두고,
+  고정 세팅은 subsection 말미 혹은 appendix reference로 정리하는 방식이 낫다.
+
+
+2.2. serial architecture를 notation이 충분히 표현하지 못한다
+
+문제
+- 3.1의 공통 인터페이스에서는 모든 stage가 같은 h_t를 consume하는 것처럼 보인다.
+- 하지만 3.3에서는 실제 serial layout이
+  self-attention -> macro -> mid -> self-attention -> micro
+  라고 설명한다.
+- 그러면 reviewer는 macro, mid, micro가 실제로 동일 hidden state를 보는지,
+  아니면 이전 block output을 순차적으로 받는지 멈춰서 생각하게 된다.
+
+왜 문제인가
+- 현재 텍스트만 보면 architecture는 serial인데 수식은 static interface처럼 읽힌다.
+- 특히 “macro와 mid 사이에는 추가 attention이 없다”는 설명이 들어간 지금 버전에서는,
+  stage-local hidden state가 구분돼 보이지 않으면 구현이 덜 선명해진다.
+
+수정 방향
+- 최소한 stage-local hidden notation을 도입하는 것이 좋다.
+- 예:
+  h_t^(0), h_t^(mac), h_t^(mid), h_t^(att2), h_t^(mic)
+  혹은 H^(0), H^(1), ... 형태.
+- 굳이 모든 식을 복잡하게 다시 쓰지 않아도 된다.
+- 3.1에서 아래 정도만 넣어도 충분하다.
+  “Eq. (2) defines the stage-local MoE interface. In the serial RouteRec architecture, each stage consumes the current hidden state produced by the previous attention or routing block.”
+- 그리고 3.3의 serial layout 설명과 맞물리게 하면 된다.
+
+
+2.3. 3.3의 granularity 수식이 현재 형태로는 부정확하거나 최소한 헷갈린다
+
+문제
+- 3.2에서는 f_t^(s) = A(R_t^(s)) 로 window를 feature summary로 바꾼다고 했다.
+- 그런데 3.3에서는 갑자기 pi_t^(s) = Gamma_s(R_t^(s)) 처럼 보인다.
+- 이 식만 보면 raw window에서 바로 routing distribution이 나오는 것처럼 읽힌다.
+- 그러면 3.2의 feature summary와 Router_s는 어디로 갔는지 모호하다.
+
+리뷰어가 느낄 수 있는 점
+- Gamma_s는 window-to-routing map인가?
+- routing granularity operator인가?
+- sequence-level broadcast와 token-level routing 차이를 말하고 싶은 건 알겠는데,
+  현재 수식은 그 의도를 정확히 못 전달한다.
+
+수정 방향
+- Gamma_s는 raw window를 받는 함수가 아니라 routing update granularity를 표현하는 방식으로 정리하는 것이 좋다.
+- 예시 방향:
+  1) 먼저 stage cue를 만든다: f^(s) = A(R^(s))
+  2) macro/mid는 stage-level route를 만든 뒤 broadcast
+  3) micro는 token-level route를 직접 만든다
+- 예:
+  \bar{\pi}^{(s)} = Router_s(f^{(s)})
+  pi_t^(s) = \bar{\pi}^{(s)} for macro/mid
+  pi_t^(s) = Router_s(f_t^(s)) for micro
+- 즉 현재 수식은 반드시 다시 다듬는 것이 좋다.
+
+
+2.4. z-loss notation bug는 꼭 고쳐야 한다
+
+문제
+- z-loss 식에서 exp q_{s,i,t,e} 가 등장하는데, q가 어디에도 정의되어 있지 않다.
+- 앞에서는 z, u, p, r, pi만 나왔다.
+
+왜 문제인가
+- 사소해 보이지만 reviewer는 이런 notation inconsistency에 매우 민감하다.
+- method 신뢰감을 깎는 전형적인 포인트다.
+
+수정 방향
+- q를 “flattened expert logits”로 새로 정의하거나,
+- 아니면 기존 z/u 표기와 통일해야 한다.
+- 어떤 표기를 쓸지 정하고 method 전체에서 하나로 통일하는 것이 좋다.
+
+
+3. 구현 의도 표현 측면에서 애매한 부분
+-------------------------------
+3.1. expert group과 cue family의 관계가 다소 강하게 읽힌다
+
+문제
+- 3.4에서 “groups correspond to the four cue families”처럼 읽힌다.
+- 이 문장은 reader에게 거의 hard semantic mapping처럼 인식될 수 있다.
+
+리뷰어가 느낄 수 있는 점
+- Tempo group은 Tempo cue에 해당하는 expert만 담당하나?
+- Focus group은 Focus cue에 해당하는 expert만 담당하나?
+- 실제 구현이 완전 1:1 family-to-group인지, 아니면 cue bank 전체를 보고 group-level router를 돌리는지 모호하다.
+
+수정 방향
+- 실제 구현이 완전 hard mapping이 아니라면 표현을 조금 누그러뜨리는 것이 좋다.
+- 예:
+  “the group structure is organized around the four semantic cue families”
+  “the group prior is aligned with the four cue families in the main configuration”
+  “groups are intended to reflect family-level control views”
+- 즉 semantic alignment는 보여주되, 과도한 hard claim으로 읽히지 않게 하는 것이 좋다.
+
+
+3.2. dense mixture를 명시한 것은 좋지만, 현재 문장은 약간 방어적으로 읽힌다
+
+문제
+- 3.4에서 dense mixing을 쓴다고 솔직하게 밝힌 점 자체는 좋다.
+- 그러나 “sparse top-k routing is a later extension rather than part of the current paper evidence”는 약간 방어적으로 들릴 수 있다.
+
+리뷰어가 느낄 수 있는 점
+- 그럼 왜 MoE라고 부르나?
+- top-k가 아닌 dense mixture면 진짜 expert specialization이 맞나?
+
+수정 방향
+- dense mixing을 약점처럼 쓰지 말고,
+  왜 이번 논문의 목적에는 dense setting이 더 적합했는지 설명하는 쪽으로 바꾸는 것이 낫다.
+- 예:
+  “We use dense soft mixing in the paper because it yields more stable diagnostics and cleaner stage-wise usage statistics; sparse top-k routing is left as an extension beyond the current scope.”
+- 즉 현재 선택을 ‘임시방편’이 아니라 ‘의도된 실험 설정’으로 보이게 해야 한다.
+
+
+3.3. route consistency의 pair construction 설명이 아직 조금 뭉뚱그려져 있다
+
+문제
+- 현재는 top-k feature-similar samples, cosine similarity, mean cue representation 정도만 나온다.
+- 전보다 나아졌지만 reviewer는 여전히 다음이 궁금하다.
+  - mean cue representation이 정확히 무엇인가?
+  - stage-specific cue representation인가?
+  - token-level mean인가 sequence-level mean인가?
+  - self-pair는 제외하나?
+  - top-k의 k 값은 얼마인가?
+  - 대칭 pair인가 비대칭 neighbor relation인가?
+
+수정 방향
+- main text에 전부 넣을 필요는 없지만, 최소한 아래 둘은 필요하다.
+  1) stage-specific cue summary라는 점
+  2) nearest-neighbor parameter를 appendix로 명시한다는 점
+- 예:
+  “For each stage s, we construct P_s from the k_nn nearest non-self samples in the mini-batch according to cosine similarity between stage-level cue summaries.”
+- 그리고 k_nn 값은 appendix configuration 표에 넣는 것이 좋다.
+
+
+4. methodology section별 비판적 코멘트
+----------------------------------
+4.1. 3.1 RouteRec Overview
+
+좋은 점
+- introduction의 challenge 구조를 method 초반에서 다시 받는 점은 좋다.
+- representation channel vs behavior channel 구분도 여전히 유효하다.
+
+아쉬운 점
+- introduction에서 이미 충분히 이해한 reader에게는 약간 다시 설명하는 느낌이 있을 수 있다.
+- fixed serial layout 설명이 조금 이른 타이밍에 나와서, overview가 “지도”보다 “부분 구현 설명”처럼 느껴질 수 있다.
+
+수정 방향
+- 3.1은 조금 더 지도 역할에 집중해도 좋다.
+- 구성 추천:
+  1) setup + backbone + FFN replacement
+  2) representation channel vs behavior channel
+  3) challenge -> method mapping
+  4) common stage interface equation
+- fixed serial layout 설명은 3.3로 조금 더 넘겨도 좋다.
+
+
+4.2. 3.2 Portable Behavioral Cues
+
+좋은 점
+- portable signal이라는 메시지가 잘 살아 있다.
+- 4 family 설명도 이전보다 좋아졌다.
+- Table 3로 대표 cue를 appendix에 보낸 것은 좋은 선택이다.
+
+아쉬운 점
+- “main paper configuration에서 각 stage uses four scalar summaries per family = 16-d cue bank”는 useful하지만,
+  개념 subsection 안에서 조금 세게 들어온다.
+- method 본문에서 family-level design principle과 fixed dimension을 약간 분리하면 더 깔끔해진다.
+
+수정 방향
+- 본문에서는 family template와 stage-specific lens를 강조하고,
+- 16-d fixed bank는 appendix table로 더 넘겨도 된다.
+- 혹은 현재처럼 유지하되 문장을 줄여서 “In the fixed paper setting, this yields a compact 16-dimensional cue bank per stage; representative examples are listed in Table 3.” 정도로만 간단히 적는 편이 낫다.
+
+
+4.3. 3.3 Coarse-to-Fine Multi-Stage Routing
+
+좋은 점
+- macro / mid / micro의 역할을 이전보다 훨씬 잘 설명하고 있다.
+- “macro와 mid 사이에 attention을 넣지 않은 이유”를 서술한 점은 장점이다.
+
+아쉬운 점
+- 이 subsection은 아이디어적으로는 좋아졌지만, notation과 serial state flow가 아직 완전히 정리되지 않았다.
+- 특히 Gamma_s 수식과 serial layout이 구현을 떠올리게 만들면서도 정확히 formalize하진 못한다.
+
+수정 방향
+- 이 파트는 현재의 서술을 유지하되,
+  1) hidden-state flow notation 추가,
+  2) granularity 식 수정,
+  3) broadcast vs token-level update를 더 formal하게 써주는 것
+이 필요하다.
+
+
+4.4. 3.4 Behavior-Guided Expert Allocation
+
+좋은 점
+- 현재 논문의 핵심 문장인 “behavior cue controls routing, hidden state is transformed by experts”가 잘 보인다.
+- dense mixture를 명시한 건 투명성 면에서 좋다.
+
+아쉬운 점
+- group-family 대응이 조금 과하게 강하게 읽힐 수 있다.
+- router composition이 잘 설명되긴 하지만, 실제 구현이 hard semantic partition인지 soft alignment인지 애매하다.
+
+수정 방향
+- expert group semantics 표현을 약간 누그러뜨리기.
+- dense setting의 이유를 더 긍정적으로 설명하기.
+- 가능하면 appendix configuration 표에 G, C, E 값을 넣기.
+
+
+4.5. 3.5 Training Objective
+
+좋은 점
+- consistency + z-loss + no load-balancing의 논리 자체는 설득력이 있다.
+- “uniform usage가 목적이 아니라 behavior-aligned specialization이 목적이다”는 메시지도 좋아졌다.
+
+아쉬운 점
+- q notation bug가 반드시 수정되어야 한다.
+- pair construction이 아직 조금 모호하다.
+- consistency loss의 대상이 되는 representation이 stage-specific cue summary인지 더 명확히 드러나면 좋다.
+
+수정 방향
+- q 정의/통일
+- P_s construction 한 줄 보강
+- k_nn 같은 파라미터는 appendix configuration에 명시
+
+
+5. appendix 평가
+----------------
+5.1. Appendix A는 이해 보조용으로는 좋지만, 재현성 문서로는 아직 약하다
+
+좋은 점
+- Table 2의 fixed configuration은 매우 유용하다.
+- Table 3의 representative cue bank도 method 이해에 큰 도움이 된다.
+
+부족한 점
+- 아직 아래 항목들이 빠져 있다.
+  - G, C, E의 실제 값
+  - router hidden dim / projection dim
+  - temperature tau_s 값
+  - consistency neighbor count k_nn
+  - category/time missing 시 fallback rule의 더 정확한 정의
+  - cue normalization / clipping / bucketization 방식
+
+수정 방향
+- Appendix A에 configuration spec 표 하나 더 넣는 것이 좋다.
+- 예:
+  - # groups
+  - experts per group
+  - total experts
+  - cue dim
+  - router MLP dim
+  - temperature
+  - k_nn
+  - missing-signal handling
+- 이렇게만 해도 reproducibility 신뢰감이 훨씬 올라간다.
+
+
+5.2. Appendix를 통해 성능 기대는 정성적으로는 전달되지만, 몇몇 문장은 아직 too editorial이다
+
+문제
+- dataset 성격 설명은 좋다. reader가 어떤 데이터셋에서 RouteRec이 더 잘 먹힐지 정성적으로 예상하게 해준다.
+- 그러나 본문 4.4의 “the same pattern is expected” 같은 표현은 여전히 위험하다.
+- Appendix D의 Table ?? placeholder도 그대로 남아 있다.
+
+리뷰어가 느낄 수 있는 점
+- 아직 결과 정리가 덜 끝난 상태인가?
+- figure가 실제 observation인지, 의도된 메시지인지?
+
+수정 방향
+- expected 표현 전부 제거하고, 실제 관찰된 경향으로 서술.
+- Table ?? 같은 placeholder 제거.
+- “intended appendix message” 같은 메타 설명보다 실제 관찰 결과를 직접 쓰는 문장으로 교체.
+
+
+6. 우선순위별 수정 권장안
+----------------------
+최우선
+1) serial architecture에 맞는 hidden-state notation 추가
+2) 3.3 granularity 수식 수정
+3) z-loss의 q notation bug 수정
+4) “expected” 문장 및 placeholder 제거
+
+그 다음
+5) framework vs fixed paper instantiation 구분 문장 추가
+6) group-family 대응 표현을 약간 누그러뜨리기
+7) dense mixture를 방어적으로 쓰지 말고, 현재 논문의 선택 이유로 정리
+8) route consistency pair construction 한 줄 보강
+
+마지막으로
+9) appendix에 configuration spec 표 하나 추가
+10) appendix 문장들을 observation 중심으로 조금 더 정리
+
+
+7. 한 줄 요약
+------------
+현재 methodology는 의도와 큰 구조는 잘 표현하고 있고, introduction과의 연결도 좋다.
+하지만 reviewer가 구현을 꼼꼼히 추적하려고 하면
+- state flow,
+- stage granularity formalization,
+- router/objective의 세부 표기,
+- appendix의 재현성 수준
+에서 멈출 가능성이 있다.
+
+따라서 다음 수정의 목표는
+“아이디어를 더 설명하는 것”이 아니라,
+“이미 보이는 아이디어를 implementation-consistent notation과 재현 가능한 spec으로 더 매끈하게 만드는 것”이 되어야 한다.

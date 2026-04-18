@@ -1,0 +1,311 @@
+RouteRec_v3 최종 수정 가이드 (v4 비교 반영)
+작성일: 2026-04-18
+
+목적
+- 최종 베이스는 v3로 유지한다.
+- 다만 v4의 장점 중 실제로 도움이 되는 부분은 제한적으로 흡수한다.
+- 목표는 "새 내용을 더 많이 넣는 것"이 아니라, 현재 v3의 장점을 보존하면서
+  experiment 정렬과 문장 설득력을 조금 더 끌어올리는 것이다.
+
+============================================================
+0. 최종 방향 한 줄 요약
+============================================================
+
+v3를 베이스로 유지하라.
+특히 method의 구조와 서술 방식은 크게 건드리지 마라.
+
+대신 v4에서 아래 두 가지만 제한적으로 흡수하라.
+1) introduction의 질문형 framing 일부
+2) Q3 첫 문장의 three-part design wording 일부
+
+즉:
+- method는 v3 유지
+- experiment 구조도 v3 유지
+- phrasing만 일부 v4에서 가져오기
+- appendix unfinished 흔적 제거가 최우선
+
+============================================================
+1. 왜 v3를 베이스로 유지해야 하는가
+============================================================
+
+1) method fidelity가 더 좋다
+v3는 framework vs paper instantiation 구분이 더 분명하다.
+이건 이 논문이 "특정 구현 리포트"가 아니라
+"behavior-guided routing framework + one selected instantiation"
+라는 점을 더 잘 보여준다.
+
+2) feature 정의가 더 정직하고 방어 가능하다
+v3는
+- optional coarse item-group labels
+- coarsest available proxy
+- fixed missing-signal rule
+로 써서 reviewer가 implementation을 물었을 때 방어가 쉽다.
+
+반면 v4는 portability narrative는 더 세지만,
+실제 구현과 1:1로 맞지 않으면 공격 포인트가 될 수 있다.
+
+3) notation과 objective 서술이 더 안정적이다
+v3는 z-loss의 expert logits 표기를 더 명확하게 정리했고,
+overall method prose도 덜 흔들린다.
+
+4) appendix 구조가 더 기능적으로 분리되어 있다
+v3의 appendix 분할:
+- B Dataset / Evaluation / Full Results
+- C Extended Structural Ablations
+- D Protocol Sensitivity
+- E Objective and Regularization Variants
+- F Efficiency and Model Cost
+- G Extended Diagnostics
+- H Behavior-Slice Analysis
+- I Extended Transfer Results
+
+이 구조는 역할이 명확하고, 최종 제출본으로 다듬기 쉽다.
+
+============================================================
+2. v3에서 절대 유지해야 할 것
+============================================================
+
+아래는 건드리지 말고 유지하는 것이 좋다.
+
+A. 3.1의 framework vs instantiation 구분
+- "We first describe RouteRec as a design framework ..."
+- concrete implementation choice는 appendix / selected paper instantiation으로 제한
+
+B. 3.2의 coarse item-group proxy 설명
+- optional coarse item-group labels
+- coarsest available item-group proxy
+- fixed missing-signal rule
+이 3개는 유지
+
+C. 3.3의 stage 설명 구조
+- macro / mid / micro 역할 분리
+- serial layout 설명
+- second attention before micro rationale
+이건 지금 방향이 맞다
+
+D. 3.4의 behavior-guided allocation 설명
+- family-level control view → within-group capacity allocation
+- hidden state는 transformed object, cue bank는 routing controller
+이 core wording 유지
+
+E. method → experiment cross-link
+- cue contribution → Sec. 4.5
+- stage placement/order → Sec. 4.4 and Appendix C
+- routing controls → Sec. 4.3
+- objective variants → Appendices E and G
+이런 연결은 유지
+
+F. appendix 역할 분리
+지금 v3의 appendix title/flow는 v4보다 낫다.
+이 구조를 유지하는 쪽이 좋다.
+
+============================================================
+3. v4에서 가져오면 좋은 것
+============================================================
+
+v4 전체를 가져오면 안 된다.
+좋은 phrasing만 제한적으로 흡수한다.
+
+------------------------------------------------------------
+3.1 introduction에서 가져올 것
+------------------------------------------------------------
+
+v4의 장점은 challenge를 더 질문형으로 던진다는 점이다.
+
+예를 들어 아래 종류의 phrasing은 좋다.
+- why routing should exist at all
+- where routing should differ across temporal evidence
+- what should drive routing in an interpretable way
+
+이걸 intro challenge paragraph나 challenge 직후 bridging sentence에
+아주 짧게만 섞는 건 좋다.
+
+중요:
+- 질문형 framing만 가져와라.
+- v4처럼 다시 길고 설명적으로 만들지는 마라.
+
+추천 방식:
+- 각 challenge 마지막 1문장만 더 직접적인 question form으로 정리
+- 또는 challenge 3개를 소개한 뒤 한 문단에서
+  "These challenges raise three concrete design questions..."
+  정도로 짧게 묶기
+
+------------------------------------------------------------
+3.2 Q3 opening sentence에서 가져올 것
+------------------------------------------------------------
+
+v4는 Q3가 method의 3축을 더 직접적으로 받는다.
+이 장점은 흡수할 가치가 있다.
+
+다만 figure 구성까지 v4처럼 바꿀 필요는 없다.
+v3의 실험 figure 구성은 유지하되,
+Q3 첫 문장만 더 method-aligned하게 바꾸면 된다.
+
+예시 톤:
+- "Figure 4 examines whether the gains come from the three-part design itself: the organization of behavior cues, the staged temporal allocation, and the final router structure, rather than from indiscriminate expert insertion."
+또는
+- "Q3 tests whether RouteRec’s gains arise from semantic cue design, staged temporal routing, and router composition as an integrated design, rather than from expert insertion alone."
+
+핵심:
+- figure panel 설명은 v3의 실제 panel 의미와 맞춰야 한다.
+- opening sentence만 3-axis language로 강화하면 충분하다.
+
+============================================================
+4. v3에서 꼭 고쳐야 할 것
+============================================================
+
+이건 v4에서 가져오는 문제가 아니라, v3 자체의 마감 작업이다.
+
+------------------------------------------------------------
+4.1 최우선: appendix unfinished 흔적 제거
+------------------------------------------------------------
+
+무조건 제거/수정:
+- Table ??
+- Placeholder summary
+- "will be finalized"
+- "should be built"
+- "intended appendix message"
+- "-"만 들어간 표
+
+특히
+- Table 6
+- Table 7
+- D/E/F appendix의 Table ?? 류
+는 그대로 두면 안 된다.
+
+원칙:
+- 실제 값 넣을 수 있으면 넣기
+- 못 넣으면 subsection 자체를 삭제하거나 짧게 정리
+
+------------------------------------------------------------
+4.2 Table 3 정리
+------------------------------------------------------------
+
+현재 Table 3은 reproducibility table처럼 보이는데,
+실제로는 range가 많아서 search-space summary처럼 읽힌다.
+
+둘 중 하나로 정리하라.
+
+권장안:
+- Table 2 = fixed main configuration
+- Table 3 = exact selected implementation values
+
+즉 Table 3에 가능하면 아래를 exact value로 넣어라.
+- final C
+- final total experts E
+- final router hidden width
+- lambda_cons
+- lambda_z
+- temperature
+- k_nn
+
+만약 dataset마다 달라서 exact one-value가 어렵다면,
+표 제목부터
+"Implementation-level search controls in the selected paper track"
+같이 바꿔서 search-space임을 명시해야 한다.
+
+------------------------------------------------------------
+4.3 experiment prose 압축
+------------------------------------------------------------
+
+v3는 v4보다 낫지만, 그래도 더 줄일 수 있다.
+
+원칙:
+- 각 Q subsection 첫 문단: 질문 + 핵심 관찰
+- 둘째 문단: 왜 이게 해당 challenge를 받치는지
+- 끝
+
+즉 메타 설명은 더 줄여라.
+특히
+- "This subsection asks..."
+- "The point is not whether..."
+- "The intended reading is..."
+같은 문장은 최소화
+
+------------------------------------------------------------
+4.4 4.1 setup 문단 3단 구조 유지
+------------------------------------------------------------
+
+4.1은 아래 3개 축만 남기면 충분하다.
+
+1) datasets + sessionization
+2) split / seen-target / subset transparency
+3) tuning / selection / fairness
+
+이 구조는 지금 v3가 이미 잘 잡고 있다.
+다만 더 늘리지 마라.
+
+------------------------------------------------------------
+4.5 Q3 / Q4 / Q5 선명화
+------------------------------------------------------------
+
+Q3:
+- semantic / structural necessity
+- stage removal / dense replacement / order variants
+- three-part design을 받는 structural question
+
+Q4:
+- availability / portability question
+- no-category / no-time / sequence-only 류 reduction
+- deployability-focused
+
+Q5:
+- externally defined behavioral regimes
+- repeat ratio / inter-event gap / concentration entropy / novelty or switching
+이걸 본문에서 짧게 보여주고 appendix에 threshold 상세를 보내기
+
+============================================================
+5. v3 에이전트에게 줄 실제 수정 지시
+============================================================
+
+아래 순서대로 수정하라.
+
+[Step 1] method는 최대한 유지
+- 3.1~3.5의 구조와 기본 문장 톤 유지
+- framework vs instantiation 구분 유지
+- coarse item-group proxy / missing-signal rule 유지
+- dense soft mixing justification은 한 문장으로 짧고 강하게 유지
+
+[Step 2] intro에 v4의 질문형 phrasing만 일부 흡수
+- challenge paragraph 또는 challenge-bridging 문단에 짧게 삽입
+- 문단 전체를 다시 길게 쓰지 말 것
+
+[Step 3] Q3 첫 문장만 3-axis language로 강화
+- figure panel 자체는 v3 구조 유지
+- 단, opening sentence에서 cue / stage / router를 integrated design으로 언급
+
+[Step 4] appendix unfinished 흔적 전부 제거
+- placeholder / Table ?? / future-tense / plan 문장 제거
+- 못 채우는 표는 삭제하거나 online appendix로 미루기
+
+[Step 5] Table 3를 exact config 또는 search-control table로 명확히 정리
+- 지금처럼 ambiguous한 range table로 남기지 말 것
+
+============================================================
+6. 최종 목표
+============================================================
+
+최종 목표는 v3를 더 길게 만드는 것이 아니다.
+오히려 반대다.
+
+- v3의 method 정밀도는 유지
+- v4의 좋은 phrasing만 부분 흡수
+- appendix unfinished 흔적 제거
+- experiment와 appendix를 "제출본 문장"으로 정제
+
+즉 이번 라운드의 목적은
+"새 내용 추가"가 아니라
+"좋은 구조를 끝까지 잠그는 것"이다.
+
+============================================================
+7. 아주 짧은 버전
+============================================================
+
+- 베이스는 v3 유지
+- method는 거의 건드리지 말 것
+- v4에서 가져올 것은
+  1) intro 질문형 phrasing 일부
+  2) Q3 첫 문장의 3-axis wording 일부
+- 가장 중요한 수정은 appendix unfinished 흔적 제거와 Table 3 정리
+- 목표는 더 풍성하게 쓰는 것이 아니라, 더 제출본답게 정제하는 것
