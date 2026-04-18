@@ -1,0 +1,91 @@
+# job_id=ADD_STAGE1_BEAUTY_DIFSR_STRUCTURE dataset=beauty model=difsr stage=stage1
+# cmd=/venv/FMoE/bin/python /workspace/FeaturedMoE/experiments/hyperopt_tune.py --config-name tune_ab --search-algo tpe --max-evals 13 --tune-epochs 40 --tune-patience 5 --seed 910008 --run-group final_experiment_addtuning --run-axis add_stage1_structure --run-phase ADD_STAGE1_BEAUTY_DIFSR_STRUCTURE model=difsr dataset=beauty eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=7 log_wandb=false show_progress=false ++seed=910008 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00016547,0.00025897,0.00040531,0.00063435,0.00099281] ++search_space_type_overrides.learning_rate=choice ++search.num_layers=[2,1] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[4,2] ++search_space_type_overrides.num_heads=choice ++search.attribute_hidden_size=[192,160] ++search_space_type_overrides.attribute_hidden_size=choice ++search.lambda_attr=[0.12,0.1] ++search_space_type_overrides.lambda_attr=choice ++search.n_layers=[1,2] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[1,2] ++search_space_type_overrides.n_heads=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.use_attribute_predictor=[true] ++search_space_type_overrides.use_attribute_predictor=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice ++search.weight_decay=[1e-06] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[128] ++search_space_type_overrides.hidden_size=choice ++search.hidden_dropout_prob=[0.05] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.1] ++search_space_type_overrides.attn_dropout_prob=choice ++search.fusion_type=["concat"] ++search_space_type_overrides.fusion_type=choice ++search.embedding_size=[64] ++search_space_type_overrides.embedding_size=choice ++search.dropout_prob=[0.1] ++search_space_type_overrides.dropout_prob=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1720517 ts=2026-04-18T15:41:18
+[UniqueChoice] enabled: dedupe/remap duplicates across 320 finite combos
+
+=================================================================
+  Hyperopt  |  DIFSR x beauty
+  max_evals=13  epochs=40  patience=5  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/8192/8192
+  track=final_experiment_addtuning  axis=add_stage1_structure  phase=ADD_STAGE1_BEAUTY_DIFSR_STRUCTURE
+=================================================================
+Changed knobs: attribute_hidden_size, lambda_attr, learning_rate, n_heads, n_layers, num_heads, num_layers
+Tuned params(len>1): 7  (~320 discrete combos)
+Tuned groups: 7
+  [optimization]
+    learning_rate                   [0.00016547, 0.00025897, 0.00040531, 0.00063435, 0.00099281]  -> choice
+  [model_core]
+    num_heads                       [4, 2]                                    -> choice
+    num_layers                      [2, 1]                                    -> choice
+  [other]
+    attribute_hidden_size           [192, 160]                                -> choice
+    lambda_attr                     [0.12, 0.1]                               -> choice
+    n_heads                         [1, 2]                                    -> choice
+    n_layers                        [1, 2]                                    -> choice
+Fixed params(singleton/non-list): 12
+Fixed groups: 12
+  [optimization]
+    hidden_dropout_prob             0.05                                    
+    weight_decay                    1e-06                                   
+  [model_core]
+    attn_dropout_prob               0.1                                     
+    dropout_prob                    0.1                                     
+    dropout_ratio                   0.12                                    
+    embedding_size                  64                                      
+    hidden_size                     128                                     
+    inner_size                      320                                     
+  [other]
+    MAX_ITEM_LIST_LENGTH            10                                      
+    fusion_type                     concat                                  
+    selected_features               ['category']                            
+    use_attribute_predictor         True                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/13] attribute_hidden_size=160, lambda_attr=0.1, learning_rate=0.0006343, n_heads=2, n_layers=1, num_heads=4, num_layers=1
+  -> MRR@20=0.003200  best=0.003200  (early_stop@16, trial=4s, avg=8s/trial, total=8s, ETA=1.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.003200 cur_best_hr10=0.008000 cur_test_mrr20=0.000300 cur_test_hr10=0.002900 avg_epoch_time_sec=0.2353 test_eval_time_sec=0.0142 test_eval_batches_per_sec=70.5470 test_eval_targets_per_sec=42116.5857 run_best_mrr20=0.003200 run_best_hr10=0.008000 run_test_mrr20=0.000300 run_test_hr10=0.002900
+
+[2/13] attribute_hidden_size=192, lambda_attr=0.1, learning_rate=0.0006343, n_heads=1, n_layers=2, num_heads=4, num_layers=1
+  -> MRR@20=0.000600  best=0.003200  (early_stop@6, trial=1s, avg=4s/trial, total=9s, ETA=49s)
+[TRIAL_METRICS] cur_best_mrr20=0.000600 cur_best_hr10=0.004000 cur_test_mrr20=0.000300 cur_test_hr10=0.002900 avg_epoch_time_sec=0.1224 test_eval_time_sec=0.0137 test_eval_batches_per_sec=72.8178 test_eval_targets_per_sec=43472.2133 run_best_mrr20=0.003200 run_best_hr10=0.008000 run_test_mrr20=0.000300 run_test_hr10=0.002900
+
+[3/13] attribute_hidden_size=160, lambda_attr=0.12, learning_rate=0.0006343, n_heads=1, n_layers=1, num_heads=4, num_layers=1
+  -> MRR@20=0.003200  best=0.003200  (early_stop@16, trial=3s, avg=4s/trial, total=12s, ETA=40s)
+[TRIAL_METRICS] cur_best_mrr20=0.003200 cur_best_hr10=0.008000 cur_test_mrr20=0.000300 cur_test_hr10=0.002900 avg_epoch_time_sec=0.1676 test_eval_time_sec=0.0137 test_eval_batches_per_sec=72.7647 test_eval_targets_per_sec=43440.5379 run_best_mrr20=0.003200 run_best_hr10=0.008000 run_test_mrr20=0.000300 run_test_hr10=0.002900
+
+[4/13] attribute_hidden_size=160, lambda_attr=0.1, learning_rate=0.0009928, n_heads=1, n_layers=1, num_heads=2, num_layers=1
+  -> MRR@20=0.007400  best=0.007400  (early_stop@27, trial=5s, avg=4s/trial, total=17s, ETA=38s)
+[TRIAL_METRICS] cur_best_mrr20=0.007400 cur_best_hr10=0.016100 cur_test_mrr20=0.005000 cur_test_hr10=0.011500 avg_epoch_time_sec=0.1702 test_eval_time_sec=0.0140 test_eval_batches_per_sec=71.4703 test_eval_targets_per_sec=42667.7485 run_best_mrr20=0.007400 run_best_hr10=0.016100 run_test_mrr20=0.005000 run_test_hr10=0.011500
+
+[5/13] attribute_hidden_size=160, lambda_attr=0.12, learning_rate=0.0009928, n_heads=2, n_layers=1, num_heads=4, num_layers=2
+  -> MRR@20=0.012300  best=0.012300  (full@40, trial=8s, avg=5s/trial, total=25s, ETA=41s)
+[TRIAL_METRICS] cur_best_mrr20=0.012300 cur_best_hr10=0.026100 cur_test_mrr20=0.009200 cur_test_hr10=0.028700 avg_epoch_time_sec=0.1967 test_eval_time_sec=0.0150 test_eval_batches_per_sec=66.7670 test_eval_targets_per_sec=39859.9091 run_best_mrr20=0.012300 run_best_hr10=0.026100 run_test_mrr20=0.009200 run_test_hr10=0.028700
+
+[6/13] attribute_hidden_size=160, lambda_attr=0.1, learning_rate=0.000259, n_heads=2, n_layers=2, num_heads=4, num_layers=1
+  -> MRR@20=0.001700  best=0.012300  (early_stop@14, trial=2s, avg=5s/trial, total=28s, ETA=33s)
+[TRIAL_METRICS] cur_best_mrr20=0.001700 cur_best_hr10=0.006000 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 avg_epoch_time_sec=0.1538 test_eval_time_sec=0.0141 test_eval_batches_per_sec=70.7816 test_eval_targets_per_sec=42256.6024 run_best_mrr20=0.012300 run_best_hr10=0.026100 run_test_mrr20=0.009200 run_test_hr10=0.028700
+
+[7/13] attribute_hidden_size=192, lambda_attr=0.12, learning_rate=0.0001655, n_heads=1, n_layers=2, num_heads=4, num_layers=1
+  -> MRR@20=0.001200  best=0.012300  (early_stop@6, trial=1s, avg=4s/trial, total=29s, ETA=25s)
+[TRIAL_METRICS] cur_best_mrr20=0.001200 cur_best_hr10=0.004000 cur_test_mrr20=0.000300 cur_test_hr10=0.002900 avg_epoch_time_sec=0.1345 test_eval_time_sec=0.0139 test_eval_batches_per_sec=72.0819 test_eval_targets_per_sec=43032.9190 run_best_mrr20=0.012300 run_best_hr10=0.026100 run_test_mrr20=0.009200 run_test_hr10=0.028700
+
+[8/13] attribute_hidden_size=160, lambda_attr=0.1, learning_rate=0.0004053, n_heads=2, n_layers=2, num_heads=2, num_layers=1
+  -> MRR@20=0.001000  best=0.012300  (early_stop@6, trial=1s, avg=4s/trial, total=31s, ETA=19s)
+[TRIAL_METRICS] cur_best_mrr20=0.001000 cur_best_hr10=0.004000 cur_test_mrr20=0.000200 cur_test_hr10=0.000000 avg_epoch_time_sec=0.1314 test_eval_time_sec=0.0139 test_eval_batches_per_sec=72.1712 test_eval_targets_per_sec=43086.2325 run_best_mrr20=0.012300 run_best_hr10=0.026100 run_test_mrr20=0.009200 run_test_hr10=0.028700
+
+[9/13] attribute_hidden_size=160, lambda_attr=0.12, learning_rate=0.000259, n_heads=1, n_layers=2, num_heads=2, num_layers=1
+  -> MRR@20=0.001000  best=0.012300  (early_stop@6, trial=1s, avg=4s/trial, total=32s, ETA=14s)
+[TRIAL_METRICS] cur_best_mrr20=0.001000 cur_best_hr10=0.004000 cur_test_mrr20=0.000200 cur_test_hr10=0.000000 avg_epoch_time_sec=0.1342 test_eval_time_sec=0.0170 test_eval_batches_per_sec=58.8047 test_eval_targets_per_sec=35106.4056 run_best_mrr20=0.012300 run_best_hr10=0.026100 run_test_mrr20=0.009200 run_test_hr10=0.028700
+
+[10/13] attribute_hidden_size=192, lambda_attr=0.12, learning_rate=0.000259, n_heads=2, n_layers=1, num_heads=2, num_layers=2
+  -> MRR@20=0.001100  best=0.012300  (early_stop@6, trial=1s, avg=3s/trial, total=33s, ETA=10s)
+[TRIAL_METRICS] cur_best_mrr20=0.001100 cur_best_hr10=0.006000 cur_test_mrr20=0.000400 cur_test_hr10=0.002900 avg_epoch_time_sec=0.1712 test_eval_time_sec=0.0149 test_eval_batches_per_sec=66.9974 test_eval_targets_per_sec=39997.4361 run_best_mrr20=0.012300 run_best_hr10=0.026100 run_test_mrr20=0.009200 run_test_hr10=0.028700
+
+[11/13] attribute_hidden_size=160, lambda_attr=0.1, learning_rate=0.0001655, n_heads=1, n_layers=1, num_heads=2, num_layers=1
