@@ -16,6 +16,8 @@ from common import (  # noqa: E402
     LOG_ROOT,
     common_arg_parser,
     build_train_rows,
+    find_completed_case_eval_row,
+    find_completed_intervention_row,
     index_path,
     latest_manifest_under,
     parse_csv_ints,
@@ -42,6 +44,7 @@ def main() -> int:
         settings=q5_train_settings(),
         seeds=seeds,
         max_evals=args.max_evals,
+        max_run_hours=args.max_run_hours,
         tune_epochs=args.tune_epochs,
         tune_patience=args.tune_patience,
         lr_mode=args.lr_mode,
@@ -69,28 +72,38 @@ def main() -> int:
             continue
         job_id = str(summary_row.get("job_id", ""))
 
-        try:
-            bundle = run_case_eval_pipeline(
-                question="q5",
-                source_summary_row=summary_row,
-                output_root=LOG_ROOT / "q5" / "case_eval" / job_id,
-            )
-            case_rows.append(bundle)
-        except Exception as exc:
-            case_rows.append(
-                {
-                    "question": "q5",
-                    "dataset": summary_row.get("dataset", ""),
-                    "setting_key": summary_row.get("setting_key", ""),
-                    "base_rank": summary_row.get("base_rank", ""),
-                    "base_tag": summary_row.get("base_tag", ""),
-                    "seed_id": summary_row.get("seed_id", ""),
-                    "result_path": summary_row.get("result_path", ""),
-                    "checkpoint_file": summary_row.get("checkpoint_file", ""),
-                    "status": "error",
-                    "error": str(exc),
-                }
-            )
+        existing_case = find_completed_case_eval_row("q5", summary_row)
+        if existing_case is not None:
+            case_rows.append(existing_case)
+        else:
+            try:
+                bundle = run_case_eval_pipeline(
+                    question="q5",
+                    source_summary_row=summary_row,
+                    output_root=LOG_ROOT / "q5" / "case_eval" / job_id,
+                    skip_by_group=bool(args.case_eval_fast),
+                )
+                case_rows.append(bundle)
+            except Exception as exc:
+                case_rows.append(
+                    {
+                        "question": "q5",
+                        "dataset": summary_row.get("dataset", ""),
+                        "setting_key": summary_row.get("setting_key", ""),
+                        "base_rank": summary_row.get("base_rank", ""),
+                        "base_tag": summary_row.get("base_tag", ""),
+                        "seed_id": summary_row.get("seed_id", ""),
+                        "result_path": summary_row.get("result_path", ""),
+                        "checkpoint_file": summary_row.get("checkpoint_file", ""),
+                        "status": "error",
+                        "error": str(exc),
+                    }
+                )
+
+        existing_intervention = find_completed_intervention_row("q5", summary_row)
+        if existing_intervention is not None:
+            intervention_rows.append(existing_intervention)
+            continue
 
         try:
             output_root = LOG_ROOT / "q5" / "interventions" / job_id

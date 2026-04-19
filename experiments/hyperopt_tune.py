@@ -4321,8 +4321,15 @@ def main():
 
     # Future case-eval / re-inference workflows need a stable exported checkpoint path.
     if _normalize_model_name(model) in _FEATURE_AWARE_MOE_MODELS:
-        cfg.setdefault("__artifact_combo_best_export_path", str((results_dir / "best_model_state.pth").resolve()))
-        cfg.setdefault("__artifact_combo_probe_export_path", str((results_dir / "probe_model_state.pth").resolve()))
+        checkpoint_stem = result_file.stem if result_file.stem else "result"
+        cfg.setdefault(
+            "__artifact_combo_best_export_path",
+            str(result_file.with_name(f"{checkpoint_stem}_best_model_state.pth").resolve()),
+        )
+        cfg.setdefault(
+            "__artifact_combo_probe_export_path",
+            str(result_file.with_name(f"{checkpoint_stem}_probe_model_state.pth").resolve()),
+        )
 
     trials = Trials()
     all_trials_data: list[dict] = []

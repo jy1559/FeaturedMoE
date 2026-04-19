@@ -21,6 +21,7 @@ def _forward_args(args: argparse.Namespace) -> list[str]:
         ("--gpus", args.gpus),
         ("--base-csv", args.base_csv),
         ("--max-evals", str(args.max_evals)),
+        ("--max-run-hours", str(args.max_run_hours)),
         ("--tune-epochs", str(args.tune_epochs)),
         ("--tune-patience", str(args.tune_patience)),
         ("--lr-mode", args.lr_mode),
@@ -52,6 +53,8 @@ def main() -> int:
     parser.add_argument("--gpus", default="0")
     parser.add_argument("--base-csv", default=str(CODE_DIR / "configs" / "base_candidates.csv"))
     parser.add_argument("--max-evals", type=int, default=5)
+    parser.add_argument("--max-run-hours", type=float, default=1.0,
+                        help="Wall-clock cap per job in hours (default: 1.0h).")
     parser.add_argument("--tune-epochs", type=int, default=100)
     parser.add_argument("--tune-patience", type=int, default=10)
     parser.add_argument("--lr-mode", default="narrow_loguniform")

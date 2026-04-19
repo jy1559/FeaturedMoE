@@ -25,6 +25,7 @@ def main() -> int:
         settings=q4_settings(appendix=bool(args.appendix)),
         seeds=seeds,
         max_evals=args.max_evals,
+        max_run_hours=args.max_run_hours,
         tune_epochs=args.tune_epochs,
         tune_patience=args.tune_patience,
         lr_mode=args.lr_mode,

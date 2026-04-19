@@ -80,6 +80,11 @@ QUESTION_AXIS = {
     "q3": "q3_stage_structure",
     "q4": "q4_cue_ablation",
     "q5": "q5_behavior_regime",
+    "a06": "a06_structural_sanity",
+    "a07": "a07_topk_routing",
+    "a08": "a08_behavior_cases",
+    "a09": "a09_transfer_portability",
+    "a10": "a10_cue_semantics",
 }
 
 SUMMARY_FIELDS = [
@@ -148,6 +153,229 @@ class BaseCandidate:
 def ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _requires_case_eval(question: str, summary_row: dict[str, Any]) -> bool:
+    question_key = str(question or "").strip().lower()
+    setting_key = str(summary_row.get("setting_key", "") or "").strip().lower()
+    if question_key == "q2":
+        return setting_key in {"route_rec_full", "router_hidden_only", "router_feature_only"}
+    if question_key == "q5":
+        return setting_key == "route_rec_full"
+    if question_key == "a08":
+        return True
+    if question_key == "a10":
+        return True
+    return False
+
+
+def _requires_intervention(question: str, summary_row: dict[str, Any]) -> bool:
+    question_key = str(question or "").strip().lower()
+    setting_key = str(summary_row.get("setting_key", "") or "").strip().lower()
+    if question_key == "q5":
+        return setting_key == "route_rec_full"
+    if question_key == "a10":
+        return setting_key in {"full", "route_rec_full"}
+    return False
+
+
+def _postprocess_requirements_for_summary(question: str, summary_row: dict[str, Any]) -> list[tuple[str, str]]:
+    requirements: list[tuple[str, str]] = []
+    if _requires_case_eval(question, summary_row):
+        requirements.append((f"{question}_case_eval_index.csv", "case_eval_manifest"))
+    if _requires_intervention(question, summary_row):
+        requirements.append((f"{question}_intervention_index.csv", "intervention_manifest"))
+    return requirements
+
+
+def _row_identity_matches(index_row: dict[str, str], summary_row: dict[str, Any]) -> bool:
+    result_path = str(summary_row.get("result_path", "") or "").strip()
+    index_result_path = str(index_row.get("result_path", "") or "").strip()
+    if result_path and index_result_path:
+        return result_path == index_result_path
+    keys = ("dataset", "setting_key", "base_rank", "seed_id")
+    return all(str(index_row.get(key, "") or "").strip() == str(summary_row.get(key, "") or "").strip() for key in keys)
+
+
+def _load_index_rows(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with open(path, "r", newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def _is_shared_result_checkpoint(path_str: str) -> bool:
+    path_text = str(path_str or "").strip()
+    if not path_text:
+        return False
+    try:
+        path = Path(path_text).expanduser().resolve()
+    except Exception:
+        return False
+    shared_paths = {
+        (RESULT_ROOT / "best_model_state.pth").resolve(),
+        (RESULT_ROOT / "probe_model_state.pth").resolve(),
+    }
+    return path in shared_paths
+
+
+def _payload_checkpoint_file(payload: dict[str, Any] | None) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    return str(payload.get("best_checkpoint_file", "") or "").strip()
+
+
+def _checkpoint_path_is_usable(path_str: str) -> bool:
+    path_text = str(path_str or "").strip()
+    if not path_text or _is_shared_result_checkpoint(path_text):
+        return False
+    try:
+        return Path(path_text).expanduser().resolve().exists()
+    except Exception:
+        return False
+
+
+def _payload_has_usable_checkpoint(payload: dict[str, Any] | None) -> bool:
+    return _checkpoint_path_is_usable(_payload_checkpoint_file(payload))
+
+
+def _find_best_result_payload_for_run_phase(run_phase: str) -> Path | None:
+    run_phase_text = str(run_phase or "").strip()
+    if not run_phase_text:
+        return None
+    candidates: list[tuple[int, float, Path]] = []
+    for result_path in RESULT_ROOT.glob("*.json"):
+        try:
+            payload = read_json(result_path)
+        except Exception:
+            continue
+        if str(payload.get("run_phase", "") or "").strip() != run_phase_text:
+            continue
+        if not result_has_successful_trials(payload):
+            continue
+        usable_checkpoint = 1 if _payload_has_usable_checkpoint(payload) else 0
+        candidates.append((usable_checkpoint, result_path.stat().st_mtime, result_path))
+    if not candidates:
+        return None
+    candidates.sort(reverse=True)
+    return candidates[0][2]
+
+
+def resolve_result_artifacts(
+    source_row: dict[str, Any],
+    *,
+    require_checkpoint: bool = False,
+) -> tuple[Path, dict[str, Any], str]:
+    result_path_text = str(source_row.get("result_path", "") or "").strip()
+    run_phase = str(source_row.get("run_phase", "") or source_row.get("job_id", "") or "").strip()
+
+    candidates: list[Path] = []
+    if result_path_text:
+        candidates.append(Path(result_path_text).expanduser())
+    fallback = _find_best_result_payload_for_run_phase(run_phase)
+    if fallback is not None and fallback not in candidates:
+        candidates.append(fallback)
+
+    best_result_path: Path | None = None
+    best_payload: dict[str, Any] = {}
+    best_checkpoint = ""
+    best_rank: tuple[int, int, float] | None = None
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            payload = read_json(candidate)
+        except Exception:
+            continue
+        if not result_has_successful_trials(payload):
+            continue
+        checkpoint_file = _payload_checkpoint_file(payload)
+        checkpoint_usable = 1 if _checkpoint_path_is_usable(checkpoint_file) else 0
+        checkpoint_present = 1 if checkpoint_file else 0
+        rank = (checkpoint_usable, checkpoint_present, candidate.stat().st_mtime)
+        if best_rank is None or rank > best_rank:
+            best_rank = rank
+            best_result_path = candidate.resolve()
+            best_payload = payload
+            best_checkpoint = checkpoint_file
+
+    if best_result_path is None:
+        raise RuntimeError(f"Missing result_path for run_phase={run_phase or '<unknown>'}")
+    if require_checkpoint and not best_checkpoint:
+        raise RuntimeError(f"Missing exported checkpoint for {best_result_path}")
+    return best_result_path, best_payload, best_checkpoint
+
+
+def _manifest_rows_succeeded(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        with open(path, "r", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+    except Exception:
+        return False
+    if not rows:
+        return False
+    if "status" not in rows[0]:
+        return True
+    saw_ok = False
+    for row in rows:
+        status = str(row.get("status", "") or "").strip().lower()
+        if status == "error":
+            return False
+        if status == "ok":
+            saw_ok = True
+    return saw_ok
+
+
+def _postprocess_manifest_exists(index_csv: Path, manifest_field: str, summary_row: dict[str, Any]) -> bool:
+    return find_completed_postprocess_row(index_csv, manifest_field, summary_row) is not None
+
+
+def find_completed_postprocess_row(index_csv: Path, manifest_field: str, summary_row: dict[str, Any]) -> dict[str, str] | None:
+    for index_row in _load_index_rows(index_csv):
+        if not _row_identity_matches(index_row, summary_row):
+            continue
+        if str(index_row.get("status", "") or "").strip().lower() == "error":
+            continue
+        if _is_shared_result_checkpoint(str(index_row.get("checkpoint_file", "") or "")):
+            continue
+        manifest_path = str(index_row.get(manifest_field, "") or "").strip()
+        if not manifest_path:
+            continue
+        manifest_file = Path(manifest_path).expanduser()
+        if _manifest_rows_succeeded(manifest_file):
+            return index_row
+    return None
+
+
+def find_completed_case_eval_row(question: str, summary_row: dict[str, Any]) -> dict[str, str] | None:
+    requirements = _postprocess_requirements_for_summary(question, summary_row)
+    for index_name, manifest_field in requirements:
+        if manifest_field != "case_eval_manifest":
+            continue
+        return find_completed_postprocess_row(index_path(question, index_name), manifest_field, summary_row)
+    return None
+
+
+def find_completed_intervention_row(question: str, summary_row: dict[str, Any]) -> dict[str, str] | None:
+    requirements = _postprocess_requirements_for_summary(question, summary_row)
+    for index_name, manifest_field in requirements:
+        if manifest_field != "intervention_manifest":
+            continue
+        return find_completed_postprocess_row(index_path(question, index_name), manifest_field, summary_row)
+    return None
+
+
+def postprocess_complete_for_summary(question: str, summary_row: dict[str, Any]) -> bool:
+    requirements = _postprocess_requirements_for_summary(question, summary_row)
+    if not requirements:
+        return True
+    for index_name, manifest_field in requirements:
+        if not _postprocess_manifest_exists(index_path(question, index_name), manifest_field, summary_row):
+            return False
+    return True
 
 
 def parse_csv_list(text: str) -> list[str]:
@@ -225,11 +453,6 @@ def q2_settings() -> list[dict[str, Any]]:
                 "router_use_feature": False,
                 "stage_router_source": {stage: "hidden" for stage in STAGE_NAMES},
             },
-        },
-        {
-            "setting_key": "router_hidden_plus_feature",
-            "setting_label": "Router Hidden+Feature",
-            "overrides": deepcopy(full),
         },
         {
             "setting_key": "router_feature_only",
@@ -468,6 +691,18 @@ def build_eval_config_from_result_payload(payload: dict[str, Any]) -> dict[str, 
     cfg["fmoe_feature_ablation_logging"] = False
     cfg["fmoe_eval_logging_timing"] = "final_only"
     cfg.update(_merge_base_config(payload))
+    # Re-assert session_fixed protocol after payload merge.
+    # Some legacy base payloads contain benchmark_filename=None, which silently
+    # switches back to random split and changes evaluation target construction.
+    cfg["benchmark_filename"] = ["train", "valid", "test"]
+    cfg["eval_args"] = {"group_by": "user", "order": "TO", "mode": "full"}
+    cfg["eval_sampling"] = {"mode": "full", "auto_full_threshold": 999999999}
+    cfg["history_input_mode"] = "session_only"
+    cfg["history_eval_policy"] = "strict_train_prefix"
+    cfg["target_group_field"] = "session_id"
+    cfg["history_group_field"] = "user_id"
+    cfg["exclude_unseen_target_from_main_eval"] = True
+    cfg["log_unseen_target_metrics"] = True
     return cfg
 
 
@@ -573,6 +808,7 @@ def build_route_row(
     seed: int,
     runtime_seed: int,
     max_evals: int,
+    max_run_hours: float,
     tune_epochs: int,
     tune_patience: int,
     lr_mode: str,
@@ -582,6 +818,23 @@ def build_route_row(
     base_lr = float(base_cfg.get("learning_rate", 1e-3) or 1e-3)
     search_values, lr_type = lr_search_spec(base_lr, lr_mode=lr_mode)
     fixed_context = deepcopy(base_cfg)
+    # Keep search context focused on model/training hparams.
+    # Dataset split/eval protocol is enforced in build_route_command.
+    for reserved_key in (
+        "benchmark_filename",
+        "eval_args",
+        "eval_mode",
+        "eval_sampling",
+        "feature_mode",
+        "data_path",
+        "history_input_mode",
+        "history_eval_policy",
+        "target_group_field",
+        "history_group_field",
+        "exclude_unseen_target_from_main_eval",
+        "log_unseen_target_metrics",
+    ):
+        fixed_context.pop(reserved_key, None)
     fixed_context.pop("learning_rate", None)
     setting_key = str(setting["setting_key"])
     return {
@@ -604,6 +857,7 @@ def build_route_row(
         "search_space_types": {"learning_rate": lr_type},
         "fixed_context": fixed_context,
         "max_evals": int(max_evals),
+        "max_run_hours": float(max_run_hours),
         "tune_epochs": int(tune_epochs),
         "tune_patience": int(tune_patience),
         "selection_rule": "overall_seen_target",
@@ -623,6 +877,8 @@ def build_route_command(row: dict[str, Any], gpu_id: str, *, search_algo: str) -
         str(search_algo),
         "--max-evals",
         str(int(row["max_evals"])),
+        "--max-run-hours",
+        str(float(row.get("max_run_hours") or 1.0)),
         "--tune-epochs",
         str(int(row["tune_epochs"])),
         "--tune-patience",
@@ -639,6 +895,14 @@ def build_route_command(row: dict[str, Any], gpu_id: str, *, search_algo: str) -
         f"dataset={row['dataset']}",
         "eval_mode=session_fixed",
         "feature_mode=full_v4",
+        "++benchmark_filename=[train,valid,test]",
+        "++eval_args.group_by=user",
+        "++eval_args.order=TO",
+        "++eval_args.mode=full",
+        "++history_input_mode=session_only",
+        "++history_eval_policy=strict_train_prefix",
+        "++target_group_field=session_id",
+        "++history_group_field=user_id",
         "++eval_sampling.mode=full",
         "++eval_sampling.auto_full_threshold=999999999",
         "++special_logging=true",
@@ -753,17 +1017,127 @@ def build_summary_row(
     }
 
 
-def resumed_summary_row(row: dict[str, Any]) -> dict[str, Any] | None:
+def _summary_row_matches_job(summary_row: dict[str, Any], row: dict[str, Any]) -> bool:
+    job_id = str(row.get("job_id", "") or "").strip()
+    summary_job_id = str(summary_row.get("job_id", "") or "").strip()
+    if job_id and summary_job_id:
+        return job_id == summary_job_id
+    keys = ("question", "dataset", "setting_key", "base_rank", "seed_id")
+    return all(str(summary_row.get(key, "") or "").strip() == str(row.get(key, "") or "").strip() for key in keys)
+
+
+def _summary_row_is_resumable(question: str, summary_row: dict[str, Any]) -> bool:
+    if str(summary_row.get("status", "") or "").strip().lower() != "ok":
+        return False
+    result_path = str(summary_row.get("result_path", "") or "").strip()
+    if not result_path:
+        return False
+    payload = load_result_payload(Path(result_path))
+    if not result_has_successful_trials(payload):
+        return False
+    return postprocess_complete_for_summary(question, summary_row)
+
+
+def _find_previous_summary_row(question: str, row: dict[str, Any], previous_rows: list[dict[str, str]]) -> dict[str, Any] | None:
+    for summary_row in previous_rows:
+        if not _summary_row_matches_job(summary_row, row):
+            continue
+        if _summary_row_is_resumable(question, summary_row):
+            resumed = dict(summary_row)
+            resumed["gpu_id"] = "resume"
+            resumed["timestamp_utc"] = now_utc()
+            return resumed
+    return None
+
+
+def _find_result_payload_for_row(row: dict[str, Any]) -> Path | None:
+    run_phase = str(row.get("job_id", "") or row.get("run_phase", "") or "").strip()
+    return _find_best_result_payload_for_run_phase(run_phase)
+
+
+def _preserved_summary_rows(
+    previous_rows: list[dict[str, str]],
+    current_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    preserved: list[dict[str, Any]] = []
+    for summary_row in previous_rows:
+        if any(_summary_row_matches_job(summary_row, row) for row in current_rows):
+            continue
+        preserved.append(dict(summary_row))
+    return preserved
+
+
+def _write_summary_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.unlink()
+    for row in rows:
+        append_csv_row(
+            path,
+            SUMMARY_FIELDS,
+            {key: row.get(key, "") for key in SUMMARY_FIELDS},
+        )
+
+
+def _finalize_summary_file(
+    *,
+    target_summary: Path,
+    temp_summary: Path,
+    previous_summary_rows: list[dict[str, str]],
+    current_rows: list[dict[str, Any]],
+) -> None:
+    merged_rows = _preserved_summary_rows(previous_summary_rows, current_rows)
+    if temp_summary.exists():
+        merged_rows.extend(_load_index_rows(temp_summary))
+        temp_summary.unlink()
+    _write_summary_rows(target_summary, merged_rows)
+
+
+def _recover_previous_summary_rows(question: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    recovered: list[dict[str, Any]] = []
+    for row in rows:
+        result_path_obj = _find_result_payload_for_row(row)
+        if result_path_obj is None:
+            continue
+        payload = load_result_payload(result_path_obj)
+        if not result_has_successful_trials(payload):
+            continue
+        recovered.append(
+            build_summary_row(
+                row,
+                gpu_id="recovered",
+                status="ok",
+                result_path=str(result_path_obj),
+                log_path=log_path_for_row(str(row.get("stage", question)), row),
+                elapsed_sec=0.0,
+                error="",
+            )
+        )
+    return recovered
+
+
+def resumed_summary_row(row: dict[str, Any], previous_rows: list[dict[str, str]] | None = None) -> dict[str, Any] | None:
+    question = str(row.get("question", "") or row.get("stage", "") or "")
+    if previous_rows:
+        previous = _find_previous_summary_row(question, row, previous_rows)
+        if previous is not None:
+            return previous
+
     log_path = log_path_for_row(str(row["stage"]), row)
     if not has_run_status_end_normal(log_path):
-        return None
-    result_path_obj = parse_result_path_from_log(log_path)
-    if result_path_obj is None:
-        return None
+        result_path_obj = _find_result_payload_for_row(row)
+        if result_path_obj is None:
+            return None
+    else:
+        result_path_obj = parse_result_path_from_log(log_path)
+        if result_path_obj is None:
+            result_path_obj = _find_result_payload_for_row(row)
+            if result_path_obj is None:
+                return None
     payload = load_result_payload(result_path_obj)
     if not result_has_successful_trials(payload):
         return None
-    return build_summary_row(
+    summary = build_summary_row(
         row,
         gpu_id="resume",
         status="ok",
@@ -772,6 +1146,9 @@ def resumed_summary_row(row: dict[str, Any]) -> dict[str, Any] | None:
         elapsed_sec=0.0,
         error="",
     )
+    if not postprocess_complete_for_summary(str(row.get("question", "") or row.get("stage", "")), summary):
+        return None
+    return summary
 
 
 def describe_job(row: dict[str, Any]) -> str:
@@ -853,13 +1230,17 @@ def run_jobs(
     install_signal_handlers()
     target_summary = summary_path(question)
     target_summary.parent.mkdir(parents=True, exist_ok=True)
-    if target_summary.exists():
-        target_summary.unlink()
+    previous_summary_rows = read_summary_rows(question)
+    if not previous_summary_rows:
+        previous_summary_rows = _recover_previous_summary_rows(question, rows)
+    temp_summary = target_summary.with_name(f"{target_summary.stem}.tmp.{os.getpid()}{target_summary.suffix}")
+    if temp_summary.exists():
+        temp_summary.unlink()
 
     if dry_run:
         for row in rows:
             append_csv_row(
-                target_summary,
+                temp_summary,
                 SUMMARY_FIELDS,
                 {
                     key: row.get(key, "")
@@ -879,19 +1260,46 @@ def run_jobs(
                     "timestamp_utc": now_utc(),
                 },
             )
+        _finalize_summary_file(
+            target_summary=target_summary,
+            temp_summary=temp_summary,
+            previous_summary_rows=previous_summary_rows,
+            current_rows=rows,
+        )
         return 0
 
     pending: Queue[dict[str, Any]] = Queue()
+    n_total = len(rows)
+    n_skipped = 0
     for row in rows:
         if resume_from_logs:
-            resumed = resumed_summary_row(row)
+            resumed = resumed_summary_row(row, previous_rows=previous_summary_rows)
             if resumed is not None:
-                append_csv_row(target_summary, SUMMARY_FIELDS, resumed)
-                print(f"[resume] SKIP {describe_job(row)}", flush=True)
+                append_csv_row(temp_summary, SUMMARY_FIELDS, resumed)
+                n_skipped += 1
+                print(
+                    f"[resume] SKIP ({n_skipped}) {describe_job(row)}"
+                    f"  reason=existing_successful_result",
+                    flush=True,
+                )
                 continue
         pending.put(row)
 
+    n_pending = pending.qsize()
+    print(
+        f"[run_jobs] question={question}  total={n_total}  "
+        f"skipped(resume)={n_skipped}  pending={n_pending}"
+        + ("  [resume_from_logs=OFF → all run]" if not resume_from_logs else ""),
+        flush=True,
+    )
+
     if pending.empty():
+        _finalize_summary_file(
+            target_summary=target_summary,
+            temp_summary=temp_summary,
+            previous_summary_rows=previous_summary_rows,
+            current_rows=rows,
+        )
         return 0
 
     gpu_queue: Queue[str] = Queue()
@@ -907,7 +1315,7 @@ def run_jobs(
             gpu_id = gpu_queue.get()
             try:
                 summary = run_one_job(row, gpu_id, search_algo=search_algo)
-                append_csv_row(target_summary, SUMMARY_FIELDS, summary)
+                append_csv_row(temp_summary, SUMMARY_FIELDS, summary)
             finally:
                 gpu_queue.put(gpu_id)
                 pending.task_done()
@@ -917,6 +1325,12 @@ def run_jobs(
         thread.start()
     for thread in threads:
         thread.join()
+    _finalize_summary_file(
+        target_summary=target_summary,
+        temp_summary=temp_summary,
+        previous_summary_rows=previous_summary_rows,
+        current_rows=rows,
+    )
     return 0
 
 
@@ -944,6 +1358,8 @@ def common_arg_parser(description: str, *, question: str, smoke_max_default: int
     parser.add_argument("--gpus", default="0")
     parser.add_argument("--base-csv", default=str(DEFAULT_BASE_CSV))
     parser.add_argument("--max-evals", type=int, default=5)
+    parser.add_argument("--max-run-hours", type=float, default=1.0,
+                        help="Wall-clock cap per job (hours). After the current trial finishes, no new trials are started (default: 1.0h).")
     parser.add_argument("--tune-epochs", type=int, default=100)
     parser.add_argument("--tune-patience", type=int, default=10)
     parser.add_argument("--lr-mode", default="narrow_loguniform")
@@ -955,6 +1371,11 @@ def common_arg_parser(description: str, *, question: str, smoke_max_default: int
     parser.add_argument("--smoke-max-runs", type=int, default=smoke_max_default)
     parser.add_argument("--appendix", action="store_true")
     parser.add_argument("--output-tag", default="")
+    parser.add_argument(
+        "--case-eval-fast",
+        action="store_true",
+        help="Reduce case-eval targets by skipping by-group subsets (original + tier unions only).",
+    )
     parser.set_defaults(question=question)
     return parser
 
@@ -979,6 +1400,7 @@ def build_train_rows(
     settings: list[dict[str, Any]],
     seeds: list[int],
     max_evals: int,
+    max_run_hours: float = 1.0,
     tune_epochs: int,
     tune_patience: int,
     lr_mode: str,
@@ -999,6 +1421,7 @@ def build_train_rows(
                         seed=seed,
                         runtime_seed=860000 + cursor,
                         max_evals=max_evals,
+                        max_run_hours=max_run_hours,
                         tune_epochs=tune_epochs,
                         tune_patience=tune_patience,
                         lr_mode=lr_mode,
@@ -1032,14 +1455,13 @@ def run_case_eval_pipeline(
     source_summary_row: dict[str, str],
     output_root: Path,
     skip_original: bool = False,
+    skip_by_group: bool = False,
 ) -> dict[str, Any]:
-    result_path = str(source_summary_row.get("result_path", "")).strip()
-    if not result_path:
-        raise RuntimeError("Missing result_path for case eval.")
-    payload = read_json(Path(result_path))
-    checkpoint_file = str(source_summary_row.get("checkpoint_file", "") or payload.get("best_checkpoint_file", "") or "").strip()
-    if not checkpoint_file:
-        raise RuntimeError(f"Missing exported checkpoint for {result_path}")
+    result_path_obj, payload, payload_checkpoint = resolve_result_artifacts(source_summary_row, require_checkpoint=True)
+    result_path = str(result_path_obj)
+    checkpoint_file = str(source_summary_row.get("checkpoint_file", "") or "").strip()
+    if not _checkpoint_path_is_usable(checkpoint_file):
+        checkpoint_file = payload_checkpoint
     checkpoint_path = Path(checkpoint_file).expanduser().resolve()
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
@@ -1061,6 +1483,8 @@ def run_case_eval_pipeline(
     ]
     if skip_original:
         cmd.append("--skip-original")
+    if skip_by_group:
+        cmd.append("--skip-by-group")
     subprocess.run(cmd, check=True, cwd=str(REPO_ROOT))
     manifest = latest_manifest_under(bundle_root, "case_eval_manifest.csv")
     export_dir = ensure_dir(output_root / "tables")
@@ -1104,3 +1528,411 @@ def write_index_rows(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+# ---------------------------------------------------------------------------
+# A06 Structural Sanity settings
+# ---------------------------------------------------------------------------
+
+def a06_settings() -> list[dict[str, Any]]:
+    """Semantic grouping ablations and temporal role ablations."""
+    full = canonical_stage_maps()
+    return [
+        {"setting_key": "full_semantic", "setting_label": "Family Prior Intact", "overrides": deepcopy(full)},
+        {
+            "setting_key": "reduced_family",
+            "setting_label": "Fewer Semantic Family Groups",
+            "overrides": {
+                **deepcopy(full),
+                "num_expert_groups": 2,
+                "expert_group_mode": "reduced",
+            },
+        },
+        {
+            "setting_key": "shuffled_family",
+            "setting_label": "Family Groups Shuffled",
+            "overrides": {
+                **deepcopy(full),
+                "expert_group_mode": "shuffled",
+            },
+        },
+        {
+            "setting_key": "flat_random",
+            "setting_label": "Flattened Scalar Bag",
+            "overrides": {
+                **deepcopy(full),
+                "expert_group_mode": "flat",
+                "num_expert_groups": 1,
+            },
+        },
+        {
+            "setting_key": "original_scope",
+            "setting_label": "Correct Temporal Roles",
+            "overrides": deepcopy(full),
+        },
+        {
+            "setting_key": "identical_scope",
+            "setting_label": "All Stages Same Scope",
+            "overrides": {
+                **deepcopy(full),
+                "stage_router_granularity": {"macro": "session", "mid": "session", "micro": "session"},
+            },
+        },
+        {
+            "setting_key": "scope_swap",
+            "setting_label": "Wrong Temporal Scope Assignment",
+            "overrides": {
+                **deepcopy(full),
+                "stage_router_granularity": {"macro": "token", "mid": "session", "micro": "session"},
+            },
+        },
+        {
+            "setting_key": "extra_attn",
+            "setting_label": "Extra Attention Without New Role",
+            "overrides": {
+                **deepcopy(full),
+                "layer_layout": ["attn", "macro_ffn", "mid_ffn", "attn", "micro_ffn", "attn"],
+            },
+        },
+    ]
+
+
+# ---------------------------------------------------------------------------
+# A07 Top-k Routing settings
+# ---------------------------------------------------------------------------
+
+def a07_settings() -> list[dict[str, Any]]:
+    """Dense vs sparse top-k routing regimes."""
+    full = canonical_stage_maps()
+    return [
+        {
+            "setting_key": "dense_global",
+            "setting_label": "Dense (k=0)",
+            "overrides": {**deepcopy(full), "moe_top_k": 0, "topk_scope_mode": "global_flat"},
+        },
+        {
+            "setting_key": "global_top8",
+            "setting_label": "Global Top-8",
+            "overrides": {**deepcopy(full), "moe_top_k": 8, "topk_scope_mode": "global_flat"},
+        },
+        {
+            "setting_key": "global_top4",
+            "setting_label": "Global Top-4",
+            "overrides": {**deepcopy(full), "moe_top_k": 4, "topk_scope_mode": "global_flat"},
+        },
+        {
+            "setting_key": "global_top2",
+            "setting_label": "Global Top-2",
+            "overrides": {**deepcopy(full), "moe_top_k": 2, "topk_scope_mode": "global_flat"},
+        },
+        {
+            "setting_key": "group_dense",
+            "setting_label": "Dense per Group",
+            "overrides": {**deepcopy(full), "moe_top_k": 0, "topk_scope_mode": "per_group"},
+        },
+        {
+            "setting_key": "group_top2",
+            "setting_label": "Group Top-2",
+            "overrides": {**deepcopy(full), "moe_top_k": 2, "topk_scope_mode": "per_group"},
+        },
+        {
+            "setting_key": "group_top1",
+            "setting_label": "Group Top-1",
+            "overrides": {**deepcopy(full), "moe_top_k": 1, "topk_scope_mode": "per_group"},
+        },
+    ]
+
+
+# ---------------------------------------------------------------------------
+# A08 Behavior Case Studies settings (eval-only; uses existing checkpoints)
+# ---------------------------------------------------------------------------
+
+def a08_train_settings() -> list[dict[str, Any]]:
+    """A08 trains a single full RouteRec checkpoint; case eval comes after."""
+    return [{"setting_key": "route_rec_full", "setting_label": "RouteRec Full", "overrides": canonical_stage_maps()}]
+
+
+# ---------------------------------------------------------------------------
+# A09 Transfer Portability settings
+# ---------------------------------------------------------------------------
+
+TRANSFER_PAIR_SPECS = {
+    "beauty_to_kuairec": {"source_dataset": "beauty", "target_dataset": "KuaiRecLargeStrictPosV2_0.2"},
+    "kuairec_to_beauty": {"source_dataset": "KuaiRecLargeStrictPosV2_0.2", "target_dataset": "beauty"},
+    "lastfm_to_kuairec": {"source_dataset": "lastfm0.03", "target_dataset": "KuaiRecLargeStrictPosV2_0.2"},
+    "beauty_to_lastfm": {"source_dataset": "beauty", "target_dataset": "lastfm0.03"},
+}
+
+TRANSFER_MODES = [
+    {"setting_key": "scratch", "setting_label": "Scratch", "transfer_mode": "none"},
+    {"setting_key": "feature_encoder_init", "setting_label": "Feature Encoder Init", "transfer_mode": "all_stage_feature_encoder"},
+    {"setting_key": "group_router_init", "setting_label": "Group Router Init", "transfer_mode": "all_stage_group_router"},
+    {"setting_key": "all_router_init", "setting_label": "All Router Init", "transfer_mode": "all_stage_full_router"},
+    {"setting_key": "full_model_init", "setting_label": "Full Model Init", "transfer_mode": "full_model"},
+]
+
+
+def a09_low_data_settings() -> list[dict[str, Any]]:
+    """Data-budget reduction curve."""
+    full = canonical_stage_maps()
+    fractions = [1.0, 0.5, 0.25, 0.1, 0.05]
+    return [
+        {
+            "setting_key": f"data_frac_{int(frac * 100):03d}",
+            "setting_label": f"{int(frac * 100)}% Data",
+            "overrides": {**deepcopy(full), "train_data_fraction": frac},
+        }
+        for frac in fractions
+    ]
+
+
+def a09_transfer_settings() -> list[dict[str, Any]]:
+    """Transfer-mode settings for pairwise portability."""
+    full = canonical_stage_maps()
+    return [
+        {
+            "setting_key": mode["setting_key"],
+            "setting_label": mode["setting_label"],
+            "overrides": {**deepcopy(full), "transfer_mode": mode["transfer_mode"]},
+            "transfer_mode": mode["transfer_mode"],
+        }
+        for mode in TRANSFER_MODES
+    ]
+
+
+# ---------------------------------------------------------------------------
+# A10 Cue Semantics settings (extended interventions)
+# ---------------------------------------------------------------------------
+
+def a10_cue_profile_settings() -> list[dict[str, Any]]:
+    """Extended cue-family isolation settings for appendix cue semantics."""
+    full = canonical_stage_maps()
+    settings = [
+        {"setting_key": "full", "setting_label": "Full", "overrides": deepcopy(full)},
+        {
+            "setting_key": "sequence_only",
+            "setting_label": "Sequence Only",
+            "overrides": {
+                **deepcopy(full),
+                "router_use_feature": False,
+                "expert_use_feature": False,
+                "stage_router_source": {stage: "hidden" for stage in STAGE_NAMES},
+            },
+        },
+    ]
+    for family in FAMILY_NAMES:
+        other_families = [f for f in FAMILY_NAMES if f != family]
+        drop_keywords = []
+        for f in other_families:
+            if f == "memory":
+                drop_keywords.extend(["repeat", "novel", "recons", "uniq"])
+            elif f == "focus":
+                drop_keywords.extend(["cat", "theme", "overlap", "mismatch"])
+            elif f == "tempo":
+                drop_keywords.extend(["gap", "pace", "int", "age", "delta"])
+            elif f == "exposure":
+                drop_keywords.extend(["pop"])
+        settings.append(
+            {
+                "setting_key": f"only_{family}",
+                "setting_label": f"Only {family.title()}",
+                "overrides": {**deepcopy(full), "stage_feature_drop_keywords": drop_keywords},
+            }
+        )
+    return settings
+
+
+def a10_intervention_specs() -> list[dict[str, Any]]:
+    """Intervention specs for cue semantics analysis (reuses Q5 base + extended)."""
+    base = q5_intervention_specs()
+    extended = [
+        {
+            "intervention": "family_permute_all",
+            "label": "Family Permute All",
+            "overrides": {"feature_perturb_mode": "family_permute", "feature_perturb_apply": "eval"},
+        },
+        {
+            "intervention": "position_shift_all",
+            "label": "Position Shift All",
+            "overrides": {
+                "feature_perturb_mode": "position_shift",
+                "feature_perturb_apply": "eval",
+                "feature_perturb_shift": 1,
+            },
+        },
+    ]
+    seen_keys = {spec["intervention"] for spec in base}
+    for spec in extended:
+        if spec["intervention"] not in seen_keys:
+            base.append(spec)
+    return base
+
+
+# ---------------------------------------------------------------------------
+# A09 transfer helper: build rows for source pretrain and target transfer
+# ---------------------------------------------------------------------------
+
+A09_SHARED_HPARAM_PRESETS: dict[str, dict[str, Any]] = {
+    "shared_a": {
+        "embedding_size": 128,
+        "d_ff": 256,
+        "d_expert_hidden": 128,
+        "d_router_hidden": 64,
+        "MAX_ITEM_LIST_LENGTH": 20,
+        "d_feat_emb": 12,
+        "expert_scale": 3,
+        "num_heads": 4,
+        "hidden_dropout_prob": 0.18,
+        "attn_dropout_prob": 0.1,
+        "weight_decay": 5e-7,
+        "lr_scheduler_type": "warmup_cosine",
+    },
+}
+
+A09_LR_CENTER_BY_DATASET: dict[str, float] = {
+    "beauty": 0.001841911333,
+    "KuaiRecLargeStrictPosV2_0.2": 0.00052,
+    "lastfm0.03": 0.00055,
+    "foursquare": 0.0008,
+    "retail_rocket": 0.0007,
+    "movielens1m": 0.0006,
+}
+
+
+def a09_source_checkpoint_path(question: str, dataset: str, preset_id: str, seed_id: int) -> Path:
+    return LOG_ROOT / question / "transfer_exports" / sanitize_token(dataset, upper=False) / f"{preset_id}_s{int(seed_id)}_best.pth"
+
+
+def build_a09_source_rows(
+    *,
+    pairs: list[str],
+    preset_ids: list[str],
+    seeds: list[int],
+    max_evals: int,
+    max_run_hours: float = 1.0,
+    tune_epochs: int,
+    tune_patience: int,
+    lr_mode: str,
+) -> list[dict[str, Any]]:
+    """Build source-pretrain rows for A09 transfer experiments."""
+    rows: list[dict[str, Any]] = []
+    dataset_order: list[str] = []
+    for pair_id in pairs:
+        spec = TRANSFER_PAIR_SPECS[pair_id]
+        for ds in (spec["source_dataset"], spec["target_dataset"]):
+            if ds not in dataset_order:
+                dataset_order.append(ds)
+    cursor = 0
+    for dataset in dataset_order:
+        validate_session_fixed_files(dataset)
+        for preset_id in preset_ids:
+            fixed_values = dict(A09_SHARED_HPARAM_PRESETS[preset_id])
+            base_lr = A09_LR_CENTER_BY_DATASET.get(dataset, 1e-3)
+            lr_vals, lr_type = lr_search_spec(base_lr, lr_mode=lr_mode)
+            for seed in seeds:
+                cursor += 1
+                job_id = f"A09_SRC_{sanitize_token(dataset, upper=True)}_{sanitize_token(preset_id, upper=True)}_S{int(seed)}"
+                base_overrides = canonical_stage_maps()
+                row: dict[str, Any] = {
+                    "question": "a09",
+                    "stage": "a09",
+                    "run_axis": QUESTION_AXIS["a09"],
+                    "dataset": dataset,
+                    "model": ROUTE_MODEL,
+                    "family": "route",
+                    "setting_key": "source_native",
+                    "setting_label": f"Source Pretrain ({preset_id})",
+                    "base_rank": 0,
+                    "base_tag": f"transfer_source_{preset_id}",
+                    "base_result_json": "",
+                    "seed_id": int(seed),
+                    "runtime_seed": 870000 + cursor,
+                    "job_id": job_id,
+                    "run_phase": job_id,
+                    "search_space": {"learning_rate": lr_vals},
+                    "search_space_types": {"learning_rate": lr_type},
+                    "fixed_context": {**base_overrides, **fixed_values},
+                    "max_evals": int(max_evals),
+                    "max_run_hours": float(max_run_hours),
+                    "tune_epochs": int(tune_epochs),
+                    "tune_patience": int(tune_patience),
+                    "selection_rule": "overall_seen_target",
+                    "phase_kind": "source_pretrain",
+                    "pair_id": "native_shared",
+                    "transfer_mode": "none",
+                    "hparam_preset": preset_id,
+                    "source_dataset": dataset,
+                    "target_dataset": dataset,
+                    "checkpoint_export_path": str(a09_source_checkpoint_path("a09", dataset, preset_id, seed)),
+                }
+                rows.append(row)
+    return rows
+
+
+def build_a09_target_rows(
+    *,
+    pairs: list[str],
+    preset_ids: list[str],
+    transfer_settings: list[dict[str, Any]],
+    seeds: list[int],
+    max_evals: int,
+    max_run_hours: float = 1.0,
+    tune_epochs: int,
+    tune_patience: int,
+    lr_mode: str,
+) -> list[dict[str, Any]]:
+    """Build target-transfer rows for A09 transfer experiments."""
+    rows: list[dict[str, Any]] = []
+    cursor = 100000
+    for pair_id in pairs:
+        spec = TRANSFER_PAIR_SPECS[pair_id]
+        source_ds = spec["source_dataset"]
+        target_ds = spec["target_dataset"]
+        validate_session_fixed_files(source_ds)
+        validate_session_fixed_files(target_ds)
+        for preset_id in preset_ids:
+            fixed_values = dict(A09_SHARED_HPARAM_PRESETS[preset_id])
+            base_lr = A09_LR_CENTER_BY_DATASET.get(target_ds, 1e-3)
+            lr_vals, lr_type = lr_search_spec(base_lr, lr_mode=lr_mode)
+            for setting in transfer_settings:
+                for seed in seeds:
+                    cursor += 1
+                    job_id = (
+                        f"A09_TGT_{sanitize_token(pair_id, upper=True)}_"
+                        f"{sanitize_token(preset_id, upper=True)}_{sanitize_token(str(setting['setting_key']), upper=True)}_S{int(seed)}"
+                    )
+                    base_overrides = canonical_stage_maps()
+                    row: dict[str, Any] = {
+                        "question": "a09",
+                        "stage": "a09",
+                        "run_axis": QUESTION_AXIS["a09"],
+                        "dataset": target_ds,
+                        "model": ROUTE_MODEL,
+                        "family": "route",
+                        "setting_key": str(setting["setting_key"]),
+                        "setting_label": str(setting["setting_label"]),
+                        "base_rank": 0,
+                        "base_tag": f"transfer_{pair_id}_{preset_id}",
+                        "base_result_json": "",
+                        "seed_id": int(seed),
+                        "runtime_seed": 870000 + cursor,
+                        "job_id": job_id,
+                        "run_phase": job_id,
+                        "search_space": {"learning_rate": lr_vals},
+                        "search_space_types": {"learning_rate": lr_type},
+                        "fixed_context": {**base_overrides, **fixed_values},
+                        "max_evals": int(max_evals),
+                        "max_run_hours": float(max_run_hours),
+                        "tune_epochs": int(tune_epochs),
+                        "tune_patience": int(tune_patience),
+                        "selection_rule": "overall_seen_target",
+                        "phase_kind": "target_transfer",
+                        "pair_id": pair_id,
+                        "transfer_mode": str(setting.get("transfer_mode", "none")),
+                        "hparam_preset": preset_id,
+                        "source_dataset": source_ds,
+                        "target_dataset": target_ds,
+                        "source_checkpoint": str(a09_source_checkpoint_path("a09", source_ds, preset_id, seed)),
+                    }
+                    rows.append(row)
+    return rows

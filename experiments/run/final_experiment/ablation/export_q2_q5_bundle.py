@@ -18,6 +18,9 @@ if str(CODE_DIR) not in sys.path:
 
 from common import DATA_ROOT, LOG_ROOT, RESULT_ROOT, SUMMARY_FIELDS  # noqa: E402
 
+# When set, only rows whose "dataset" field matches are exported.
+_DATASETS_FILTER: set[str] = set()
+
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
@@ -115,6 +118,8 @@ def _collect_summary_result_rows(question: str) -> list[dict[str, Any]]:
     for summary_row in _read_csv(LOG_ROOT / question / "summary.csv"):
         if str(summary_row.get("status", "")).lower() != "ok":
             continue
+        if _DATASETS_FILTER and str(summary_row.get("dataset", "")) not in _DATASETS_FILTER:
+            continue
         row = _summary_to_result_row(summary_row)
         if row is not None:
             row["question"] = question
@@ -126,6 +131,8 @@ def _collect_summary_result_rows(question: str) -> list[dict[str, Any]]:
 def _concat_case_export(index_csv: Path, filename: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index_row in _read_csv(index_csv):
+        if _DATASETS_FILTER and str(index_row.get("dataset", "")) not in _DATASETS_FILTER:
+            continue
         export_dir = str(index_row.get("case_eval_export_dir", "")).strip()
         if not export_dir:
             continue
@@ -141,6 +148,8 @@ def _intervention_performance_rows(index_csv: Path) -> tuple[list[dict[str, Any]
     performance_rows: list[dict[str, Any]] = []
     route_rows_raw: list[dict[str, Any]] = []
     for index_row in _read_csv(index_csv):
+        if _DATASETS_FILTER and str(index_row.get("dataset", "")) not in _DATASETS_FILTER:
+            continue
         manifest_path = str(index_row.get("intervention_manifest", "")).strip()
         if not manifest_path:
             continue
@@ -232,9 +241,12 @@ def _best_dense_vs_staged_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any
 
 
 def main() -> int:
+    global _DATASETS_FILTER
     parser = argparse.ArgumentParser(description="Export Q2~Q5 ablation outputs.")
     parser.add_argument("--output-dir", default=str(DATA_ROOT))
+    parser.add_argument("--datasets", default="", help="Comma-separated dataset filter (empty = all).")
     args, _unknown = parser.parse_known_args()
+    _DATASETS_FILTER = {d.strip() for d in str(args.datasets).split(",") if d.strip()}
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 

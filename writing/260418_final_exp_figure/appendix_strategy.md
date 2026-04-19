@@ -1,3 +1,181 @@
+# RouteRec Appendix Strategy v2
+
+## 핵심 판단
+
+지금 appendix의 문제는 `A06~A09에 뭘 더 넣을까`가 아니다.
+
+더 큰 문제는, 현재 묶음이 `실험 슬롯` 중심이라서 독자가 appendix를 읽을 때
+
+- 어떤 그림은 구조 정당화,
+- 어떤 그림은 경계 조건,
+- 어떤 그림은 diagnostics,
+- 어떤 그림은 behavior slice,
+
+를 한 흐름으로 이해하지 못한다는 점이다.
+
+따라서 revision 기준은 패널 수가 아니라 `주제별 묶음`이다.
+
+appendix는 이제 아래 다섯 묶음으로 재정리하는 것이 맞다.
+
+## 권장 Appendix Taxonomy
+
+### A06 Structural Sanity Checks
+
+역할:
+
+- 본문 Q3의 구조 선택을 짧고 직접적으로 방어
+- `semantic grouping`과 `temporal role assignment`만 남김
+
+넣을 것:
+
+- family prior intact vs reduced vs shuffled vs flattened
+- original temporal role vs identical scope vs scope swap vs extra attention
+
+넣지 않을 것:
+
+- top-k
+- sparse routing
+- operating summary를 과도하게 섞는 패널
+
+핵심 메시지:
+
+- 지금 구조가 단순히 parameterization 때문이 아니라, semantic grouping과 temporal role 분리가 실제로 필요하다.
+
+### A07 Top-k Routing Regimes
+
+역할:
+
+- `dense RouteRec이 왜 main choice인가`를 sparse/top-k와의 operating-regime 비교로 설명
+- 성능표가 아니라 `quality-selectivity frontier`를 보여주는 appendix
+
+넣을 것:
+
+- quality vs active experts frontier
+- global top-k sweep
+- grouped top-k sweep
+- average quality vs active experts vs top-share summary
+
+넣지 않을 것:
+
+- cue PCA
+- behavior cases
+- generic routing heatmap dump
+
+핵심 메시지:
+
+- sparse routing은 흥미로운 control이지만, 현재 paper setting에서는 dense routing이 가장 안정적인 operating point다.
+
+### A08 Behavior Case Studies
+
+역할:
+
+- behavior slice를 paper-friendly case study로 번역
+- `어떤 case가 gain을 만들고`, `그 case가 어떤 routing/cue 특성을 가지는가`를 보여줌
+
+넣을 것:
+
+- per-case grouped bar + line with only essential comparators
+- gain vs routing concentration scatter
+- one cue-space prototype panel or one cue-profile panel
+
+넣지 않을 것:
+
+- pure/permissive jargon-heavy split
+- threshold robustness panel 여러 개
+- top-k와 섞인 analysis
+
+핵심 메시지:
+
+- RouteRec gain은 모든 case에서 균일하지 않고, 해석 가능한 일부 behavior case에서 집중된다.
+
+### A09 Boundary Conditions and Lightweight Portability
+
+역할:
+
+- `어디까지 버티고 어디서 약해지는가`를 compact하게 보여주는 boundary-condition appendix
+
+넣을 것:
+
+- low-data budget curves
+- 매우 compact한 transfer-style reuse comparison
+
+넣지 않을 것:
+
+- 넓은 transfer matrix
+- operating panel을 여러 장으로 늘리는 구성
+
+핵심 메시지:
+
+- low-data와 reuse setting은 RouteRec의 승리 선언이 아니라, 경계 조건을 점검하는 공간이다.
+
+### A10 Cue Semantics and Intervention Analysis
+
+역할:
+
+- `metric appendix`가 아니라 `analysis appendix`
+- feature family, portable cue setting, intervention response를 한 묶음으로 정리
+
+넣을 것:
+
+- portable cue family profile under different cue settings
+- cue-setting별 routing sharpness summary
+- intervention score drop + family-mass shift map
+
+넣지 않을 것:
+
+- stage-by-stage expert heatmap
+- 구조 ablation과 섞인 패널
+- low-data 결과와 혼합된 portability analysis
+
+핵심 메시지:
+
+- RouteRec의 router는 단순 hidden-state artifact가 아니라, semantic cue families와 intervention에 일관되게 반응하는 control interface다.
+
+## 묶음 기준
+
+appendix panel은 아래 셋 중 하나에만 속해야 한다.
+
+1. `sanity check`: main design을 짧게 방어하는가
+2. `operating regime`: dense vs sparse, rich vs selective의 tradeoff를 보여주는가
+3. `analysis`: routing이 무엇에 반응하는지, 어떤 case를 설명하는지 보여주는가
+
+이 셋 중 어디에도 명확히 속하지 않으면 빼는 편이 낫다.
+
+## 지금 구조에서 줄여야 할 것
+
+- metric 종류만 바꾼 유사 plot 반복
+- subfigure마다 전혀 다른 시각 언어를 쓰는 구성
+- 내부 코드베이스를 알아야 이해되는 naming
+- 본문과 연결이 약한 generic diagnostic dump
+- stage heatmap을 중심으로 한 appendix 구성
+
+## 시각화 원칙
+
+- x축은 변수 이름이 아니라 해석 문장처럼 써야 한다.
+- bar + line은 `quality + behavior summary`처럼 역할이 분명할 때만 쓴다.
+- heatmap은 `delta`나 `matrix-like relation`일 때만 쓴다.
+- analysis appendix에는 scatter, projection, family-profile line plot 같은 비-metric 중심 plot을 의도적으로 섞는다.
+- 한 notebook 안의 패널들은 같은 질문에 답해야 한다.
+
+## 현재 권장 파일 매핑
+
+- A06: structural sanity only
+- A07: top-k regimes only
+- A08: behavior cases only
+- A09: low-data and compact transfer only
+- A10: cue semantics and intervention analysis
+
+## 바로 반영할 변경
+
+- A06은 현재 방향 유지, 축 이름만 더 직관적으로 유지
+- A07은 top-k 전용 notebook으로 고정
+- A08은 case study + cue-space analysis만 남김
+- A09는 transfer panel을 더 compact한 bar + line 방식으로 정리
+- A10을 새로 만들어 `analysis-only appendix` 역할을 맡김
+
+<details>
+<summary>Archived Earlier Slot-by-Slot Notes</summary>
+
 # RouteRec Appendix Strategy
 
 ## 목적
@@ -569,3 +747,5 @@ transfer는 줄여서 본다.
 - Q5는 `semantic intervention과 behavior regime`를 appendix에서 더 설득력 있게 확장할 수 있다.
 
 즉 다음 단계에서 ipynb 예제를 다시 만들 때는, A06과 A09를 특히 크게 바꾸는 것이 맞다.
+
+</details>

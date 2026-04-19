@@ -1,0 +1,665 @@
+RouteRec 본문 실험(Q2~Q5) 최종 재설계안
+=====================================
+
+목표
+----
+이 문서는 현재 논문 메시지와 기존 q2~q5 코드/시각화 초안을 다시 맞춰서,
+본문에 들어갈 최종 실험 분류, 각 Q의 주장, 실제로 돌릴 variant, figure/table 구성,
+그리고 필요한 logging/export 방향까지 한 번에 정리한 것이다.
+
+핵심 원칙은 아래와 같다.
+
+1. 본문 Q는 4개만 유지한다.
+   - Q2: 왜 좋아졌는가? (routing source)
+   - Q3: 왜 이 구조여야 하는가? (design justification)
+   - Q4: practical한가? (efficiency / cost)
+   - Q5: router가 실제로 무엇을 배우는가? (behavior-grounded routing)
+
+2. subfigure는 최소화한다.
+   - Q2: 2 subfigure
+   - Q3: 2 subfigure
+   - Q4: figure 없이 compact table 1개 권장
+   - Q5: 2 subfigure
+
+3. 본문에서는 “한 그림 = 한 메시지”가 되도록 한다.
+   - 복합적인 twin-axis, scatter+bar 혼합, 여러 지표 동시 표시는 appendix로 내린다.
+   - 본문은 NDCG@20 중심으로 단순하게 가고, HR@10은 텍스트나 appendix에서 보조로 언급한다.
+
+4. 현재 notebook/launcher는 최대한 재활용하되, 질문의 역할만 다시 정렬한다.
+   - 현재 q2: 본문 Q2로 유지
+   - 현재 q3: 본문 Q3로 재설계
+   - 현재 q4(lightweight cues): appendix로 이동
+   - 현재 q5: 본문 Q5로 유지하되 aggregate 성능보다 case 중심으로 바꾼다
+   - 새 Q4 efficiency는 별도 benchmark/export로 추가
+
+
+0. 전체 본문 흐름
+----------------
+
+최종 본문 실험 순서는 아래가 가장 자연스럽다.
+
+Q2 -> Q3 -> Q4 -> Q5
+
+이 순서의 논리:
+- Q2: 성능 개선의 직접 원인이 routing source라는 것을 먼저 보인다.
+- Q3: 그렇다면 왜 하필 이 routing design인지 정당화한다.
+- Q4: 그 설계가 실제로 감당 가능한 비용인지 짧게 확인한다.
+- Q5: 마지막으로 router가 실제로 어떤 semantic behavior를 보이는지 보여준다.
+
+즉:
+원인 -> 구조 정당화 -> 실용성 -> 해석 가능성
+순서다.
+
+이 순서가 좋은 이유:
+- Q5를 맨 뒤에 두면, conclusion 직전에 “이 모델이 진짜 뭘 배우는가”를 보여줄 수 있다.
+- Q2와 Q5가 겹치는 문제를 줄일 수 있다.
+- Q4를 짧게 table로 처리하면 본문이 늘어지지 않는다.
+
+
+1. Q2 최종 설계: Routing source가 정말 핵심인가?
+----------------------------------------------
+
+1.1 이 Q가 주장해야 하는 것
+-------------------------
+Q2는 아래 한 문장을 설득해야 한다.
+
+“같은 cue를 쓰더라도, 그것을 hidden representation에 섞는 것보다 routing control에 사용하는 것이 더 효과적이다.”
+
+즉 이 Q는
+- feature-aware routing의 필요성
+- hidden-only routing과의 차이
+- simple fusion으로는 충분하지 않음을
+보여주는 파트다.
+
+Q2에서 semantic case나 routing pattern을 과하게 보여줄 필요는 없다.
+그건 Q5에서 보여주는 게 더 자연스럽다.
+
+
+1.2 돌릴 variant
+----------------
+본문에는 아래 5개로 고정하는 것이 가장 좋다.
+
+1. shared_ffn
+   - SASRec 스타일 shared FFN
+   - feature도 routing도 없음
+
+2. hidden_only
+   - hidden state만 router 입력
+
+3. feature_fusion_bias
+   - feature를 hidden에만 bias/additive 방식으로 주입
+   - routing은 shared FFN처럼 유지.
+   - 코드의 bias 활용. MoE 없이 injective bias만 넣기 
+
+4. mixed_hidden_behavior
+   - hidden branch와 feature branch를 모두 router에 사용. 기존의 mix 방식
+
+5. behavior_guided (our model)
+   - final RouteRec
+   - behavior feature만 routing control로 사용
+
+중요:
+- fusion baseline은 꼭 넣는 것이 좋다.
+- FiLM처럼 복잡하게 가지 말고 additive bias 하나로 충분하다.
+- 목적은 “feature를 representation에 주는 것”과 “feature로 routing을 제어하는 것”을 분리하는 데 있다.
+
+
+1.4 Q2 figure 구성
+------------------
+Figure Q2는 2개의 subfigure만 둔다.
+
+Q2(a): dynamic 쪽 데이터셋 3개 (혹은 선택한거 1개)
+- Beauty
+- KuaiRec
+- Retail Rocket
+
+Q2(b): stable / mixed 쪽 데이터셋 3개 (혹은 선택한거 1개)
+- Foursquare
+- LastFM
+- ML-1M
+
+형태:
+- 각 subfigure 안에 3개 dataset mini-panel (혹은 평균 or 1개만)
+- 각 mini-panel은 grouped bar plot (혹은 그냥 bar plot)
+- x축: 5개 variant
+- y축: NDCG@20, HR@10 (기존 ipynb들처럼 NDCG는 bar, HR은 꺾은선)
+
+- 라벨:
+  - Shared FFN
+  - Hidden only
+  - Fusion bias
+  - Mixed
+  - Behavior-guided
+
+왜 2개 subfigure로 나누는가:
+- 데이터셋 6개를 한 figure에 다 때려넣으면 너무 복잡하다.
+- dynamic / stable 계열로 나누면 메시지가 더 분명해진다.
+- “어디서 더 잘 먹히는지”도 자연스럽게 드러난다.
+
+
+1.5 Q2 figure가 전달하는 핵심 메시지
+-----------------------------------
+Q2(a)와 Q2(b)를 합쳐서 아래를 말하게 만들면 된다.
+
+- hidden-only routing도 일부 도움이 된다.
+- mixed나 simple fusion도 어느 정도는 따라온다.
+- 하지만 최종 behavior-guided routing이 가장 일관되게 좋다.
+- 따라서 improvement는 단순한 feature injection이 아니라 routing control에서 나온다.
+
+
+1.6 Q2 notebook / export 수정 포인트
+----------------------------------
+현재 02_q2_routing_control.ipynb의 (a)는 거의 그대로 재사용 가능하다.
+다만 아래를 바꾸는 것이 좋다.
+
+variant_order:
+- shared_ffn
+- hidden_only
+- feature_fusion_bias
+- mixed_hidden_behavior
+- behavior_guided
+
+quality export에 필요한 최소 컬럼:
+- dataset
+- variant_or_model
+- metric
+- cutoff
+- value
+- split
+- selection_rule
+- run_id
+
+q2_settings()에 새로 추가할 것:
+- feature_fusion_bias
+
+case eval은 Q2 본문에서는 필수 아님.
+기존 representative case export는 appendix qualitative로 넘기는 것이 좋다.
+
+
+2. Q3 최종 설계: 왜 이 routing design이어야 하는가?
+--------------------------------------------------
+
+2.1 이 Q가 주장해야 하는 것
+-------------------------
+Q3는 아래 두 문장을 설득해야 한다.
+
+1. temporal evidence를 macro/mid/micro로 분리하는 것이 중요하다.
+2. flat expert selection보다 hierarchical sparse routing이 더 적절하다.
+
+즉 Q3의 핵심은
+- time scope 분해
+- sparse group-aware route commitment
+두 축이다.
+
+Q3에서는 order sweep, random group, stage placement full sweep 같은 잡다한 변형은 본문에서 빼는 게 맞다.
+그런 건 appendix로 보내면 된다.
+
+
+2.2 돌릴 variant
+----------------
+Q3는 2개의 subfigure만 둔다.
+
+Q3(a): temporal decomposition
+- single_view (stage 1개 혹은 병렬)
+- best_two_view (stage 2개)
+- final_three_stage
+
+Q3(b): routing organization
+- flat_sparse (router wrapper 1? flat router만 쓰는거 코드에 있음. 이 중에 top 6)
+- flat_dense (위처럼 flat router 모든거 사용)
+- hierarchical_dense (최종 wrapper dense routing)
+- hierarchical_sparse (최종 wrapper인데 top k 최종 모델처럼 group top 3, expert top 2)
+
+각각 의미는 아래와 같다.
+
+single_view:
+- temporal scope를 분리하지 않고 하나의 routing view만 사용
+- macro/mid/micro cue를 합치거나 pooled merge해서 하나의 routed block에 넣음
+
+best_two_view:
+- 2-stage 후보 중 가장 나은 reduced variant
+- 논문에는 그냥 “Best 2-view”로 표시 가능
+- 세부 조합은 appendix에 둔다
+
+final_three_stage:
+- 현재 최종 RouteRec
+
+flat_sparse:
+- 12 experts에서 directly 6 top-k
+- group prior 없음
+
+flat_dense: 
+ - flat에 top k 없이
+
+hierarchical_sparse:
+- 4 groups 중 top-3
+- 각 selected group에서 top-2 experts
+- final RouteRec routing organization
+
+hierarchical_dense:
+- group prior는 유지하지만 dense mixing
+- sparse top-k는 사용하지 않음
+
+이 구성이 좋은 이유:
+- Q3(a)는 “왜 3개 temporal control view가 필요한가”를 보여준다.
+- Q3(b)는 “왜 group-aware sparse routing이어야 하는가”를 보여준다.
+
+
+2.3 Q3 figure 구성
+------------------
+Figure Q3는 2개의 subfigure만 둔다.
+
+Q3(a): Temporal decomposition matters
+
+- x축: Single-view / Best 2-view / Final 3-stage
+- y축: NDCG@20, HR@10
+Q3(b): Hierarchical sparse routing matters
+
+- x축: Flat sparse / Flat dense / Hierarchical sparse / Hierarchical dense
+- y축: NDCG@20, HR@10
+
+
+
+왜 dataset mini-plot을 다시 안 쓰는가:
+- Q2에서 이미 dataset별 성능은 충분히 보여준다
+- Q3는 설계 축 정당화가 핵심이므로 aggregate bar가 더 적절하다
+
+
+2.4 Q3 figure가 전달하는 핵심 메시지
+-----------------------------------
+Q3(a):
+- temporal control을 분해하지 않으면 gain이 줄어든다
+
+Q3(b):
+- flat sparse보다 hierarchical sparse가 낫고,
+- dense hierarchy보다 sparse hierarchy가 논문 메시지와 더 잘 맞는다
+
+즉 Q3 전체는 아래 문장으로 요약된다.
+
+“RouteRec의 강점은 단순히 expert를 추가한 데 있지 않고, temporal decomposition과 hierarchical sparse routing을 함께 쓴 데 있다.”
+
+
+2.5 Q3 notebook / export 수정 포인트
+----------------------------------
+현재 03_q3_stage_structure.ipynb는 (a)(b) 두 panel 구조라 틀은 좋다.
+다만 내용은 아래처럼 바꾸는 것이 좋다.
+
+기존 (a):
+- final vs reduced-stage alternatives
+-> 유지 가능, 단 label을 single-view / best 2-view / final 3-stage로 정리
+
+기존 (b):
+- slow-to-fast ordering matters
+-> 본문에서 빼고, hierarchical sparse vs flat sparse vs hierarchical dense로 교체
+
+q3_settings() 쪽에 필요한 설정 family:
+- single_view
+- best_two_view candidates
+- final_three_stage
+- flat_sparse
+- hierarchical_sparse
+- hierarchical_dense
+
+plotting용 추가 metadata 권장:
+- panel_family  (temporal_decomp / routing_org)
+- variant_label
+- variant_order
+
+order sweep / random group / stage placement full sweep은 appendix용 settings로 남겨두는 것이 좋다.
+
+
+3. Q4 최종 설계: practical한가?
+------------------------------
+
+3.1 이 Q가 주장해야 하는 것
+-------------------------
+Q4는 딱 이것만 말하면 된다.
+
+“최종 sparse RouteRec는 parameter와 runtime 측면에서 감당 가능한 수준이며, dense expert ensemble처럼 과도하게 무겁지 않다.”
+
+이 파트는 본문에서 길게 끌 필요 없다.
+오히려 짧고 분명하게 확인해주는 게 좋다.
+
+
+3.2 비교할 모델
+---------------
+본문에는 아래 정도면 충분하다.
+
+- SASRec
+- RouteRec-dense
+- RouteRec-sparse-final
+- optional: FAME
+
+RouteRec-sparse-final:
+- 4 groups x 3 experts
+- top-3 groups
+- top-2 experts per selected group
+- 총 12 experts 중 6 experts active
+
+중요:
+
+- 그건 appendix나 efficiency supplement에 두는 게 낫다
+- 본문은 total params + 실제 wall-clock cost만 보여주는 게 더 직관적이다
+
+
+3.3 Q4는 figure보다 table 권장
+-----------------------------
+본문에서는 figure 없이 compact table 1개가 가장 낫다.
+
+Table Q4 columns:
+- Model
+- Total params (M)
+- Active params (MoE로 비활성화되는 param 제외. M)
+- Train time ratio (vs SASRec)
+- Inference time ratio (vs SASRec)
+
+가능하면 측정 방식은 명시:
+- 동일 GPU
+- 동일 batch size
+- 동일 representative dataset subset
+
+본문 서술 포인트:
+- final sparse RouteRec activates only a subset of experts per decision
+- despite a larger parameter pool, observed runtime overhead remains moderate
+- this supports the claim that RouteRec is a practical sparse conditional-computation design
+
+
+3.4 Q4 export / benchmark 구현 포인트
+-----------------------------------
+새 script를 따로 두는 것이 가장 깔끔하다.
+
+예:
+- q4_efficiency_tradeoff.py
+- benchmark_checkpoint_cost.py
+
+필요한 출력:
+- model_name
+- total_params
+- active_params
+- train_time_ratio
+- infer_time_ratio
+- optional: memory_mb (appendix)
+
+Hparam은 best 모델?을 한 번씩 돌려서 param 수 비교도 해보고
+동일한 hparam (dim 등)을 돌려서 param 수와 성능 비교도 가능
+
+즉 Q4는 “새로운 학습 실험”이라기보다 “기존 checkpoint benchmark + param count”에 가깝다.
+
+
+4. Q5 최종 설계: router가 실제로 무엇을 배우는가?
+-------------------------------------------------
+
+4.1 이 Q가 주장해야 하는 것
+-------------------------
+Q5는 아래 문장을 설득해야 한다.
+
+“RouteRec의 router는 behavioral regime에 따라 stage별로 서로 다른 semantic group을 실제로 선택하며, targeted intervention을 주면 그 선택이 의미 있게 바뀐다.”
+
+즉 Q5는 성능 plot이 아니라 routing semantics 파트다.
+성능은 이미 Q1~Q3에서 충분히 보였다고 보고,
+Q5에서는 “router가 진짜 behavior를 본다”는 증거를 주는 것이 핵심이다.
+
+
+4.2 representative case 선정
+---------------------------
+본문에는 case 3개만 두는 것이 좋다.
+
+1. Repeat-heavy
+2. Fast exploratory
+3. Narrow-focus
+
+이 3개면 충분하다.
+
+왜 3개인가:
+- 너무 많으면 산만하다
+- semantic family 3개(Tempo / Focus / Memory)가 명확히 드러난다
+- Exposure는 나머지 case나 appendix에서 보조로 다뤄도 충분하다
+
+case 선정 원칙:
+- pre-defined slice statistic 기반
+- held-out set에서 archetypal example 선택
+- 가능하면 final model이 안정적으로 동작한 example
+- selection rule은 appendix에 짧게 명시
+
+
+4.3 Q5 figure 구성
+------------------
+Figure Q5는 3개의 subfigure를 둔다.
+
+Q5(a)~(c): Representative routing maps
+- 3개 case를 1 x 3으로 배치
+- 각 case마다 3 x 4 heatmap 하나
+  - row: group (Tempo / Focus / Memory / Exposure)
+  - col: experts (group별 3 expert)
+	한 stage만 보여줘도 되고, 3개 stage에서 평균내는데, group 내부 expert별 내림차순해서 평균내도 됨 (unselected는 0으로)
+  - value: selected-expert normalized mass or top-k inclusion frequency
+
+즉 Q5는
+- Repeat-heavy case heatmap
+- Fast exploratory case heatmap
+- Narrow-focus case heatmap
+이렇게 3개가 나란히 놓인다
+
+즉:
+- Q5는 “원래 route가 semantic하게 보인다”
+를 보여준다.
+
+
+4.4 왜 Q5를 case 중심으로 가져가나
+---------------------------------
+사용자님 지적대로 Q5는 성능보다 라우팅 자체를 보여주는 게 더 중요하다.
+그 이유는:
+- Q1~Q3에서 이미 성능 주장은 충분히 했다
+- Q5에서까지 또 slice-level accuracy plot을 크게 넣으면 Q2/Q3와 겹친다
+- 논문의 인상은 “그래서 router가 실제로 뭘 하고 있느냐”에서 갈린다
+
+따라서 Q5는 aggregate slice plot보다 case-based semantic evidence가 더 강하다.
+
+
+4.5 Q5 notebook / export 수정 포인트
+----------------------------------
+현재 05_q5_behavior_regimes.ipynb는
+- (a) semantic intervention quality
+- (b) where routing helps most
+구조다.
+
+이걸 아래처럼 바꾸는 것이 좋다.
+
+새 Q5(a):
+- representative cases heatmap
+- 입력 CSV/JSON에 필요한 최소 컬럼:
+  - case_name
+  - stage
+  - group_name
+  - selected_mass
+  - case_type
+  - short_description(optional)
+
+현재 q5_behavior_regime.py는 case eval / intervention export 구조가 이미 있으므로,
+그걸 활용해서 본문용 compact summary를 다시 뽑는 방식이 가장 좋다.
+
+
+5. appendix로 내릴 것
+--------------------
+
+아래는 본문에서 빼고 appendix로 보내는 것을 권장한다.
+
+5.1 현재 04_q4_lightweight_cues.ipynb 전체
+----------------------------------------
+이건 버리지 말고 appendix 핵심 figure로 살리는 것이 좋다.
+
+(a) Cue reduction by dataset
+- full / no category / no time / sequence only
+
+(b) Routing operating map under cue removal
+- entropy / effective experts / retention
+
+이 그림들은 quality가 나쁘지 않다.
+다만 본문 Q4가 이제 efficiency가 되었기 때문에 위치만 appendix로 바뀌는 것이다.
+
+
+5.2 현재 03 notebook의 ordering panel
+-----------------------------------
+- slow-to-fast ordering matters
+- local-first / global-late / duplicated-mid
+이런 건 appendix structural ablation으로 좋다.
+
+
+5.3 현재 02 notebook의 representative cases
+------------------------------------------
+- stage-averaged representative cases
+이건 appendix qualitative로 좋다.
+다만 본문 Q5는 stage x group heatmap으로 더 직관적으로 바꾸는 것이 낫다.
+
+
+5.4 현재 05 notebook의 slice scatter / semantic intervention quality
+-------------------------------------------------------------------
+- slice-wise gain scatter
+- full intervention quality grouped bars
+이런 것은 appendix extended evidence로 좋다.
+본문에서는 case 중심 semantic evidence가 더 강하다.
+
+
+6. 코드 / logging 측면에서 꼭 추가하면 좋은 것
+--------------------------------------------
+
+6.1 공통 summary row metadata
+----------------------------
+각 question summary CSV에 아래 컬럼이 있으면 plotting이 훨씬 편해진다.
+
+- plot_group
+- panel_family
+- variant_label
+- variant_order
+- is_main_text
+- is_appendix
+
+이렇게 해두면 notebook에서 하드코딩이 줄고,
+본문용 / appendix용 분리도 쉬워진다.
+
+
+6.2 Q2에 추가할 것
+-----------------
+q2_settings()에:
+- feature_fusion_bias
+
+Q2 main plot에 필요한 variant label map:
+- shared_ffn -> Shared FFN
+- hidden_only -> Hidden only
+- feature_fusion_bias -> Fusion bias
+- mixed_hidden_behavior -> Mixed
+- behavior_guided -> Behavior-guided
+
+
+6.3 Q3에 추가할 것
+-----------------
+q3_settings()에서 family를 두 묶음으로 나누는 것이 좋다.
+
+temporal_decomp:
+- single_view
+- best_two_view variants
+- final_three_stage
+
+routing_org:
+- flat_sparse
+- hierarchical_sparse
+- hierarchical_dense
+
+그리고 wrapper ordering / random grouping / stage placement full sweep은 appendix family로 따로 둔다.
+
+
+6.4 Q4에 추가할 것
+-----------------
+새 benchmark export 필요:
+- model_name
+- total_params
+- train_time_ratio
+- infer_time_ratio
+- optional memory_mb (appendix)
+
+이건 실험 launcher보다 checkpoint benchmark script를 새로 두는 것이 낫다.
+
+
+6.5 Q5에 추가할 것
+-----------------
+대표 case export:
+- case_name
+- stage
+- group_name
+- selected_mass
+- selected_rank(optional)
+- case_type
+
+intervention export:
+- case_name
+- intervention_target
+- route_shift
+- target_score_drop
+- top1_changed
+
+즉 Q5는 aggregate slice summary보다,
+case-level route evidence를 뽑는 export가 더 중요하다.
+
+
+7. 최종 본문 실험 구성 요약
+--------------------------
+
+Q2. Routing source matters
+- variants:
+  - Shared FFN
+  - Hidden only
+  - Fusion bias
+  - Mixed
+  - Behavior-guided
+- figure:
+  - (a) dynamic datasets 3개 mini-bar
+  - (b) stable/mixed datasets 3개 mini-bar
+- 메시지:
+  - feature를 representation에 넣는 것보다 routing control로 쓰는 것이 핵심
+
+Q3. Final design justification
+- variants:
+  - (a) Single-view / Best 2-view / Final 3-stage
+  - (b) Flat sparse / Hierarchical sparse / Hierarchical dense
+- figure:
+  - (a) avg NDCG@20 bar (+ dataset dots)
+  - (b) avg NDCG@20 bar (+ dataset dots)
+- 메시지:
+  - temporal decomposition과 hierarchical sparse routing이 함께 중요
+
+Q4. Practicality
+- models:
+  - SASRec
+  - RouteRec-dense
+  - RouteRec-sparse-final
+  - optional FAME
+- table:
+  - Total params
+  - Train time ratio
+  - Inference time ratio
+- 메시지:
+  - sparse RouteRec는 fully dense expert ensemble처럼 과도하게 무겁지 않다
+
+Q5. Router semantics
+- cases:
+  - Repeat-heavy
+  - Fast exploratory
+  - Narrow-focus
+- figure:
+  - (a) 3개 case의 stage x group heatmap
+  - (b) 같은 3개 case의 targeted intervention summary
+- 메시지:
+  - router는 실제로 behavior regime에 따라 semantic group을 다르게 선택하며, intervention에도 반응한다
+
+
+8. 최종 한 줄 정리
+------------------
+
+본문 실험은 아래 4문장을 차례대로 설득하면 된다.
+
+- Q2: improvement는 단순 feature injection이 아니라 routing control에서 나온다.
+- Q3: 그 routing gain은 temporal decomposition과 hierarchical sparse routing의 조합에서 나온다.
+- Q4: 그 설계는 실제로 감당 가능한 비용을 가진다.
+- Q5: 그리고 router는 실제로 behavior-grounded semantic structure를 학습한다.
+
+이 4개만 제대로 보여주면, 본문 실험 섹션은 충분히 선명하고 설득력 있게 정리될 수 있다.

@@ -16,6 +16,7 @@ from common import (  # noqa: E402
     LOG_ROOT,
     common_arg_parser,
     build_train_rows,
+    find_completed_case_eval_row,
     index_path,
     latest_manifest_under,
     parse_csv_ints,
@@ -41,6 +42,7 @@ def main() -> int:
         settings=q2_settings(),
         seeds=seeds,
         max_evals=args.max_evals,
+        max_run_hours=args.max_run_hours,
         tune_epochs=args.tune_epochs,
         tune_patience=args.tune_patience,
         lr_mode=args.lr_mode,
@@ -61,17 +63,23 @@ def main() -> int:
     if rc != 0 or args.dry_run:
         return rc
 
+    case_eval_settings = {"route_rec_full", "router_hidden_only", "router_feature_only"}
     case_rows: list[dict[str, str]] = []
     for summary_row in read_summary_rows("q2"):
         if str(summary_row.get("status", "")).lower() != "ok":
             continue
-        if str(summary_row.get("setting_key", "")) != "route_rec_full":
+        if str(summary_row.get("setting_key", "")) not in case_eval_settings:
+            continue
+        existing = find_completed_case_eval_row("q2", summary_row)
+        if existing is not None:
+            case_rows.append(existing)
             continue
         try:
             bundle = run_case_eval_pipeline(
                 question="q2",
                 source_summary_row=summary_row,
                 output_root=LOG_ROOT / "q2" / "case_eval" / str(summary_row.get("job_id", "")),
+                skip_by_group=bool(args.case_eval_fast),
             )
             case_rows.append(bundle)
         except Exception as exc:
