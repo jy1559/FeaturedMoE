@@ -143,7 +143,11 @@ def _build_targets(
 
 def _build_eval_cfg(source_cfg: dict, *, target: dict, gpu_id: int | None):
     cfg = deepcopy(source_cfg)
-    cfg["data_path"] = str(target["data_path"])
+    # Important: keep the *source* data_path so the vocab (esp. item_id -> embedding row)
+    # matches the checkpoint. For case-eval subsets we only filter valid/test interactions
+    # after loading the original dataset, instead of rebuilding a smaller vocab.
+    if str(target.get("scope", "")) != "original":
+        cfg["case_eval_filter_data_path"] = str(target["data_path"])
     cfg["dataset"] = str(source_cfg["dataset"])
     cfg["log_wandb"] = False
     cfg["saved"] = False
@@ -215,6 +219,8 @@ def main() -> int:
     parser.add_argument("--source-result-json", default="", help="Optional source result json for provenance")
     parser.add_argument("--case-root", default=DEFAULT_CASE_ROOT)
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT)
+    parser.add_argument("--bundle-name", default="", help="Optional fixed bundle directory name under output-root for resumable runs")
+    parser.add_argument("--resume", action="store_true", help="If set, skip targets already marked ok in an existing manifest")
     parser.add_argument("--tiers", default="pure,permissive")
     parser.add_argument("--groups", default=",".join(DEFAULT_GROUPS))
     parser.add_argument("--dataset", default="", help="Override dataset name; default uses source config dataset")
@@ -235,8 +241,11 @@ def main() -> int:
     case_root = Path(args.case_root).expanduser().resolve()
     output_root = Path(args.output_root).expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
-    run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    bundle_root = output_root / f"{_sanitize(dataset)}_{run_stamp}"
+    if str(args.bundle_name or "").strip():
+        bundle_root = output_root / _sanitize(args.bundle_name)
+    else:
+        run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        bundle_root = output_root / f"{_sanitize(dataset)}_{run_stamp}"
     bundle_root.mkdir(parents=True, exist_ok=True)
 
     targets = _build_targets(
@@ -257,7 +266,26 @@ def main() -> int:
     manifest_rows = []
     manifest_path = bundle_root / "case_eval_manifest.csv"
 
+    # Resume: load existing ok rows so we can skip them.
+    existing_ok: set[str] = set()
+    if args.resume and manifest_path.exists():
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if str(row.get("status", "")).strip().lower() == "ok":
+                        label = str(row.get("label", "")).strip()
+                        if label:
+                            existing_ok.add(label)
+                        manifest_rows.append(dict(row))
+        except Exception:
+            existing_ok = set()
+            manifest_rows = []
+
     for idx, target in enumerate(targets, start=1):
+        if args.resume and str(target.get("label", "")) in existing_ok:
+            print(f"[{idx}/{len(targets)}] skip target={target['label']} (resume: already ok)")
+            continue
         print(f"[{idx}/{len(targets)}] eval target={target['label']} data_path={target['data_path']}")
         eval_cfg = _build_eval_cfg(source_cfg, target=target, gpu_id=args.gpu_id)
         model_name = str(eval_cfg.get("model", "")).lower()

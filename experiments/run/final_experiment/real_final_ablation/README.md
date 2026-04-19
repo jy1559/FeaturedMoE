@@ -30,7 +30,6 @@ This folder is intentionally separate from the older `final_experiment/ablation`
 ## Expected Notebook Exports
 
 - `q2_quality.csv`
-- `q2_routing_profile.csv`
 - `q3_temporal_decomp.csv`
 - `q3_routing_org.csv`
 - `q4_efficiency_table.csv`

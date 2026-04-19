@@ -239,14 +239,12 @@ def main() -> int:
     q4_rows = _read_csv(LOG_ROOT / "q4" / "summary.csv")
     q5_rows = _collect_summary_rows("q5", dataset_filter)
 
-    q2_profile = _concat_case_export(LOG_ROOT / "q2" / "q2_case_eval_index.csv", "case_eval_routing_profile.csv", dataset_filter)
     q5_case_profile = _concat_case_export(LOG_ROOT / "q5" / "q5_case_eval_index.csv", "case_eval_routing_profile.csv", dataset_filter)
     q3_temporal, q3_routing_org = _collapse_q3(q3_rows)
     q5_case_heatmap = _build_q5_case_heatmap(q5_case_profile)
     q5_intervention_summary = _build_q5_intervention_summary(LOG_ROOT / "q5" / "q5_intervention_index.csv", dataset_filter)
 
     _write_csv(output_dir / "q2_quality.csv", q2_rows, ["dataset", "variant_label", "test_ndcg20", "test_hit10", "base_rank", "seed_id"])
-    _write_csv(output_dir / "q2_routing_profile.csv", q2_profile, ["dataset", "setting_key", "stage_name", "routed_family", "usage_share", "base_rank", "seed_id"])
     _write_csv(output_dir / "q3_temporal_decomp.csv", q3_temporal, ["dataset", "variant_label", "variant_group", "variant_order", "test_ndcg20", "test_hit10", "base_rank", "seed_id"])
     _write_csv(output_dir / "q3_routing_org.csv", q3_routing_org, ["dataset", "variant_label", "variant_group", "variant_order", "test_ndcg20", "test_hit10", "base_rank", "seed_id"])
     _write_csv(output_dir / "q4_efficiency_table.csv", q4_rows, ["dataset_scope", "dataset", "model_name", "total_params", "active_params", "train_time_ratio", "infer_time_ratio", "status"])
@@ -266,7 +264,6 @@ def main() -> int:
                 "dataset_filter": sorted(dataset_filter),
                 "counts": {
                     "q2_quality": len(q2_rows),
-                    "q2_routing_profile": len(q2_profile),
                     "q3_temporal_decomp": len(q3_temporal),
                     "q3_routing_org": len(q3_routing_org),
                     "q4_efficiency_table": len(q4_rows),

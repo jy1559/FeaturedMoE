@@ -14,11 +14,25 @@
 \acmISBN{}
 
 \usepackage{array}
+\usepackage{makecell}
 \usepackage{multirow}
 \usepackage{tabularx}
 \usepackage[table]{xcolor}
 
+\raggedbottom
+\setcounter{topnumber}{3}
+\setcounter{dbltopnumber}{2}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.8}
+\renewcommand{\dblfloatpagefraction}{0.8}
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+
 \newcolumntype{Y}{>{\centering\arraybackslash}X}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \definecolor{routerecgray}{gray}{0.93}
 \newcommand{\tblbest}[1]{#1}
 \newcommand{\tblsecond}[1]{#1}
@@ -95,14 +109,14 @@ Feature-aware and heterogeneity-aware sequential models partially address this i
 
 Taken together, these challenges raise three concrete design questions: why routing should exist at all, where it should differ across temporal evidence, and what should drive it in an interpretable way.
 
-We address these challenges with \textbf{RouteRec}, a behavior-guided sparse conditional computation framework for sequential recommendation. RouteRec is organized around four tightly linked design elements that map directly to the challenges above. \emph{Portable Behavioral Cues} summarize ordinary logs into compact routing signals, providing a lightweight interface for behavior-aware control. Such cues include, for example, inter-event tempo, category concentration and switching, recurrence patterns, and popularity exposure. \emph{Coarse-to-Fine Multi-Stage Routing} applies those cues across macro, mid, and micro scopes so that expert allocation follows temporal evidence granularity rather than a single global bias. \emph{Behavior-Guided Sparse Expert Allocation} decouples routing signals from hidden representations, so experts transform sequence states while routing remains tied to inspectable behavior cues. \emph{Sparse Hierarchical Activation} then commits each routing decision to a small subset of semantic groups and experts rather than diffusely mixing all available experts.
+We address these challenges with \textbf{RouteRec}, a behavior-guided sparse conditional computation framework for sequential recommendation. RouteRec is organized around a three-part design that maps directly to the challenges above. \emph{Portable Behavioral Cues} summarize ordinary logs into compact routing signals, providing a lightweight interface for behavior-aware control. Such cues include, for example, inter-event tempo, category concentration and switching, recurrence patterns, and popularity exposure. \emph{Coarse-to-Fine Multi-Stage Routing} applies those cues across macro, mid, and micro scopes so that expert allocation follows temporal evidence granularity rather than a single global bias. \emph{Behavior-Guided Expert Allocation} decouples routing signals from hidden representations, so experts transform sequence states while routing remains tied to inspectable behavior cues. In the selected paper instantiation, this third component is realized with sparse hierarchical activation, committing each routing decision to a small subset of semantic groups and experts rather than diffusely mixing all available experts.
 
 This framing deliberately treats behavioral information as a control interface for conditional computation rather than as another feature-fusion pathway. As a result, RouteRec preserves a strong sequence backbone while exposing a compact mechanism for behavior-grounded specialization with selective activation. The rest of the paper follows this structure: Related Work clarifies where prior studies stop short of these goals, Method formalizes the design axes, and Experiments test whether compact cues, multi-stage routing, sparse commitment, and decoupled expert allocation each matter in practice.
 
 The main contributions of this work are as follows:
 \begin{itemize}
   \item We identify three front-end challenges for conditional computation in sequential recommendation: the mismatch between behavioral diversity and shared computation, temporal-scope mismatch in routing, and the opacity of hidden-state-only expert allocation.
-  \item We propose RouteRec, which combines portable behavioral cues, coarse-to-fine multi-stage routing, behavior-guided expert allocation, and sparse hierarchical activation to align expert usage with observable behavior.
+  \item We propose RouteRec, which combines portable behavioral cues, coarse-to-fine multi-stage routing, and behavior-guided expert allocation to align expert usage with observable behavior, and instantiates this allocation with sparse hierarchical activation in the selected paper setting.
   \item We design RouteRec to operate from ordinary interaction logs, making the routing interface compact, transferable, and suitable for diagnostic analysis across datasets.
   \item We show that RouteRec improves recommendation quality over strong baselines on several datasets and yields more behavior-consistent and computationally selective routing patterns in ablation and diagnostic studies.
 \end{itemize}
@@ -128,7 +142,7 @@ For our setting, this interpretability issue matters because RouteRec is not onl
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=0.95\textwidth]{figures/figure2_overall_arch_simple.pdf}
-  \caption{Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided sparse routing stages. (b) All stages use the same hierarchical sparse routing principle: group-level scores select a subset of semantic groups, then conditional intra-group scores select a subset of experts inside each chosen group before forming the active expert mixture. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by the basic sparse routing logic.}
+  \caption{Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided sparse routing stages. (b) All stages use the same hierarchical sparse routing principle: group-level scores select a subset of semantic groups, then conditional intra-group scores select a subset of experts inside each chosen group before forming the active expert mixture. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by the basic sparse routing logic. This figure is a framework-level view; the exact serial paper instantiation is specified in Method Section 3.3 and Appendix~\ref{app:method-details}.}
   \Description{A three-panel architecture figure showing RouteRec with a unified hierarchical sparse router across macro, mid, and micro stages, where stages differ by temporal evidence scope and granularity.}
   \label{fig:framework}
 \end{figure*}
@@ -139,7 +153,7 @@ For our setting, this interpretability issue matters because RouteRec is not onl
 \subsection{RouteRec Overview}
 \label{sec:problem-framework}
 
-Figure~\ref{fig:framework} summarizes RouteRec. For each user, we observe interactions ordered by time and train the model for next-item prediction. In one training instance, the observed prefix is denoted by $x_{1:t}$ and the target by $x_{t+1}$. Each interaction contains at least an item identity and timestamp, and may additionally include coarse category information depending on the dataset. RouteRec retains a strong sequential backbone for encoding the prefix, but replaces shared feed-forward computation with stage-wise sparse routing.
+Figure~\ref{fig:framework} summarizes RouteRec at the framework level. For each user, we observe interactions ordered by time and train the model for next-item prediction. In one training instance, the observed prefix is denoted by $x_{1:t}$ and the target by $x_{t+1}$. Each interaction contains at least an item identity and timestamp, and may additionally include coarse category information depending on the dataset. RouteRec retains a strong sequential backbone for encoding the prefix, but replaces shared feed-forward computation with stage-wise sparse routing.
 
 We first describe RouteRec as a design framework and refer to the fixed paper instantiation only when concrete implementation choices matter. The model uses two signal channels. The representation channel maps the observed prefix to hidden states, which are the content representations transformed by experts. The behavior channel summarizes the same prefix into compact cues derived from ordinary logs. These cues are deliberately compact: they are designed as a control interface for routing rather than as another deep side-information branch. In the main text we discuss the selected paper instantiation only when that choice matters for the empirical track, while broader variants and implementation alternatives are deferred to the appendix ablations. Appendix~\ref{app:method-details} collects the corresponding specification details for the selected paper track.
 
@@ -185,7 +199,7 @@ Although the router formula is shared, stages are not redundant. They differ in 
 \[
 \text{self-attention} \rightarrow \text{macro routing block} \rightarrow \text{mid routing block} \rightarrow \text{self-attention} \rightarrow \text{micro routing block}.
 \]
-Let $\mathbf{h}^{(0)}_t$ denote the hidden state after the first attention block, $\mathbf{h}^{(1)}_t$ after macro routing, $\mathbf{h}^{(2)}_t$ after mid routing, and $\mathbf{h}^{(3)}_t$ after the second attention block. Macro, mid, and micro therefore consume $\mathbf{h}^{(0)}_t$, $\mathbf{h}^{(1)}_t$, and $\mathbf{h}^{(3)}_t$, respectively. The first attention layer builds a contextualized prefix representation before any routing decision is made. Macro and mid then operate consecutively because both provide slower sequence-level control over closely related contextual states: macro reflects broader recent-history tendency, whereas mid refines the evolving intent of the current session. In our architecture sweep, inserting another attention layer between them increased depth without yielding a comparably distinct temporal view; the issue is not depth for its own sake, but whether the extra update creates a meaningfully different temporal control view. By contrast, the second attention layer is placed immediately before micro so that the final local router sees a refreshed token interaction state before prediction. Appendix~\ref{app:stage-layout} reports the corresponding stage-order and layout ablations for this selected architectural choice.
+Let $\mathbf{h}^{(0)}_t$ denote the hidden state after the first attention block, $\mathbf{h}^{(1)}_t$ after macro routing, $\mathbf{h}^{(2)}_t$ after mid routing, and $\mathbf{h}^{(3)}_t$ after the second attention block. Macro, mid, and micro therefore consume $\mathbf{h}^{(0)}_t$, $\mathbf{h}^{(1)}_t$, and $\mathbf{h}^{(3)}_t$, respectively. The first attention layer builds a contextualized prefix representation before any routing decision is made. Macro and mid then operate consecutively because both provide slower sequence-level control over closely related contextual states: macro reflects broader recent-history tendency, whereas mid refines the evolving intent of the current session. In our architecture sweep, inserting another attention layer between them increased depth without yielding a comparably distinct temporal view; the issue is not depth for its own sake, but whether the extra update creates a meaningfully different temporal control view. By contrast, the second attention layer is placed immediately before micro so that the final local router sees a refreshed token interaction state before prediction. This should be read as an empirically selected paper-track configuration within the broader RouteRec framework, not as the only valid layout. Appendix~\ref{app:stage-layout} reports the corresponding stage-order and layout ablations for this selected architectural choice.
 
 \paragraph{Macro and mid (sequence-wise routing).}
 Macro and mid compute one routing distribution per sequence from their respective windows, then broadcast it over valid positions inside the sequence. Macro uses broader cross-session history; mid uses within-session prefix evidence. This setting emphasizes stable allocation for slower-changing context, where token-wise routing tended to add variance without introducing an equally meaningful control resolution in our ablations.
@@ -390,7 +404,7 @@ Q1 establishes the aggregate competitiveness of the full model under the shared 
 \label{sec:routing-control}
 Figure~\ref{fig:routing-control-panels} compares five variants that separate where behavior information is used: a shared FFN, hidden-only routing, feature fusion by additive bias, mixed hidden+behavior routing, and the final behavior-guided sparse router. Hidden-only routing can improve over a shared FFN, and simple feature reinjection is not entirely ineffective, but neither yields the same consistency as using behavior cues directly as routing controls. The final behavior-guided design therefore outperforms representation-only feature injection and avoids collapsing the routing signal back into hidden-state geometry.
 
-Q2 isolates the source of the routing decision. The key question is not whether features help somewhere in the model, but whether they should control routing or merely be fused into the representation path. Panel (a) therefore compares ranking quality across the five control variants, while Panel (b) summarizes how routing mass redistributes across semantic groups for the routing-active variants. Because RouteRec also includes a routing-side regularizer, Appendix~\ref{app:objective} reports the corresponding objective variants to separate routing-signal effects from objective effects. This analysis directly addresses Challenge~3 and supports the behavior-guided sparse expert-allocation axis introduced in Section~\ref{sec:method}.
+Q2 isolates the source of the routing decision. The key question is not whether features help somewhere in the model, but whether they should control routing or merely be fused into the representation path. To avoid conflating routing controls with dataset choice, both panels compare the same five variants (Shared FFN, Hidden only, Fusion bias, Mixed, Behavior-guided) and differ only in dataset grouping. Panel (a) focuses on behaviorally dynamic datasets, while Panel (b) reports the more stable or mixed datasets under the same variant set. Because RouteRec also includes a routing-side regularizer, Appendix~\ref{app:objective} reports the corresponding objective variants to separate routing-signal effects from objective effects. This analysis directly addresses Challenge~3 and supports the behavior-guided sparse expert-allocation axis introduced in Section~\ref{sec:method}.
 
 \begin{figure}[!t]
   \centering
@@ -399,17 +413,17 @@ Q2 isolates the source of the routing decision. The key question is not whether 
     \placeholderpanel{1.25in}
 
     \vspace{0.35em}
-    {\footnotesize (a) Dataset-wise ranking quality across routing controls}
+    {\footnotesize (a) Dynamic-dataset group: same five controls}
   \end{minipage}\hfill
   \begin{minipage}[t]{0.48\columnwidth}
     \centering
     \placeholderpanel{1.25in}
 
     \vspace{0.35em}
-    {\footnotesize (b) Stage-averaged routing profile of routing-active variants}
+    {\footnotesize (b) Stable/mixed-dataset group: same five controls}
   \end{minipage}
-  \caption{Routing-control comparison. (a) Ranking quality across Shared FFN, Hidden only, Fusion bias, Mixed, and Behavior-guided variants. (b) Stage-averaged semantic routing profiles for the routing-active variants.}
-  \Description{A two-panel placeholder figure comparing routing-control variants by ranking quality and stage-averaged semantic routing profiles.}
+  \caption{Routing-control comparison across two dataset groups. Panel (a) and Panel (b) use the same five variants (Shared FFN, Hidden only, Fusion bias, Mixed, Behavior-guided) and differ only in dataset grouping, so the comparison isolates how identical routing-control choices behave in dynamic versus more stable settings.}
+  \Description{A two-panel placeholder figure comparing the same five routing-control variants across two dataset groups, dynamic and stable/mixed.}
   \label{fig:routing-control-panels}
 \end{figure}
 
@@ -444,20 +458,22 @@ Taken together, these ablations test whether RouteRec's gain comes from temporal
 \label{sec:efficiency}
 Table~\ref{tab:efficiency-main} evaluates whether the final sparse RouteRec design remains practical in cost. The point of this analysis is not to turn the paper into a systems study, but to confirm that the selected sparse hierarchy does not behave like an indiscriminate dense expert ensemble. We therefore report total parameter count, active parameter count under sparse routing, and short train/inference time ratios relative to SASRec on two representative datasets.
 
-This analysis is intentionally compact. RouteRec does introduce a larger parameter pool than a shared FFN backbone, but its sparse activation pattern keeps the active computation substantially below a fully dense alternative. The lightweight-cue portability experiments remain important to the broader claim about deployability, but they are treated as supplementary evidence in the appendix rather than as a main-text centerpiece.
+This analysis is intentionally compact. The key distinction is not only total capacity but also executed capacity: dense and sparse RouteRec can share similar expert pools, yet differ in how much computation is activated per decision. The lightweight-cue portability experiments remain important to the broader claim about deployability, but they are treated as supplementary evidence in the appendix rather than as a main-text centerpiece.
 
 \begin{table}[!t]
-  \caption{Efficiency summary on two representative datasets. Time ratios are measured relative to SASRec under the shared protocol.}
+  \caption{Efficiency summary on two representative datasets. Params are reported as total/active values (M), where active counts include only experts activated per routed decision. Train and inference ratios are measured relative to SASRec under the same GPU and batch-size setting.}
   \label{tab:efficiency-main}
   \centering
-  \begin{tabular}{lrrrr}
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\columnwidth}{@{}L{0.34\columnwidth}YYY@{}}
     \toprule
-    Model & Total Params (M) & Active Params (M) & Train Time Ratio & Inference Time Ratio \\
+    Model & Params (Total / Active, M) & Train $\times$ & Infer $\times$ \\
     \midrule
-    SASRec & -- & -- & 1.00 & 1.00 \\
-    RouteRec-dense & -- & -- & -- & -- \\
-    RouteRec-sparse-final & -- & -- & -- & -- \\
-    FAME (optional) & -- & -- & -- & -- \\
+    SASRec & -- / -- & 1.00 & 1.00 \\
+    RouteRec-dense & -- / -- & -- & -- \\
+    RouteRec-sparse-final & -- / -- & -- & -- \\
+    FAME & -- / -- & -- & -- \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -466,7 +482,7 @@ This analysis is intentionally compact. RouteRec does introduce a larger paramet
 \label{sec:behavior-regimes}
 Figure~\ref{fig:behavior-regime-panels} addresses the most direct semantic question raised by the method: if RouteRec is designed to react to behavioral regimes, then representative repeat-heavy, fast exploratory, and narrow-focus cases should exhibit different stage-wise routing maps. We therefore present three representative routing cases in the main text and retain intervention-based perturbation results as supporting evidence for the appendix and discussion.
 
-This analysis connects the empirical evidence back to the motivation in Figure~\ref{fig:intro-behavioral-features}. To avoid circularity, the representative cases are selected from simple post hoc statistics derived from raw interaction histories, such as repeat ratio, average inter-event gap, and concentration entropy, rather than from optimized labels or supervision targets. The goal is not to claim perfect semantic disentanglement, but to show that the learned routing patterns change in behaviorally interpretable ways when the observed regime changes.
+This analysis connects the empirical evidence back to the motivation in Figure~\ref{fig:intro-behavioral-features}. To avoid circularity, the representative cases are selected from simple post hoc statistics derived from raw interaction histories, such as repeat ratio, average inter-event gap, and concentration entropy, rather than from optimized labels or supervision targets. The goal is not to claim perfect semantic disentanglement, but to show that the learned routing patterns change in behaviorally interpretable ways when the observed regime changes. Appendix-level targeted cue interventions further support this reading by showing that perturbing the case-defining cue family shifts the corresponding routing emphasis and confidence.
 
 \begin{figure}[!t]
   \centering
@@ -491,8 +507,8 @@ This analysis connects the empirical evidence back to the motivation in Figure~\
     \vspace{0.35em}
     {\footnotesize (c) Narrow-focus case}
   \end{minipage}
-  \caption{Representative routing semantics. Each panel shows a stage-aware routing map for one representative behavioral case, highlighting how the learned router emphasizes different semantic groups across regimes.}
-  \Description{A three-panel placeholder figure showing stage-aware routing maps for repeat-heavy, fast exploratory, and narrow-focus cases.}
+  \caption{Representative routing semantics. Cases are selected by simple post hoc statistics from raw histories rather than optimized labels: repeat-heavy (high repeat ratio, low concentration entropy), fast exploratory (short mean inter-event gap, high switch rate), and narrow-focus (high dominant-group mass, low entropy). Each panel shows a stage-aware routing map for one case, highlighting how semantic-group emphasis shifts across regimes.}
+  \Description{A three-panel placeholder figure showing stage-aware routing maps for repeat-heavy, fast exploratory, and narrow-focus cases, with case-defining statistics summarized in the caption.}
   \label{fig:behavior-regime-panels}
 \end{figure}
 
@@ -502,7 +518,7 @@ Detailed full-cutoff results and extended analyses, including exact sparse-routi
 \label{sec:conclusion}
 RouteRec starts from a simple hypothesis: when behavioral evidence changes, the computation path should change as well. The experiments support this view from three main angles. First, RouteRec improves next-item ranking most clearly on behaviorally dynamic datasets and remains competitive on several others, although the advantage narrows in more preference-stable settings such as ML-1M. Second, the gain is tied to the routing signal, the staged temporal decomposition, and sparse route commitment rather than to indiscriminate expert insertion. Third, compact cues derived from ordinary interaction logs can preserve a meaningful share of the benefit, which keeps the method practical even when side information is limited.
 
-Taken together, these results suggest that behavior-guided routing can be both semantically meaningful and computationally selective. The main contribution is therefore the combination of portable behavioral cues, coarse-to-fine multi-stage routing, behavior-guided expert allocation, and sparse hierarchical activation into one coherent conditional-computation design for recommendation. Sparse route commitment makes the method a practical alternative to indiscriminate shared computation rather than merely another MoE capacity boost. Future work can build on this interface with adaptive sparsity budgets, transfer of routing priors across domains, more robust cue construction under limited or noisy metadata, and tighter deployment-aware constraints such as latency-aware routing and router calibration.
+Taken together, these results suggest that behavior-guided routing can be both semantically meaningful and computationally selective. The main contribution is a coherent three-part design: portable behavioral cues, coarse-to-fine multi-stage routing, and behavior-guided expert allocation, realized in the selected paper setting with sparse hierarchical activation. Sparse route commitment makes the method a practical alternative to indiscriminate shared computation rather than merely another MoE capacity boost. Supplementary appendix analyses further indicate that this interface remains useful under reduced cue availability and broader structural controls. Future work can build on this interface with adaptive sparsity budgets, transfer of routing priors across domains, more robust cue construction under limited or noisy metadata, and tighter deployment-aware constraints such as latency-aware routing and router calibration.
 
 \clearpage
 \bibliographystyle{ACM-Reference-Format}
@@ -518,24 +534,25 @@ This appendix records the fixed paper instantiation and the representative cue b
 
 \subsection{Main Paper Configuration}
 
-\begin{table}[t]
+\begin{table}[!tbp]
   \centering
   \caption{Fixed main configuration used in the paper.}
   \label{tab:appendix-main-setting}
   \footnotesize
   \setlength{\tabcolsep}{4pt}
-  \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+  \renewcommand{\arraystretch}{1.07}
+  \begin{tabularx}{\columnwidth}{@{}L{0.33\columnwidth}>{\raggedright\arraybackslash}X@{}}
     \toprule
     Aspect & Main paper configuration \\
     \midrule
-    Backbone layout & self-attention $\rightarrow$ macro routing block $\rightarrow$ mid routing block $\rightarrow$ self-attention $\rightarrow$ micro routing block \\
+    Backbone layout & \makecell[l]{self-attention $\rightarrow$ macro routing block\\ $\rightarrow$ mid routing block $\rightarrow$ self-attention\\ $\rightarrow$ micro routing block} \\
     Stage execution & Serial \\
-    Routing granularity & Macro and mid use sequence-wise routing; micro uses position-wise routing \\
+    Routing granularity & \makecell[l]{Macro and mid use sequence-wise routing;\\ micro uses position-wise routing} \\
     Router composition & Shared hierarchical sparse router at all three stages \\
-    Expert activation & Top-$3$ groups out of $4$, then top-$2$ experts inside each selected group \\
-    Active experts & $6$ active experts out of $12$ total experts per routed decision in the main setting \\
-    Macro history window & $H=5$ recent sessions \\
-    Core auxiliary terms & Route consistency + z-loss; load balancing disabled in the selected paper runs \\
+    Expert activation & \makecell[l]{Top-$3$ groups out of $4$, then top-$2$ experts\\ inside each selected group} \\
+    Active experts & \makecell[l]{$6$ active experts out of $12$ total experts\\ per routed decision in the main setting} \\
+    Macro history window & \makecell[l]{$H=5$ recent sessions for the macro history bank;\\ $w=5$ short-horizon positions for micro summaries} \\
+    Core auxiliary terms & \makecell[l]{Route consistency + z-loss in the selected runs;\\ load balancing disabled in the main paper setting} \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -544,33 +561,37 @@ The placement of the two attention layers reflects the intended temporal roles o
 
 This table serves as a reproducibility summary rather than as a search-space description. Architectural choices are fixed across the paper track, whereas capacity and optimization values are selected per dataset from a narrow candidate set and are therefore reported as compact ranges only when no single global value is shared across all reported runs.
 
-\subsection{Implementation Specification}
+\subsection{Implementation Specification and Minimal Execution Notes}
 
-\begin{table}[t]
+\begin{table}[!tbp]
   \centering
   \caption{Implementation-level settings used in the selected paper track.}
   \label{tab:appendix-implementation-spec}
   \footnotesize
   \setlength{\tabcolsep}{4pt}
-  \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+  \renewcommand{\arraystretch}{1.07}
+  \begin{tabularx}{\columnwidth}{@{}L{0.34\columnwidth}>{\raggedright\arraybackslash}X@{}}
     \toprule
     Item & Reported setting \\
     \midrule
-    Semantic groups & $G=4$ groups aligned with Tempo, Focus, Memory, and Exposure \\
-    Experts per group & $C\in\{2,3,4\}$ in the paper track; total experts $E=4C$ \\
-    Main sparse setting & $C=3$, top-$3$ groups, top-$2$ experts per selected group \\
+    Semantic groups & \makecell[l]{$G=4$ groups aligned with\\ Tempo, Focus, Memory, and Exposure} \\
+    Experts per group & \makecell[l]{$C\in\{2,3,4\}$ in the paper track;\\ total experts $E=4C$} \\
+    Main sparse setting & \makecell[l]{$C=3$, top-$3$ groups,\\ top-$2$ experts per selected group} \\
     Cue dimensionality & $16$ scalars per stage in the fixed paper instantiation \\
-    Router hidden width & Selected from a small candidate set in the paper track; representative range $48$--$128$ \\
-    Routing temperature & Macro $1.0$; mid and micro $1.2$ in the reported setting \\
-    Consistency neighbors & $k_{\mathrm{nn}}=1$ nearest non-self sample per stage in the paper track \\
-    Missing-signal handling & Broadcast scalar fields across positions when available; zero-fill group-based focus cues when the grouping field is unavailable \\
+    Router hidden width & \makecell[l]{Selected from a small candidate set in the paper track;\\ representative range $48$--$128$} \\
+    Routing temperature & \makecell[l]{Macro $1.0$; mid and micro $1.2$\\ in the reported setting} \\
+    Consistency neighbors & \makecell[l]{$k_{\mathrm{nn}}=1$ nearest non-self sample\\ per stage in the paper track} \\
+    Missing-signal handling & \makecell[l]{Broadcast scalar fields across positions when available;\\ zero-fill group-based focus cues when the grouping field is unavailable} \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
+\noindent\textbf{Minimal execution notes.}
+The implementation uses three simple rules that are easy to miss if one only reads the high-level method description. First, macro and mid cues are computed once per example and then broadcast over the routed positions, whereas micro cues are evaluated at the position level. Second, top-$k$ masking is followed by re-normalization inside the active support rather than by leaving the logits in an unnormalized sparse state. Third, if a dataset does not expose the grouping field needed for focus-family cues, the implementation falls back to the fixed missing-signal policy in Table~\ref{tab:appendix-implementation-spec} rather than silently redefining the cue family per dataset.
+
 \subsection{Representative Behavioral Cue Families}
 
-\begin{table*}[t]
+\begin{table*}[!t]
   \centering
   \caption{Representative cue summaries used by RouteRec in the main configuration. Each stage uses four semantic families with four scalar summaries per family; the table lists representative examples rather than every implementation detail.}
   \label{tab:appendix-feature-families}
@@ -591,13 +612,15 @@ This table serves as a reproducibility summary rather than as a search-space des
 
 This cue bank is intentionally compact. The feature families are hand-designed in the sense that they encode behavioral hypotheses, but they are not intended to become an unbounded feature-engineering exercise. Instead, the design goal is to construct a small set of summaries that can serve as a stable routing interface across datasets. In practice, the macro bank is instantiated from the recent-session window used by the selected paper instantiation, while mid and micro are computed from the current session prefix at different temporal scopes. The main text therefore reports the family structure and representative examples, while this appendix provides the implementation-oriented view.
 
-\section{Dataset, Evaluation, and Full Results}
+\section{Dataset, Evaluation, and Full Ranking Results}
+
+All experiments were conducted on machines equipped with NVIDIA RTX 3090 24\,GB GPUs. Each training or evaluation process used a single GPU; multiple GPUs were used only to run independent experiments in parallel, not for multi-GPU training within a single run.
 \label{app:data-details}
 This appendix summarizes the six datasets and makes the evaluation protocol explicit, since recent work has shown that session construction and split strategy can materially affect offline recommender results~\cite{ji2023leakage,gusak2025timesplit}. The original releases are cited here for completeness~\cite{mcauley2015amazon,yang2010foursquare,gao2022kuairec,celma2010music,harper2015movielens,retailrocket2015dataset}. The dataset descriptions emphasize domain differences and signal availability because the routing branch depends on which behavioral evidence is exposed in each corpus.
 
 \subsection{Datasets and Protocol}
 
-\begin{table}[t]
+\begin{table}[!tbp]
   \caption{Datasets used in the experiments. Datasets marked with $^\dagger$ are sampled processed subsets.}
   \label{tab:appendix-datasets}
   \centering
@@ -652,7 +675,7 @@ Our reporting protocol follows three simple rules. First, every model is tuned w
 
 The final paper track therefore uses bounded search spaces rather than unconstrained retuning. In the paper-facing comparison, baselines and RouteRec are aligned to the same shared optimization pool, and model families differ only through a small number of architecture-specific additions. For RouteRec, the selected three-stage routing layout remains fixed, but depth, hidden dropout, and routing-side controls are still tuned within bounded candidate sets. To keep the appendix concise but still reproducible, Table~\ref{tab:appendix-final-grid} separates the shared optimization pool from the baseline-family and RouteRec-specific additions, and lists the dataset-specific learning-rate intervals explicitly.
 
-\begin{table*}[t]
+\begin{table*}[!t]
   \centering
   \caption{Bounded candidate grids used in the final paper track.}
   \label{tab:appendix-final-grid}
@@ -730,8 +753,8 @@ The final paper track therefore uses bounded search spaces rather than unconstra
       attention $\{0.05,0.06,0.08,0.10,0.12\}$ \\
       Regularization & $\lambda_{\mathrm{cons}}\{0,2.5,5,8,12\}\times10^{-4}$\newline
       $\lambda_z\{0,5,10,20\}\times10^{-5}$ \\
-      Anchor family & Bank size $\{10,12,16,24\}$\newline
-      internal width preset per family \\
+      Cue bank & Cue bank size $\{10,12,16,24\}$\newline
+      router inner width per cue family (small preset) \\
       \bottomrule
     \end{tabularx}
   \end{minipage}\hfill
@@ -760,7 +783,7 @@ The final paper track therefore uses bounded search spaces rather than unconstra
 \subsection{Full Ranking Results}
 Table~\ref{tab:appendix-full-seen} restores the full cutoff grid summarized more compactly in Table~\ref{tab:main-overall}. This presentation preserves the same selection rule as the main text while exposing the complete $k\in\{5,10,20\}$ breakdown.
 
-\begin{table*}[t]
+\begin{table*}[!t]
   \caption{Full seen-target experimental results across all cutoffs. Datasets marked with $^\dagger$ are sampled processed subsets. Avg.~Rank is computed over all rows in this table, where lower is better. The RouteRec column is shaded for readability.}
   \label{tab:appendix-full-seen}
   \centering
@@ -845,11 +868,55 @@ Table~\ref{tab:appendix-full-seen} restores the full cutoff grid summarized more
 
 This table makes it possible to verify whether the observed trends persist beyond the compact main-text summary under the same selection rule.
 
-\section{Extended Structural Ablations}
-\label{app:stage-layout}
-Figure~\ref{fig:appendix-stage-layout} expands the structural study in Figure~\ref{fig:stage-structure-panels} with the broader sweep of cue variants, stage-semantics controls, family-grouping comparisons, and deeper layout comparisons that are too detailed for the main text.
+\section{Where RouteRec Helps Most: Special Bins}
+\label{app:special-bins}
+This section examines coarse difficulty-oriented bins such as session length, target frequency, and optional user history, with the goal of showing where the average RouteRec gain is concentrated. The reported analyses distribute gains across session-length, item-frequency, and optional user-history regimes rather than treating the average result as a black box, making the Q1 improvement pattern more interpretable before the paper turns to architectural justification and sparse-routing design.
 
-\begin{figure}[t]
+\begin{table}[!tbp]
+  \centering
+  \caption{Special-bin definitions and sample counts used in the appendix gain analysis.}
+  \label{tab:appendix-special-bins}
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\columnwidth}{@{}l>{\raggedright\arraybackslash}Xc@{}}
+    \toprule
+    Bin family & Definition rule & Visualization \\
+    \midrule
+    Session length & Short / medium / long session buckets from the observed prefix length & Figure~\ref{fig:appendix-special-bins}(a) \\
+    Target frequency & Rare / mid / frequent target buckets under the train split & Figure~\ref{fig:appendix-special-bins}(b) \\
+    User history & Optional low-history / medium-history / heavy-history grouping & Supporting figure \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{figure}[!tbp]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.12in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Session-length bins with RouteRec, SASRec, and the strongest baseline}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.12in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Target-frequency bins with absolute quality and relative gain}
+  \end{minipage}
+  \caption{Special-bin analysis reporting where the average RouteRec gain is concentrated across session-length and target-frequency regimes. These bins are coarse difficulty- and exposure-oriented partitions rather than semantically defined behavioral regimes; those behavior-centric slices are examined separately in Appendix~\ref{app:behavior-slices}.}
+  \Description{A two-panel placeholder figure for session-length and target-frequency bin analysis.}
+  \label{fig:appendix-special-bins}
+\end{figure}
+
+These figures are positioned before the structural ablations to show that Q1 is not merely an average-score claim: RouteRec produces its clearest margin in behaviorally heterogeneous or otherwise difficult regimes, which motivates the later appendix sections on design and routing semantics.
+
+\section{Extended Framework and Structural Ablations}
+\label{app:stage-layout}
+This section extends the main-text design-justification study by examining broader temporal-layout and cue-organization variants within the RouteRec framework. Figure~\ref{fig:appendix-stage-layout} covers the full sweep of layout, stage-semantics, and family-grouping alternatives that are too detailed for the main text. Read together, the panels provide broader support for Q3 by showing that the final paper layout is neither an arbitrary depth increase nor a brittle one-off ordering.
+
+\begin{figure}[!tbp]
   \centering
   \begin{minipage}[t]{0.48\linewidth}
     \centering
@@ -876,77 +943,53 @@ Figure~\ref{fig:appendix-stage-layout} expands the structural study in Figure~\r
     \vspace{0.35em}
     {\footnotesize (c) Stage-placement, ordering, and router variants}
   \end{minipage}
-  \caption{Extended structural ablations. (a) Semantic cue and family-structure variants. (b) Stage-semantics and layout variants. (c) Stage-placement, ordering, and router variants.}
-  \Description{A three-panel placeholder figure for extended structural ablations covering cue semantics, stage semantics, and routing-layout variants.}
+  \caption{Extended structural ablations. (a) Semantic cue and family-group organization variants. (b) Stage-semantics and temporal-role controls. (c) Stage-placement, ordering, and router-layout variants.}
+  \Description{A three-panel placeholder figure for extended structural ablations covering cue grouping, stage semantics, and routing-layout variants.}
   \label{fig:appendix-stage-layout}
 \end{figure}
 
-Panel (a) tests whether semantic grouping matters beyond a flat bag of scalars. Panel (b) examines whether the chosen macro, mid, and micro roles matter beyond merely having three blocks. Panel (c) reports the broader family of stage-placement and router variants from which the final design was selected.
-
-\section{Protocol Sensitivity and Supplementary Views}
-\label{app:protocol-sensitivity}
-Table~\ref{tab:appendix-protocol-sensitivity} records the supplementary checks that are most likely to arise once the main protocol is understood: whether the seen-target focus materially changes qualitative conclusions, and whether minor protocol adjustments overturn the main ranking pattern.
-
-\begin{table}[H]
-  \centering
-  \caption{Protocol sensitivity and supplementary evaluation views.}
-  \label{tab:appendix-protocol-sensitivity}
-  \scriptsize
-  \setlength{\tabcolsep}{3pt}
-  \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}Xcc>{\raggedright\arraybackslash}X@{}}
-    \toprule
-    Check & RouteRec & Strongest baseline & Observation \\
-    \midrule
-    Seen-target MRR@20 & -- & -- & Main comparison in the paper \\
-    Overall MRR@20 & -- & -- & Qualitative ranking remains similar \\
-    Unseen-target accounting & -- & -- & Supplementary only \\
-    Alternate threshold check & -- & -- & Representative-dataset robustness \\
-    Alternate held-out cleanup & -- & -- & No reversal of the main conclusion \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
-
-The scope of this table is intentionally narrow. Its purpose is to show that the qualitative conclusion does not hinge on a single fragile reporting view.
+Panel (a) tests whether semantic grouping matters beyond a flat scalar bag. Panel (b) checks whether the macro, mid, and micro roles correspond to meaningfully distinct temporal views rather than just three copies of the same router. Panel (c) then reports the broader layout family from which the paper-track architecture was chosen as the most stable high-performing option.
 
 \section{Sparse Routing Design Variants}
 \label{app:sparse-design}
-Table~\ref{tab:appendix-sparse-design} tests whether the selected sparse hierarchy is an arbitrary engineering choice or a meaningful part of the RouteRec design. The comparisons include dense versus sparse routing, group top-$k$ sweeps, expert top-$k$ sweeps, and flat versus hierarchical sparse routing under comparable active-expert budgets.
+Table~\ref{tab:appendix-sparse-design} tests whether the selected sparse hierarchy is an arbitrary engineering choice or a meaningful part of the RouteRec design. This section directly supports Q3 and Q4 by contrasting dense routing, flat sparse controls, and hierarchical top-$k$ variants under comparable activation budgets.
 
-\begin{table}[H]
+\begin{table}[!tbp]
   \centering
-  \caption{Sparse routing design variants.}
+  \caption{Sparse routing design variants, ranging from a dense reference to progressively sparser hierarchical configurations under comparable total expert pools.}
   \label{tab:appendix-sparse-design}
-  \small
-  \setlength{\tabcolsep}{5pt}
-  \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}XYYY@{}}
+  \footnotesize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}Xcc>{\raggedright\arraybackslash}X@{}}
     \toprule
     Variant & MRR@20 & Active experts & Observation \\
     \midrule
     Dense full mixture & -- & 12 & Reference control \\
     Flat sparse top-$6$ & -- & 6 & Same active count without hierarchy \\
-    Hierarchical top-$2$/top-$2$ & -- & 4 & Overly restrictive \\
-    Hierarchical top-$3$/top-$2$ & -- & 6 & Selected main setting \\
-    Hierarchical top-$4$/top-$2$ & -- & 8 & Weaker group commitment \\
-    Hierarchical top-$3$/top-$3$ & -- & 9 & Higher active-compute budget \\
+    Top-$2$ groups, top-$1$ expert per group & -- & 2 & Extremely sparse reference \\
+    Top-$2$ groups, top-$2$ experts per group & -- & 4 & Strong group commitment but tight capacity \\
+    Top-$3$ groups, top-$2$ experts per group & -- & 6 & Selected main setting \\
+    Top-$4$ groups, top-$2$ experts per group & -- & 8 & Weaker group commitment \\
+    Top-$3$ groups, top-$3$ experts per group & -- & 9 & Larger active-compute budget reference \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-This compact table isolates whether the gain comes from sparsity alone, the hierarchical organization, or the chosen activation budget.
+The table separates three related questions: whether sparsity itself helps, whether hierarchy matters beyond a flat top-$k$ mask, and whether the selected main setting provides a reasonable balance between route commitment and active capacity.
 
 \section{Objective and Regularization Variants}
 \label{app:objective}
-Table~\ref{tab:appendix-objective} isolates the contribution of consistency, z-loss, and balance regularization using ranking quality, route consistency, and stability indicators. This analysis justifies the final objective and helps prevent the main-text routing diagnostics from being over-interpreted as a trivial consequence of the consistency regularizer alone.
+This table isolates whether the observed routing semantics depend primarily on the selected auxiliary objective or remain visible across objective variants. Table~\ref{tab:appendix-objective} reports ranking quality together with routing-stability indicators for each objective configuration, allowing the diagnostics in Appendix~\ref{app:diagnostics} to be read with the objective contribution accounted for.
 
-\begin{table}[H]
+\begin{table}[!tbp]
   \centering
   \caption{Objective and regularization variants.}
   \label{tab:appendix-objective}
-  \small
-  \setlength{\tabcolsep}{5pt}
+  \footnotesize
+  \setlength{\tabcolsep}{4pt}
   \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}XYYY@{}}
     \toprule
-    Variant & MRR@20 & Consistency & Stability \\
+    Variant & MRR@20 & Neighbor JSD $\downarrow$ & Route-entropy var.\ $\downarrow$ \\
     \midrule
     No auxiliary loss & -- & -- & -- \\
     KNN + consistency & -- & -- & -- \\
@@ -958,57 +1001,58 @@ Table~\ref{tab:appendix-objective} isolates the contribution of consistency, z-l
   \end{tabularx}
 \end{table}
 
-This compact table shows whether the full objective improves MRR@20 while preserving routing consistency and stability under sparse activation, and whether the diagnostic notion of consistency remains informative once the auxiliary loss is removed.
+The two central comparisons are whether the selected objective improves ranking under sparse routing, and whether removing specific auxiliary terms materially changes the sharpness and consistency patterns reported in Appendix~\ref{app:diagnostics}.
 
-\section{Full Results and Cost Tables}
+\section{Full Cost and Efficiency Summary}
 \label{app:efficiency}
-Table~\ref{tab:appendix-efficiency} provides a compact cost summary for the claim that the routing branch is lightweight. Rather than turning the paper into a systems study, this section reports the rough parameter and runtime overhead for all compared methods under the shared protocol, together with RouteRec's active-parameter view under sparse routing.
+Table~\ref{tab:appendix-efficiency} provides a compact cost summary for the claim that the routing branch is lightweight. Rather than turning the appendix into a systems study, this section reports the rough parameter and runtime overhead for representative baselines together with RouteRec's active-parameter view under sparse routing.
 
-\begin{table*}[t]
+\begin{table*}[!t]
   \centering
   \caption{Model cost and efficiency summary for all compared methods.}
   \label{tab:appendix-efficiency}
   \scriptsize
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabularx}{\textwidth}{@{}lcccc@{}}
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.05}
+  \begin{tabularx}{\textwidth}{@{}L{0.18\textwidth}ccccL{0.24\textwidth}@{}}
     \toprule
-    Model & Params & Active params & Train-time ratio & Infer-time ratio \\
+    Model & Params & Active params & Train $\times$ & Infer $\times$ & Note \\
     \midrule
-    GRU4Rec & -- & -- & -- & -- \\
-    SASRec & -- & -- & -- & -- \\
-    TiSASRec & -- & -- & -- & -- \\
-    DuoRec & -- & -- & -- & -- \\
-    FEARec & -- & -- & -- & -- \\
-    BSARec & -- & -- & -- & -- \\
-    FAME & -- & -- & -- & -- \\
-    DIF-SR & -- & -- & -- & -- \\
-    FDSA & -- & -- & -- & -- \\
-    RouteRec & -- & -- & -- & -- \\
+    GRU4Rec & -- & -- & -- & -- & \makecell[l]{Same session-fixed protocol;\\ dense recurrent reference} \\
+    SASRec & -- & -- & $1.00\times$ & $1.00\times$ & \makecell[l]{Normalization anchor for the ratio columns;\\ same dataset split and evaluation path} \\
+    TiSASRec & -- & -- & -- & -- & \makecell[l]{Time-aware Transformer reference under\\ the same benchmark harness} \\
+    DuoRec & -- & -- & -- & -- & \makecell[l]{Contrastive sequential baseline;\\ reported under the shared tuning pool} \\
+    FEARec & -- & -- & -- & -- & \makecell[l]{Frequency-aware baseline;\\ same batch/eval accounting} \\
+    BSARec & -- & -- & -- & -- & \makecell[l]{Structural sequential baseline;\\ cost recorded with the shared protocol} \\
+    FAME & -- & -- & -- & -- & \makecell[l]{Expert-based recommendation baseline\\ included for direct comparison to sparse expert allocation} \\
+    DIF-SR & -- & -- & -- & -- & \makecell[l]{Feature-aware sequential baseline;\\ active parameters equal total parameters} \\
+    FDSA & -- & -- & -- & -- & \makecell[l]{Feature-side sequential attention baseline;\\ no sparse activation accounting} \\
+    RouteRec & -- & -- & -- & -- & \makecell[l]{Measured with the selected sparse paper setting;\\ active parameters count only the routed expert subset} \\
     \bottomrule
   \end{tabularx}
 \end{table*}
 
-A compact cost comparison is sufficient here to anchor the selective-activation claim and to show that the observed gains are not being attributed solely to an unchecked increase in computation.
+A compact cost comparison is sufficient here to anchor the selective-activation claim and to show that the observed gains are not being attributed solely to an unchecked increase in compute. The timing numbers in this table are measured on a single NVIDIA RTX 3090 24\,GB GPU under the same batch-size and evaluation conditions; the ratios serve as a practical reference point rather than as a deployment-grade systems benchmark.
 
 \section{Extended Routing Diagnostics}
 \label{app:diagnostics}
-Figure~\ref{fig:appendix-diagnostics} groups the main routing diagnostics into one coordinated layout so that group usage, expert usage, sharpness, and semantic consistency can be read together.
+This section summarizes the final model's routing structure through aggregate diagnostics rather than controlled perturbations; targeted interventions are deferred to Appendix~\ref{app:qualitative-cases}. Figure~\ref{fig:appendix-diagnostics} groups the main routing diagnostics into one coordinated layout so that group usage, route sharpness, and stage-wise consistency can be read together. This section provides the most direct aggregate support for Q5.
 
-\begin{figure}[t]
+\begin{figure}[!tbp]
   \centering
   \begin{minipage}[t]{0.48\linewidth}
     \centering
     \placeholderpanel{1.18in}
 
     \vspace{0.35em}
-    {\footnotesize (a) Expert-usage heatmaps by stage}
+    {\footnotesize (a) Stage-wise family and expert usage heatmaps}
   \end{minipage}\hfill
   \begin{minipage}[t]{0.48\linewidth}
     \centering
     \placeholderpanel{1.18in}
 
     \vspace{0.35em}
-    {\footnotesize (b) Entropy and effective-expert-count summary}
+    {\footnotesize (b) Route entropy and effective-expert-count summary}
   \end{minipage}
 
   \vspace{0.8em}
@@ -1018,27 +1062,20 @@ Figure~\ref{fig:appendix-diagnostics} groups the main routing diagnostics into o
     \placeholderpanel{1.18in}
 
     \vspace{0.35em}
-    {\footnotesize (c) Stage-wise route consistency}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.48\linewidth}
-    \centering
-    \placeholderpanel{1.18in}
-
-    \vspace{0.35em}
-    {\footnotesize (d) Feature-bucket route patterns}
+    {\footnotesize (c) Stage-wise consistency and routing richness}
   \end{minipage}
-  \caption{Routing diagnostics. (a) Group/expert usage by stage. (b) Entropy and effective expert count. (c) Stage-wise route consistency. (d) Feature-bucket routing patterns.}
-  \Description{A four-panel placeholder figure for group and expert usage heatmaps, entropy summaries, stage-wise consistency, and feature-bucket route patterns.}
+  \caption{Routing diagnostics. (a) Group/expert usage by stage. (b) Route entropy and effective expert count. (c) Stage-wise consistency and routing richness. Targeted intervention results are reported separately in Appendix~\ref{app:qualitative-cases}.}
+  \Description{A three-panel figure for group and expert usage heatmaps, route entropy summaries, and stage-wise consistency.}
   \label{fig:appendix-diagnostics}
 \end{figure}
 
-These diagnostics are organized from coarse structure to semantic interpretation. The first two panels show how broad or sharp routing is at each stage under sparse activation, while the last two panels connect those patterns back to feature similarity and interpretable behavioral regimes.
+These diagnostics are organized from coarse structure to semantic interpretation. The first two panels show how broad or sharp routing is at each stage under sparse activation, while the third panel connects those patterns to stage-wise consistency and routing richness across behavioral regimes.
 
-\section{Behavioral Slice Definitions and Extended Slice Results}
+\section{Extended Behavioral Slice Results}
 \label{app:behavior-slices}
-Because RouteRec is motivated by heterogeneous behavior, a slice-wise view is a natural complement to the aggregate metrics. This appendix section first defines the diagnostic slices explicitly, then expands the main-text regime analysis with per-dataset breakdowns, additional slices, and more detailed routing summaries.
+Unlike Appendix~\ref{app:special-bins}, which analyzes coarse difficulty-oriented bins, this section examines semantically defined behavioral regimes such as repeat-heavy, fast exploratory, narrow-focus, and preference-stable slices. The section first defines the diagnostic slices explicitly, then expands the main-text regime analysis with per-dataset breakdowns, additional slices, and more detailed routing summaries.
 
-\begin{table}[t]
+\begin{table}[!tbp]
   \centering
   \caption{Diagnostic slice definitions used in the behavior-regime analysis.}
   \label{tab:appendix-slice-definitions}
@@ -1058,7 +1095,7 @@ Because RouteRec is motivated by heterogeneous behavior, a slice-wise view is a 
 
 These slices are used only for post hoc diagnosis. They are computed from simple observable statistics of the interaction history, not from optimized supervision targets, and not from labels learned jointly with the model.
 
-\begin{figure}[t]
+\begin{figure}[!tbp]
   \centering
   \begin{minipage}[t]{\linewidth}
     \centering
@@ -1084,17 +1121,38 @@ These slices are used only for post hoc diagnosis. They are computed from simple
 
 Together, the two panels expose dataset-level heterogeneity that would be too detailed for the main paper while making the slice construction explicit enough to avoid circular interpretation.
 
-\section{Qualitative Routing Cases}
+\section{Targeted Interventions and Qualitative Cases}
 \label{app:qualitative-cases}
-Table~\ref{tab:appendix-qualitative-cases} provides a compact case-based view of the routing behavior for a small number of representative sessions. The goal is not to replace the aggregate analyses, but to make the macro/mid/micro interpretation readable at the level of individual examples, including which groups and experts were actually activated.
+This section complements the main-text case visualizations with controlled cue-family perturbations and directly inspectable qualitative examples. The main text presents three representative cases, while this appendix adds a preference-stable contrastive case and summarizes the matched intervention evidence. Together, the intervention panels and the case table make the semantic claim in Q5 readable both at the distribution level and at the level of individual sessions.
 
-\begin{table*}[t]
+\begin{figure}[!tbp]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (a) Intervention score drop by family perturbation}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \placeholderpanel{1.05in}
+
+    \vspace{0.35em}
+    {\footnotesize (b) Routing-mass shift after semantic interventions}
+  \end{minipage}
+  \caption{Targeted intervention analysis. (a) Score drop by cue-family perturbation for each behavioral regime. (b) Routing-mass shift after semantic interventions, showing which stage absorbs the largest realignment under each perturbation.}
+  \Description{A two-panel placeholder figure for intervention score drops and routing-mass shifts.}
+  \label{fig:appendix-interventions}
+\end{figure}
+
+\begin{table*}[!t]
   \centering
   \caption{Representative qualitative routing cases.}
   \label{tab:appendix-qualitative-cases}
   \scriptsize
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabularx}{\textwidth}{@{}lXlXl@{}}
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\textwidth}{@{}L{0.15\textwidth}L{0.24\textwidth}L{0.18\textwidth}L{0.22\textwidth}L{0.16\textwidth}@{}}
     \toprule
     Case & Prefix summary & Selected groups / experts & Prediction outcome & Interpretation \\
     \midrule
@@ -1106,13 +1164,13 @@ Table~\ref{tab:appendix-qualitative-cases} provides a compact case-based view of
   \end{tabularx}
 \end{table*}
 
-This table complements the summary statistics with directly inspectable routing examples.
+The intervention panels explain which semantic families the router appears to rely on most, while Table~\ref{tab:appendix-qualitative-cases} complements that distribution-level view with directly inspectable cases.
 
-\section{Extended Transfer Results}
+\section{Optional Transfer Results}
 \label{app:transfer}
-This section reports additional transfer experiments for low-resource and cross-domain adaptation.
+This section reports optional transfer-style results examining whether RouteRec's portable routing interface can be reused across domains with different behavioral and temporal characteristics. The source-target matrix and low-resource curves provide the pairwise and data-efficiency views that are too detailed for the main text.
 
-\begin{table}[t]
+\begin{table}[!tbp]
   \centering
   \caption{Source-target transfer matrix.}
   \label{tab:appendix-transfer-matrix}
@@ -1134,7 +1192,7 @@ This section reports additional transfer experiments for low-resource and cross-
 
 The matrix provides the exact source-target view that is too detailed for the main paper. It is useful for identifying asymmetric transfer pairs and for checking whether router reuse is most effective between domains with similar temporal and repetition structure. For compactness, the table uses the abbreviations Bty, Fsq, KRec, LFM, ML1M, and RR.
 
-\begin{figure}[t]
+\begin{figure}[!tbp]
   \centering
   \begin{minipage}[t]{0.48\linewidth}
     \centering
@@ -1166,6 +1224,6 @@ The matrix provides the exact source-target view that is too detailed for the ma
   \label{fig:appendix-transfer-panels}
 \end{figure}
 
-Together, the table and figure connect exact pairwise results to higher-level transfer patterns. The overall pattern suggests that transfer is asymmetric, most helpful in related domains and low-resource regimes, and partially preserved even under coarser router reuse.
+The table and figure together connect exact pairwise results to higher-level transfer patterns, and are particularly useful for identifying asymmetric transfer pairs and for checking whether routing-interface reuse is most effective between domains with similar temporal and repetition structure.
 
 \end{document}

@@ -8,6 +8,7 @@ import csv
 import os
 import sys
 import time
+import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,24 @@ from common import (  # noqa: E402
     parse_csv_list,
     selected_candidates_from_args,
     write_json,
+)
+
+
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module=r"recbole\.data\.dataset\.dataset",
+)
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message=r".*GradScaler.*deprecated.*",
+)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module=r"ray\._private\.parameter",
+    message=r".*pkg_resources is deprecated as an API.*",
 )
 
 
@@ -155,6 +174,17 @@ def _named_model_config(dataset: str, model_name: str, route_cfg: dict[str, Any]
 
 
 def _count_active_params(model: Any, cfg: dict[str, Any]) -> int:
+    def _cfg_get(key: str, default: Any = None) -> Any:
+        if hasattr(cfg, "get"):
+            try:
+                return cfg.get(key, default)
+            except Exception:
+                pass
+        try:
+            return cfg[key]
+        except Exception:
+            return default
+
     total = sum(p.numel() for p in model.parameters())
     expert_total = sum(p.numel() for name, p in model.named_parameters() if "expert" in name.lower())
     if expert_total <= 0:
@@ -167,11 +197,11 @@ def _count_active_params(model: Any, cfg: dict[str, Any]) -> int:
             n_experts = 0
     if n_experts <= 0:
         return total
-    if str(cfg.get("model", "")).lower() not in {"featuredmoe_n3", "featured_moe_n3"}:
+    if str(_cfg_get("model", "")).lower() not in {"featuredmoe_n3", "featured_moe_n3"}:
         return total
-    group_top_k = int(cfg.get("group_top_k", 0) or 0)
-    expert_top_k = int(cfg.get("expert_top_k", 0) or 0)
-    moe_top_k = int(cfg.get("moe_top_k", 0) or 0)
+    group_top_k = int(_cfg_get("group_top_k", 0) or 0)
+    expert_top_k = int(_cfg_get("expert_top_k", 0) or 0)
+    moe_top_k = int(_cfg_get("moe_top_k", 0) or 0)
     if group_top_k > 0 and expert_top_k > 0:
         active_experts = min(n_experts, group_top_k * expert_top_k)
     elif moe_top_k > 0:

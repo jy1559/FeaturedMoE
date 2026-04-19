@@ -4319,8 +4319,10 @@ def main():
         file_parts.extend([ts, f"pid{os.getpid()}"])
         result_file = results_dir / ("_".join(file_parts) + ".json")
 
+    export_final_checkpoints = bool(cfg.get("artifact_export_final_checkpoint", True))
+
     # Future case-eval / re-inference workflows need a stable exported checkpoint path.
-    if _normalize_model_name(model) in _FEATURE_AWARE_MOE_MODELS:
+    if export_final_checkpoints and _normalize_model_name(model) in _FEATURE_AWARE_MOE_MODELS:
         checkpoint_stem = result_file.stem if result_file.stem else "result"
         cfg.setdefault(
             "__artifact_combo_best_export_path",
@@ -4874,16 +4876,17 @@ def main():
 
     exported_best_checkpoint = ""
     exported_probe_checkpoint = ""
-    combo_best_export_path = str(cfg.get("__artifact_combo_best_export_path", "") or "").strip()
-    combo_probe_export_path = str(cfg.get("__artifact_combo_probe_export_path", "") or "").strip()
-    if combo_best_export_path and combo_best_artifact_state.get("best_checkpoint"):
-        best_ckpt_src = Path(str(combo_best_artifact_state.get("best_checkpoint") or ""))
-        if best_ckpt_src.exists():
-            exported_best_checkpoint = _export_stage_file(best_ckpt_src, combo_best_export_path)
-    if combo_probe_export_path and combo_best_artifact_state.get("probe_checkpoint"):
-        probe_ckpt_src = Path(str(combo_best_artifact_state.get("probe_checkpoint") or ""))
-        if probe_ckpt_src.exists():
-            exported_probe_checkpoint = _export_stage_file(probe_ckpt_src, combo_probe_export_path)
+    if export_final_checkpoints:
+        combo_best_export_path = str(cfg.get("__artifact_combo_best_export_path", "") or "").strip()
+        combo_probe_export_path = str(cfg.get("__artifact_combo_probe_export_path", "") or "").strip()
+        if combo_best_export_path and combo_best_artifact_state.get("best_checkpoint"):
+            best_ckpt_src = Path(str(combo_best_artifact_state.get("best_checkpoint") or ""))
+            if best_ckpt_src.exists():
+                exported_best_checkpoint = _export_stage_file(best_ckpt_src, combo_best_export_path)
+        if combo_probe_export_path and combo_best_artifact_state.get("probe_checkpoint"):
+            probe_ckpt_src = Path(str(combo_best_artifact_state.get("probe_checkpoint") or ""))
+            if probe_ckpt_src.exists():
+                exported_probe_checkpoint = _export_stage_file(probe_ckpt_src, combo_probe_export_path)
 
     # Summary
     total_time = time.time() - global_t0

@@ -23,6 +23,7 @@ ARTIFACT_ROOT = REPO_ROOT / "experiments" / "run" / "artifacts"
 RESULT_DIRS = [
     ARTIFACT_ROOT / "results" / "f",
     ARTIFACT_ROOT / "results" / "results_final_experiment_fmoe",
+    ARTIFACT_ROOT / "results" / "23090_results",
 ]
 
 # Fallback: used only for datasets with no entries in RESULT_DIRS
@@ -31,6 +32,8 @@ FALLBACK_DIRS = [
 ]
 
 CSV_PATH = Path(__file__).resolve().parent / "configs" / "base_candidates.csv"
+CSV_TOPK_PATH = Path(__file__).resolve().parent / "configs" / "base_candidates_topk.csv"
+CSV_DENSE_PATH = Path(__file__).resolve().parent / "configs" / "base_candidates_dense.csv"
 
 TARGET_MODEL_CLASS = "FeaturedMoE_N3"
 TARGET_MODEL = "featured_moe_n3"
@@ -113,8 +116,19 @@ def result_test_mean(payload: Dict[str, Any]) -> float:
     )
 
 
+def _glob_json_files(root: Path) -> List[Path]:
+    # Legacy dirs keep JSON files in root; newer runs may store under nested folders.
+    root_files = list(root.glob("*.json"))
+    nested_files = list(root.rglob("*.json"))
+    if not root_files:
+        return nested_files
+    # Keep root-first order but include nested-only files too.
+    known = {str(p) for p in root_files}
+    return root_files + [p for p in nested_files if str(p) not in known]
+
+
 def scan_fmoe_files(dirs=None) -> Dict[str, Dict[str, Any]]:
-    """Return dict: basename -> {path, payload, dir_label}"""
+    """Return dict: stable_key -> {path, payload, dir_label}"""
     if dirs is None:
         dirs = RESULT_DIRS
     found: Dict[str, Dict[str, Any]] = {}
@@ -123,11 +137,16 @@ def scan_fmoe_files(dirs=None) -> Dict[str, Dict[str, Any]]:
             print(f"[WARN] dir not found: {result_dir}", file=sys.stderr)
             continue
         label = DIR_LABEL.get(str(result_dir), result_dir.name)
-        for fpath in sorted(result_dir.glob("*.json")):
+        for fpath in sorted(_glob_json_files(result_dir)):
             name = fpath.name
             if TARGET_MODEL_CLASS not in name:
                 continue
-            # skip diag/ special/ normal/ subdirs (only .json in root)
+            lower_name = name.lower()
+            if lower_name.endswith("_special_metrics.json") or "special_metrics" in lower_name:
+                continue
+            ptext = str(fpath).lower()
+            if "/special/" in ptext or "/diag/" in ptext:
+                continue
             try:
                 payload = json.loads(fpath.read_text(encoding="utf-8"))
             except Exception as e:
@@ -135,19 +154,55 @@ def scan_fmoe_files(dirs=None) -> Dict[str, Dict[str, Any]]:
                 continue
             if not isinstance(payload, dict):
                 continue
+            # Keep only full run payloads (not analysis/manifest JSON files).
+            trials = payload.get("trials")
+            if not isinstance(trials, list) or not trials:
+                continue
             model_cls = payload.get("model", "")
             if model_cls != TARGET_MODEL_CLASS:
                 continue
-            # prefer results_final_experiment_fmoe over f (richer special metrics)
-            if name in found and label != "rfmoe":
+            run_phase = str(payload.get("run_phase", "")).strip()
+            stable_key = f"{payload.get('dataset','')}::{run_phase}::{name}"
+            # Prefer results_final_experiment_fmoe over f when key collides.
+            if stable_key in found and label != "rfmoe":
                 continue
-            found[name] = {
+            found[stable_key] = {
                 "path": fpath,
                 "payload": payload,
                 "dir_label": label,
                 "dataset": payload.get("dataset", ""),
             }
     return found
+
+
+def _all_dense_plain(stage_mode: Any) -> bool:
+    if not isinstance(stage_mode, dict):
+        return False
+    vals = [str(v).strip().lower() for v in stage_mode.values()]
+    return bool(vals) and all(v == "dense_plain" for v in vals)
+
+
+def classify_routing_mode(payload: Dict[str, Any]) -> str:
+    run_phase = str(payload.get("run_phase", "")).upper()
+    if "TOPK" in run_phase:
+        return "topk"
+
+    for obj in (payload.get("fixed_search") or {}, payload.get("context_fixed") or {}):
+        if not isinstance(obj, dict):
+            continue
+        moe_top_k = obj.get("moe_top_k")
+        group_top_k = obj.get("group_top_k")
+        expert_top_k = obj.get("expert_top_k")
+        topk_scope_mode = str(obj.get("topk_scope_mode", "")).strip().lower()
+        if safe_float(moe_top_k, 0.0) > 0 or safe_float(group_top_k, 0.0) > 0 or safe_float(expert_top_k, 0.0) > 0:
+            return "topk"
+        if _all_dense_plain(obj.get("stage_compute_mode")):
+            return "dense"
+        if topk_scope_mode in {"global_flat", "per_group"} and safe_float(moe_top_k, 0.0) <= 0:
+            return "dense"
+
+    # Legacy runs with no explicit top-k metadata are treated as dense/default.
+    return "dense"
 
 
 def build_source_run_phase(payload: Dict[str, Any]) -> str:
@@ -197,6 +252,7 @@ def main() -> None:
             "payload": payload,
             "valid_mean": v_mean,
             "test_mean": t_mean,
+            "routing_mode": classify_routing_mode(payload),
         })
 
     for ds in DATASETS:
@@ -226,6 +282,7 @@ def main() -> None:
                 "payload": payload,
                 "valid_mean": v_mean,
                 "test_mean": t_mean,
+                "routing_mode": classify_routing_mode(payload),
             })
         for ds in missing_datasets:
             print(f"[INFO] {ds}: {len(by_dataset.get(ds, []))} candidates (fallback)", file=sys.stderr)
@@ -237,24 +294,38 @@ def main() -> None:
         if not entries:
             print(f"[INFO] {ds}: no data found, skipping", file=sys.stderr)
             continue
-        top = select_top_k(entries, TOP_K)
-        for rank, entry in enumerate(top, start=1):
+        entries.sort(key=lambda e: (e["test_mean"], e["valid_mean"]), reverse=True)
+        total_top = entries[:TOP_K]
+        topk_entries = [e for e in entries if e.get("routing_mode") == "topk"]
+        dense_entries = [e for e in entries if e.get("routing_mode") == "dense"]
+        topk_rank_map = {id(e): i for i, e in enumerate(topk_entries, start=1)}
+        dense_rank_map = {id(e): i for i, e in enumerate(dense_entries, start=1)}
+
+        for rank_total, entry in enumerate(total_top, start=1):
             payload = entry["payload"]
-            tag = make_tag(ds, rank, entry["dir_label"])
-            notes = build_notes(rank, entry["dir_label"], payload, entry["test_mean"])
+            tag = make_tag(ds, rank_total, entry["dir_label"])
+            notes = build_notes(rank_total, entry["dir_label"], payload, entry["test_mean"])
             run_phase = build_source_run_phase(payload)
+            rank_topk = topk_rank_map.get(id(entry), "")
+            rank_dense = dense_rank_map.get(id(entry), "")
             rows.append({
                 "dataset": ds,
                 "model": TARGET_MODEL,
-                "rank": rank,
+                "rank": rank_total,
                 "enabled": "true",
                 "tag": tag,
                 "result_json": str(entry["path"]),
                 "notes": notes,
-                "config_rank": rank,
+                "config_rank": rank_total,
                 "seed_count": 1,
                 "mean_valid_score": f"{entry['valid_mean']:.12f}",
                 "mean_test_score": f"{entry['test_mean']:.12f}",
+                "routing_mode": entry.get("routing_mode", "dense"),
+                "rank_total": rank_total,
+                "rank_topk": rank_topk,
+                "rank_dense": rank_dense,
+                "use_for_default": "true",
+                "use_for_topk_ablation": "true" if rank_topk else "false",
                 "source_run_phase": run_phase,
             })
 
@@ -262,6 +333,7 @@ def main() -> None:
     fieldnames = [
         "dataset", "model", "rank", "enabled", "tag", "result_json",
         "notes", "config_rank", "seed_count", "mean_valid_score", "mean_test_score",
+        "routing_mode", "rank_total", "rank_topk", "rank_dense", "use_for_default", "use_for_topk_ablation",
         "source_run_phase",
     ]
     with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
@@ -269,7 +341,41 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(rows)
 
+    # Companion CSV for top-k-only ablation: rank is remapped to rank_topk.
+    topk_rows = []
+    for row in rows:
+        rk = str(row.get("rank_topk", "")).strip()
+        if not rk:
+            continue
+        r2 = dict(row)
+        r2["rank"] = int(rk)
+        r2["config_rank"] = int(rk)
+        topk_rows.append(r2)
+    topk_rows.sort(key=lambda r: (str(r["dataset"]), int(r["rank"])))
+    with CSV_TOPK_PATH.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(topk_rows)
+
+    # Companion CSV for dense-only reference: rank is remapped to rank_dense.
+    dense_rows = []
+    for row in rows:
+        rk = str(row.get("rank_dense", "")).strip()
+        if not rk:
+            continue
+        r2 = dict(row)
+        r2["rank"] = int(rk)
+        r2["config_rank"] = int(rk)
+        dense_rows.append(r2)
+    dense_rows.sort(key=lambda r: (str(r["dataset"]), int(r["rank"])))
+    with CSV_DENSE_PATH.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(dense_rows)
+
     print(f"[OK] wrote {len(rows)} rows to {CSV_PATH}", file=sys.stderr)
+    print(f"[OK] wrote {len(topk_rows)} rows to {CSV_TOPK_PATH}", file=sys.stderr)
+    print(f"[OK] wrote {len(dense_rows)} rows to {CSV_DENSE_PATH}", file=sys.stderr)
 
     # Print summary
     print("\n=== Updated base_candidates.csv ===")
@@ -280,7 +386,11 @@ def main() -> None:
             continue
         print(f"  {ds}:")
         for r in ds_rows:
-            print(f"    rank={r['rank']} test={float(r['mean_test_score']):.6f} valid={float(r['mean_valid_score']):.6f}  {r['tag']}")
+            print(
+                f"    rank={r['rank']} mode={r['routing_mode']}"
+                f" topk_rank={r['rank_topk'] or '-'} dense_rank={r['rank_dense'] or '-'}"
+                f" test={float(r['mean_test_score']):.6f} valid={float(r['mean_valid_score']):.6f}  {r['tag']}"
+            )
 
 
 if __name__ == "__main__":

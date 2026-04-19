@@ -5,9 +5,9 @@
 - run_group: real_final_ablation
 - run_axis: q2_routing_control
 - run_phase: Q2_KUAIRECLARGESTRICTPOSV2_0_2_HIDDEN_ONLY_R02_S1
-- best_mrr@20: 0.0179
-- test_mrr@20: 0.3362
-- test_hr@10: 0.3617
+- best_mrr@20: 0.0182
+- test_mrr@20: 0.3371
+- test_hr@10: 0.3539
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/KuaiRecLargeStrictPosV2_0.2/Q2/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_q2_kuaireclargestrictposv2_0_2_hidden_only_r02_s1_20260419_100321_760293_pid817572/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/KuaiRecLargeStrictPosV2_0.2/Q2/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_q2_kuaireclargestrictposv2_0_2_hidden_only_r02_s1_20260419_100321_760293_pid817572/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/KuaiRecLargeStrictPosV2_0.2/Q2/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_q2_kuaireclargestrictposv2_0_2_hidden_only_r02_s1_20260419_100321_760293_pid817572/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/KuaiRecLargeStrictPosV2_0.2/Q2/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_q2_kuaireclargestrictposv2_0_2_hidden_only_r02_s1_20260419_100321_760293_pid817572/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/KuaiRecLargeStrictPosV2_0.2/Q2/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_q2_kuaireclargestrictposv2_0_2_hidden_only_r02_s1_20260419_100321_760293_pid817572/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/KuaiRecLargeStrictPosV2_0.2/Q2/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_q2_kuaireclargestrictposv2_0_2_hidden_only_r02_s1_20260419_100321_760293_pid817572/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/KuaiRecLargeStrictPosV2_0.2/Q2/KuaiRecLargeStrictPosV2_0.2_FeaturedMoE_N3_q2_kuaireclargestrictposv2_0_2_hidden_only_r02_s1_20260419_100321_760293_pid817572/diag/raw/epoch_trace.csv
 - feature_ablation: 

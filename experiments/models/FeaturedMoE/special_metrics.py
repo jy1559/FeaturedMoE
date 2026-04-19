@@ -112,6 +112,18 @@ def _extract_sequence_feature(
         values = torch.as_tensor(values, device=row_idx.device)
     else:
         values = values.to(device=row_idx.device)
+    if values.ndim <= 0 or values.size(0) <= 0:
+        return None
+    if row_idx.numel() <= 0:
+        return None
+    max_rows = int(values.size(0))
+    if max_rows <= 0:
+        return None
+    valid_row_mask = (row_idx >= 0) & (row_idx < max_rows)
+    if not bool(valid_row_mask.all()):
+        if not bool(valid_row_mask.any()):
+            return None
+        row_idx = row_idx[valid_row_mask]
     values = values.index_select(0, row_idx)
     if values.ndim <= 1:
         return values.float()
@@ -123,6 +135,19 @@ def _extract_sequence_feature(
             device=values.device,
         )
     else:
+        if not torch.is_tensor(item_seq_len):
+            item_seq_len = torch.as_tensor(item_seq_len, device=values.device)
+        else:
+            item_seq_len = item_seq_len.to(device=values.device)
+        if item_seq_len.ndim <= 0 or item_seq_len.size(0) <= 0:
+            return None
+        max_len_rows = int(item_seq_len.size(0))
+        valid_len_mask = (row_idx >= 0) & (row_idx < max_len_rows)
+        if not bool(valid_len_mask.all()):
+            if not bool(valid_len_mask.any()):
+                return None
+            row_idx = row_idx[valid_len_mask]
+            values = values[valid_len_mask]
         last_idx = item_seq_len.index_select(0, row_idx).long().clamp(min=1, max=values.size(1)) - 1
     return values[torch.arange(values.size(0), device=values.device), last_idx].float()
 

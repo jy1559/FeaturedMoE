@@ -159,8 +159,6 @@ def ensure_dir(path: Path) -> Path:
 def _requires_case_eval(question: str, summary_row: dict[str, Any]) -> bool:
     question_key = str(question or "").strip().lower()
     setting_key = str(summary_row.get("setting_key", "") or "").strip().lower()
-    if question_key == "q2":
-        return setting_key in {"hidden_only", "mixed_hidden_behavior", "behavior_guided"}
     if question_key == "q5":
         return setting_key == "behavior_guided"
     return False
@@ -1128,6 +1126,7 @@ def build_route_command(row: dict[str, Any], gpu_id: str, *, search_algo: str) -
         f"++phase_hparam_id={hydra_literal(str(row.get('base_rank', '')))}",
         f"++phase_seed_id={hydra_literal(int(row['seed_id']))}",
         f"++phase_run_id={hydra_literal(str(row['job_id']))}",
+        f"++artifact_export_final_checkpoint={hydra_literal(str(row.get('question', '')).strip().lower() == 'q5')}",
     ]
     for key, values in search.items():
         cmd.append(f"++search.{key}={hydra_literal(values)}")
@@ -1689,6 +1688,7 @@ def run_case_eval_pipeline(
     source_dir = ensure_dir(output_root / "source")
     config_json = materialize_eval_config(result_path, source_dir)
     bundle_root = ensure_dir(output_root / "case_eval")
+    bundle_name = f"{question}_{sanitize_token(source_summary_row.get('dataset',''))}_{sanitize_token(source_summary_row.get('setting_key',''))}_R{sanitize_token(source_summary_row.get('base_rank',''))}_S{sanitize_token(source_summary_row.get('seed_id',''))}"
     cmd = [
         python_bin(),
         str(REPO_ROOT / "experiments" / "run" / "fmoe_n4" / "eval_checkpoint_case_subsets.py"),
@@ -1700,13 +1700,18 @@ def run_case_eval_pipeline(
         str(Path(result_path).resolve()),
         "--output-root",
         str(bundle_root),
+        "--bundle-name",
+        bundle_name,
+        "--resume",
     ]
     if skip_original:
         cmd.append("--skip-original")
     if skip_by_group:
         cmd.append("--skip-by-group")
     subprocess.run(cmd, check=True, cwd=str(REPO_ROOT))
-    manifest = latest_manifest_under(bundle_root, "case_eval_manifest.csv")
+    manifest = (bundle_root / bundle_name / "case_eval_manifest.csv").expanduser().resolve()
+    if not manifest.exists():
+        manifest = latest_manifest_under(bundle_root, "case_eval_manifest.csv")
     export_dir = ensure_dir(output_root / "tables")
     export_cmd = [
         python_bin(),

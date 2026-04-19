@@ -1264,6 +1264,116 @@ def run_checkpoint_evaluation(
     run_logger=None,
 ):
     """Load one checkpoint and run valid/test evaluation only."""
+    def _read_inter_session_tokens(inter_path: Path) -> list[str]:
+        """Read session_id tokens from a RecBole *.inter file (tab-separated).
+
+        We intentionally keep this dependency-free (no pandas) so it can run in
+        the same environment as the training/eval scripts.
+        """
+        if not inter_path.exists():
+            return []
+        with open(inter_path, "r", encoding="utf-8") as f:
+            header = f.readline().rstrip("\n")
+            if not header:
+                return []
+            cols = header.split("\t")
+            # Column names may include type suffix, e.g. "session_id:token".
+            def _base(col: str) -> str:
+                return col.split(":", 1)[0].strip()
+
+            session_col = None
+            for i, col in enumerate(cols):
+                if _base(col) == "session_id":
+                    session_col = i
+                    break
+            if session_col is None:
+                return []
+            out: list[str] = []
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split("\t")
+                if session_col >= len(parts):
+                    continue
+                out.append(parts[session_col])
+            return out
+
+    def _resolve_case_eval_inter_files(*, case_root: Path, dataset_name: str) -> tuple[Path | None, Path | None]:
+        # Support both layouts:
+        # 1) case_root/<dataset>/<dataset>.valid.inter
+        # 2) case_root/<dataset>.valid.inter
+        d = case_root / dataset_name
+        candidates = [
+            (d / f"{dataset_name}.valid.inter", d / f"{dataset_name}.test.inter"),
+            (case_root / f"{dataset_name}.valid.inter", case_root / f"{dataset_name}.test.inter"),
+        ]
+        for valid_p, test_p in candidates:
+            if valid_p.exists() or test_p.exists():
+                return valid_p if valid_p.exists() else None, test_p if test_p.exists() else None
+        return None, None
+
+    def _tokens_to_internal_ids(dataset_obj, field: str, tokens: list[str]) -> set[int]:
+        """Convert raw token strings to internal ids if mapping exists.
+
+        RecBole datasets typically keep token->id mapping in one of these:
+        - dataset.field2token_id[field] : dict[token, int]
+        - dataset.token2id(field, token) or dataset.token2id(field, [tokens])
+        """
+        mapping = getattr(dataset_obj, "field2token_id", None)
+        if isinstance(mapping, dict):
+            field_map = mapping.get(field)
+            if isinstance(field_map, dict):
+                return {int(field_map[t]) for t in tokens if t in field_map}
+        token2id = getattr(dataset_obj, "token2id", None)
+        if callable(token2id):
+            # Try vectorized then scalar conversion.
+            try:
+                ids = token2id(field, tokens)
+                try:
+                    return {int(x) for x in list(ids)}
+                except Exception:
+                    return {int(ids)}
+            except TypeError:
+                pass
+            out: set[int] = set()
+            for t in tokens:
+                try:
+                    out.add(int(token2id(field, t)))
+                except Exception:
+                    continue
+            return out
+        return set()
+
+    def _filter_loader_by_session_ids(loader_obj, allowed_session_ids: set[int]) -> None:
+        if not allowed_session_ids:
+            return
+        dataset_obj = getattr(loader_obj, "dataset", None)
+        if dataset_obj is None:
+            return
+        inter_feat = getattr(dataset_obj, "inter_feat", None)
+        if inter_feat is None:
+            return
+        try:
+            sess = inter_feat["session_id"]
+        except Exception:
+            return
+        # sess is typically a torch tensor of integer ids.
+        try:
+            sess_list = sess.tolist()
+        except Exception:
+            return
+        mask_list = [int(sid) in allowed_session_ids for sid in sess_list]
+        tensor_kwargs = {}
+        if hasattr(sess, "device"):
+            tensor_kwargs["device"] = sess.device
+        mask = torch.tensor(mask_list, dtype=torch.bool, **tensor_kwargs)
+        try:
+            dataset_obj.inter_feat = inter_feat[mask]
+        except Exception:
+            # Best-effort fallback: if Interaction slicing is not supported.
+            return
+
     cfg_local = cfg_i.copy()
     cfg_local['log_wandb'] = False
     model_name_local = str(cfg_local.get("model", "")).lower()
@@ -1290,6 +1400,40 @@ def run_checkpoint_evaluation(
 
     dataset = create_dataset(config)
     train_data, valid_data, test_data = data_preparation(config, dataset)
+
+    # Case-eval: keep vocab from the original data_path, but restrict valid/test to
+    # the session subset provided by a separate case root.
+    case_filter_root_raw = str(cfg_local.get("case_eval_filter_data_path", "") or "").strip()
+    if case_filter_root_raw:
+        try:
+            case_filter_root = Path(case_filter_root_raw).expanduser().resolve()
+            base_root = Path(str(cfg_local.get("data_path", "") or "")).expanduser().resolve()
+            if case_filter_root == base_root:
+                case_filter_root_raw = ""
+        except Exception:
+            case_filter_root_raw = ""
+
+    if case_filter_root_raw:
+        try:
+            case_filter_root = Path(case_filter_root_raw).expanduser().resolve()
+            valid_inter, test_inter = _resolve_case_eval_inter_files(
+                case_root=case_filter_root, dataset_name=str(config["dataset"])
+            )
+            if valid_inter is not None or test_inter is not None:
+                # Read tokens (raw strings) from subset split files.
+                valid_tokens = _read_inter_session_tokens(valid_inter) if valid_inter is not None else []
+                test_tokens = _read_inter_session_tokens(test_inter) if test_inter is not None else []
+
+                # Convert to internal ids using the mapping in each split's dataset instance.
+                # Note: valid_data/test_data loaders may hold different dataset objects.
+                valid_allowed = _tokens_to_internal_ids(valid_data.dataset, "session_id", valid_tokens) if valid_tokens else set()
+                test_allowed = _tokens_to_internal_ids(test_data.dataset, "session_id", test_tokens) if test_tokens else set()
+
+                _filter_loader_by_session_ids(valid_data, valid_allowed)
+                _filter_loader_by_session_ids(test_data, test_allowed)
+        except Exception:
+            # Never fail evaluation purely because case-eval filtering couldn't be applied.
+            pass
 
     model_cls = get_model(config['model'])
     model = model_cls(config, train_data.dataset).to(config['device'])

@@ -15,7 +15,6 @@ Fresh notebook package for the real-final RouteRec Q2~Q5 main-body figures.
 These notebooks read from `writing/260419_real_final_exp/data`:
 
 - `q2_quality.csv`
-- `q2_routing_profile.csv`
 - `q3_temporal_decomp.csv`
 - `q3_routing_org.csv`
 - `q4_efficiency_table.csv`
