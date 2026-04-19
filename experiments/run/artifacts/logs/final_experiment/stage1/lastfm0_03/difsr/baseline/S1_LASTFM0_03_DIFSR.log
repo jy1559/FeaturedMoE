@@ -1,0 +1,54 @@
+# job_id=S1_LASTFM0_03_DIFSR dataset=lastfm0.03 model=difsr stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_lfm_small --search-algo tpe --max-evals 24 --tune-epochs 35 --tune-patience 4 --seed 610016 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_LASTFM0_03_DIFSR model=difsr dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=4 log_wandb=false show_progress=false ++seed=610016 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00012973,0.00020303,0.00031777,0.00049733,0.00077837] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-05,5e-05,0.0001,0.0002] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[112,128,160,192] ++search_space_type_overrides.hidden_size=choice ++search.num_layers=[2,3,4] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,2,4] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[112,128,160,192] ++search_space_type_overrides.attribute_hidden_size=choice ++search.fusion_type=["concat","gate","sum"] ++search_space_type_overrides.fusion_type=choice ++search.lambda_attr=[0.12,0.14,0.15,0.16] ++search_space_type_overrides.lambda_attr=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.15] ++search_space_type_overrides.dropout_ratio=choice ++search.use_attribute_predictor=[true] ++search_space_type_overrides.use_attribute_predictor=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1629769 ts=2026-04-18T02:49:23
+[UniqueChoice] enabled: dedupe/remap duplicates across 2211840 finite combos
+
+=================================================================
+  Hyperopt  |  DIFSR x lastfm0.03
+  max_evals=24  epochs=35  patience=4  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=2048/4096/4096
+  track=final_experiment  axis=stage1_broad_search  phase=S1_LASTFM0_03_DIFSR
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, attribute_hidden_size, fusion_type, hidden_dropout_prob, hidden_size, lambda_attr, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 11  (~2211840 discrete combos)
+Tuned groups: 11
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.12, 0.15, 0.2]                    -> choice
+    learning_rate                   [0.00012973, 0.00020303, 0.00031777, 0.00049733, 0.00077837]  -> choice
+    weight_decay                    [1e-05, 5e-05, 0.0001, 0.0002]            -> choice
+  [model_core]
+    attn_dropout_prob               [0.1, 0.12, 0.15, 0.2]                    -> choice
+    hidden_size                     [112, 128, 160, 192]                      -> choice
+    num_heads                       [1, 2, 4]                                 -> choice
+    num_layers                      [2, 3, 4]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30, 50]                          -> choice
+    attribute_hidden_size           [112, 128, 160, 192]                      -> choice
+    fusion_type                     ['concat', 'gate', 'sum']                 -> choice
+    lambda_attr                     [0.12, 0.14, 0.15, 0.16]                  -> choice
+Fixed params(singleton/non-list): 4
+Fixed groups: 4
+  [model_core]
+    dropout_ratio                   0.15                                    
+    inner_size                      320                                     
+  [other]
+    selected_features               ['category']                            
+    use_attribute_predictor         True                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.1, attribute_hidden_size=192, fusion_type=concat, hidden_dropout_prob=0.12, hidden_size=112, lambda_attr=0.16, learning_rate=0.0004973, num_heads=4, num_layers=4, weight_decay=1e-05
+  -> MRR@20=0.146100  best=0.146100  (full@35, trial=8.9min, avg=9.2min/trial, total=9.2min, ETA=3.51h)
+[TRIAL_METRICS] cur_best_mrr20=0.146100 cur_best_hr10=0.184700 cur_test_mrr20=0.141700 cur_test_hr10=0.180800 avg_epoch_time_sec=15.3129 test_eval_time_sec=0.1258 test_eval_batches_per_sec=7.9503 test_eval_targets_per_sec=27341.1595 run_best_mrr20=0.146100 run_best_hr10=0.184700 run_test_mrr20=0.141700 run_test_hr10=0.180800
+
+[2/24] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=192, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=160, lambda_attr=0.16, learning_rate=0.0001297, num_heads=2, num_layers=4, weight_decay=0.0001
+  -> MRR@20=0.040100  best=0.146100  (full@35, trial=3.8min, avg=6.6min/trial, total=13.1min, ETA=2.40h)
+[TRIAL_METRICS] cur_best_mrr20=0.040100 cur_best_hr10=0.051500 cur_test_mrr20=0.041500 cur_test_hr10=0.053700 avg_epoch_time_sec=6.4663 test_eval_time_sec=0.0913 test_eval_batches_per_sec=10.9587 test_eval_targets_per_sec=37687.0056 run_best_mrr20=0.146100 run_best_hr10=0.184700 run_test_mrr20=0.141700 run_test_hr10=0.180800
+
+[3/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.2, attribute_hidden_size=112, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=192, lambda_attr=0.12, learning_rate=0.0001297, num_heads=2, num_layers=4, weight_decay=0.0001
