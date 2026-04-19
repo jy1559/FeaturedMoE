@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FDSA
+- dataset: movielens1m
+- run_group: final_experiment_addtuning
+- run_axis: add_stage1_structure
+- run_phase: ADD_STAGE1_MOVIELENS1M_FDSA_STRUCTURE
+- best_mrr@20: 0.1004
+- test_mrr@20: 0.0658
+- test_hr@10: 0.1538
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_addtuning/movielens1m/ADD/movielens1m_FDSA_add_stage1_movielens1m_fdsa_structure_20260418_182859_677884_pid1727798/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: 
+- diag_raw_best_valid: 
+- diag_raw_test: 
+- diag_raw_epoch_trace: 
+- feature_ablation: 

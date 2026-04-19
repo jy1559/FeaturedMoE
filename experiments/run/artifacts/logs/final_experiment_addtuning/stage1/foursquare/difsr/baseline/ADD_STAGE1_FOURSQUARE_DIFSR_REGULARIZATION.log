@@ -1,0 +1,120 @@
+# job_id=ADD_STAGE1_FOURSQUARE_DIFSR_REGULARIZATION dataset=foursquare model=difsr stage=stage1
+# cmd=/venv/FMoE/bin/python /workspace/FeaturedMoE/experiments/hyperopt_tune.py --config-name tune_fs --search-algo tpe --max-evals 12 --tune-epochs 40 --tune-patience 5 --seed 910029 --run-group final_experiment_addtuning --run-axis add_stage1_regularization --run-phase ADD_STAGE1_FOURSQUARE_DIFSR_REGULARIZATION model=difsr dataset=foursquare eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=4 log_wandb=false show_progress=false ++seed=910029 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00017873,0.00027972,0.00043779,0.00068518,0.00107236] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[0.0001,0.00015,5e-05] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[30,20,10] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.use_attribute_predictor=[true] ++search_space_type_overrides.use_attribute_predictor=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice ++search.hidden_size=[192] ++search_space_type_overrides.hidden_size=choice ++search.num_layers=[2] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.15] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.12] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[96] ++search_space_type_overrides.attribute_hidden_size=choice ++search.fusion_type=["sum"] ++search_space_type_overrides.fusion_type=choice ++search.lambda_attr=[0.12] ++search_space_type_overrides.lambda_attr=choice ++search.embedding_size=[64] ++search_space_type_overrides.embedding_size=choice ++search.n_layers=[1] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[1] ++search_space_type_overrides.n_heads=choice ++search.dropout_prob=[0.1] ++search_space_type_overrides.dropout_prob=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1723245 ts=2026-04-18T15:52:35
+[UniqueChoice] enabled: dedupe/remap duplicates across 45 finite combos
+
+=================================================================
+  Hyperopt  |  DIFSR x foursquare
+  max_evals=12  epochs=40  patience=5  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/4096/4096
+  track=final_experiment_addtuning  axis=add_stage1_regularization  phase=ADD_STAGE1_FOURSQUARE_DIFSR_REGULARIZATION
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, learning_rate, weight_decay
+Tuned params(len>1): 3  (~45 discrete combos)
+Tuned groups: 3
+  [optimization]
+    learning_rate                   [0.00017873, 0.00027972, 0.00043779, 0.00068518, 0.00107236]  -> choice
+    weight_decay                    [0.0001, 0.00015, 5e-05]                  -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [30, 20, 10]                              -> choice
+Fixed params(singleton/non-list): 16
+Fixed groups: 16
+  [optimization]
+    hidden_dropout_prob             0.15                                    
+  [model_core]
+    attn_dropout_prob               0.12                                    
+    dropout_prob                    0.1                                     
+    dropout_ratio                   0.12                                    
+    embedding_size                  64                                      
+    hidden_size                     192                                     
+    inner_size                      320                                     
+    num_heads                       1                                       
+    num_layers                      2                                       
+  [other]
+    attribute_hidden_size           96                                      
+    fusion_type                     sum                                     
+    lambda_attr                     0.12                                    
+    n_heads                         1                                       
+    n_layers                        1                                       
+    selected_features               ['category']                            
+    use_attribute_predictor         True                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/12] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.001072, weight_decay=0.0001
+  -> MRR@20=0.118400  best=0.118400  (full@40, trial=41s, avg=46s/trial, total=46s, ETA=8.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.118400 cur_best_hr10=0.191500 cur_test_mrr20=0.106700 cur_test_hr10=0.172700 avg_epoch_time_sec=1.0045 test_eval_time_sec=0.0780 test_eval_batches_per_sec=12.8287 test_eval_targets_per_sec=45682.8503 run_best_mrr20=0.118400 run_best_hr10=0.191500 run_test_mrr20=0.106700 run_test_hr10=0.172700
+
+[2/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.001072, weight_decay=0.00015
+  -> MRR@20=0.121900  best=0.121900  (full@40, trial=32s, avg=41s/trial, total=1.4min, ETA=6.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.121900 cur_best_hr10=0.195300 cur_test_mrr20=0.105100 cur_test_hr10=0.167500 avg_epoch_time_sec=0.7888 test_eval_time_sec=0.0747 test_eval_batches_per_sec=13.3858 test_eval_targets_per_sec=47666.9567 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 30, 'learning_rate': 0.00017873, 'weight_decay': 0.0001}
+
+[3/12] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0001787, weight_decay=0.0001
+  -> MRR@20=0.029000  best=0.121900  (early_stop@6, trial=7s, avg=30s/trial, total=1.5min, ETA=4.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.029000 cur_best_hr10=0.029900 cur_test_mrr20=0.036800 cur_test_hr10=0.036800 avg_epoch_time_sec=1.1318 test_eval_time_sec=0.0804 test_eval_batches_per_sec=12.4326 test_eval_targets_per_sec=44272.4077 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+[4/12] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.0006852, weight_decay=5e-05
+  -> MRR@20=0.097800  best=0.121900  (full@40, trial=39s, avg=33s/trial, total=2.2min, ETA=4.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.097800 cur_best_hr10=0.156800 cur_test_mrr20=0.088800 cur_test_hr10=0.142300 avg_epoch_time_sec=0.9625 test_eval_time_sec=0.0779 test_eval_batches_per_sec=12.8399 test_eval_targets_per_sec=45722.8467 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+[5/12] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.001072, weight_decay=0.00015
+  -> MRR@20=0.119200  best=0.121900  (full@40, trial=39s, avg=35s/trial, total=2.9min, ETA=4.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.119200 cur_best_hr10=0.190000 cur_test_mrr20=0.105300 cur_test_hr10=0.170700 avg_epoch_time_sec=0.9766 test_eval_time_sec=0.0777 test_eval_batches_per_sec=12.8703 test_eval_targets_per_sec=45831.3001 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+[6/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.0004378, weight_decay=5e-05
+  -> MRR@20=0.076600  best=0.121900  (full@40, trial=29s, avg=34s/trial, total=3.4min, ETA=3.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.076600 cur_best_hr10=0.123500 cur_test_mrr20=0.067000 cur_test_hr10=0.109100 avg_epoch_time_sec=0.7154 test_eval_time_sec=0.0755 test_eval_batches_per_sec=13.2367 test_eval_targets_per_sec=47135.9349 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 30, 'learning_rate': 0.00017873, 'weight_decay': 0.00015}
+
+[7/12] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0001787, weight_decay=0.00015
+  -> MRR@20=0.029000  best=0.121900  (early_stop@6, trial=7s, avg=31s/trial, total=3.6min, ETA=2.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.029000 cur_best_hr10=0.029900 cur_test_mrr20=0.036800 cur_test_hr10=0.036800 avg_epoch_time_sec=1.1330 test_eval_time_sec=0.0805 test_eval_batches_per_sec=12.4266 test_eval_targets_per_sec=44251.1586 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+[8/12] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.0002797, weight_decay=0.0001
+  -> MRR@20=0.025500  best=0.121900  (early_stop@6, trial=5s, avg=28s/trial, total=3.7min, ETA=1.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.025500 cur_best_hr10=0.029200 cur_test_mrr20=0.033700 cur_test_hr10=0.036000 avg_epoch_time_sec=0.8346 test_eval_time_sec=0.0771 test_eval_batches_per_sec=12.9769 test_eval_targets_per_sec=46210.7543 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+[9/12] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.0004378, weight_decay=5e-05
+  -> MRR@20=0.076900  best=0.121900  (full@40, trial=40s, avg=29s/trial, total=4.4min, ETA=1.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.076900 cur_best_hr10=0.125700 cur_test_mrr20=0.069400 cur_test_hr10=0.108700 avg_epoch_time_sec=0.9964 test_eval_time_sec=0.0807 test_eval_batches_per_sec=12.3915 test_eval_targets_per_sec=44126.0463 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+[10/12] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.001072, weight_decay=5e-05
+  -> MRR@20=0.119700  best=0.121900  (full@40, trial=39s, avg=30s/trial, total=5.0min, ETA=1.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.119700 cur_best_hr10=0.196000 cur_test_mrr20=0.107900 cur_test_hr10=0.175100 avg_epoch_time_sec=0.9746 test_eval_time_sec=0.0779 test_eval_batches_per_sec=12.8294 test_eval_targets_per_sec=45685.6450 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+[11/12] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0004378, weight_decay=0.00015
+  -> MRR@20=0.077400  best=0.121900  (full@40, trial=54s, avg=33s/trial, total=6.0min, ETA=33s)
+[TRIAL_METRICS] cur_best_mrr20=0.077400 cur_best_hr10=0.118600 cur_test_mrr20=0.064300 cur_test_hr10=0.104700 avg_epoch_time_sec=1.3320 test_eval_time_sec=0.0831 test_eval_batches_per_sec=12.0307 test_eval_targets_per_sec=42841.4963 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+[12/12] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0002797, weight_decay=0.00015
+  -> MRR@20=0.027100  best=0.121900  (early_stop@6, trial=8s, avg=31s/trial, total=6.1min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.027100 cur_best_hr10=0.028800 cur_test_mrr20=0.035100 cur_test_hr10=0.035600 avg_epoch_time_sec=1.1781 test_eval_time_sec=0.0826 test_eval_batches_per_sec=12.1122 test_eval_targets_per_sec=43131.6121 run_best_mrr20=0.121900 run_best_hr10=0.195300 run_test_mrr20=0.105100 run_test_hr10=0.167500
+
+=================================================================
+  DONE  |  DIFSR x foursquare
+  Best MRR@20 = 0.121900  |  12/12 trials OK
+  Best HR@10  = 0.195300
+  Test MRR@20 = 0.105100  (best-valid checkpoint)
+  Test HR@10  = 0.167500  (best-valid checkpoint)
+  Avg epoch time = 0.789 sec/epoch
+  Final test eval = 0.075 sec | batches/s=13.386 | targets/s=47666.957
+[RUN_METRICS] best_valid_mrr20=0.121900 best_valid_hr10=0.195300 test_mrr20=0.105100 test_hr10=0.167500 avg_epoch_time_sec=0.7888 test_eval_time_sec=0.0747 test_eval_batches_per_sec=13.3858 test_eval_targets_per_sec=47666.9567
+  Total time: 6.1 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 10
+    learning_rate: 0.00107236
+    weight_decay: 0.00015
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/foursquare_DIFSR_add_stage1_foursquare_difsr_regularization_20260418_155236_077065_pid1723245.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/normal/add_stage1_regularization/ADD/foursquare/DIFSR/foursquare_DIFSR_add_stage1_foursquare_difsr_regularization_20260418_155236_077065_pid1723245.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/special/add_stage1_regularization/ADD/foursquare/DIFSR/foursquare_DIFSR_add_stage1_foursquare_difsr_regularization_20260418_155236_077065_pid1723245_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment_addtuning/special/add_stage1_regularization/ADD/foursquare/DIFSR/foursquare_DIFSR_add_stage1_foursquare_difsr_regularization_20260418_155236_077065_pid1723245_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1723245 start=2026-04-18T15:52:35 end=2026-04-18T15:58:43

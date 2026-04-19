@@ -5,9 +5,9 @@
 - run_group: final_experiment_addtuning
 - run_axis: add_stage1_dropout
 - run_phase: ADD_STAGE1_BEAUTY_BSAREC_DROPOUT
-- best_mrr@20: 0.0156
-- test_mrr@20: 0.014
-- test_hr@10: 0.0401
+- best_mrr@20: 0.016
+- test_mrr@20: 0.0137
+- test_hr@10: 0.0372
 
 ## Artifacts
 

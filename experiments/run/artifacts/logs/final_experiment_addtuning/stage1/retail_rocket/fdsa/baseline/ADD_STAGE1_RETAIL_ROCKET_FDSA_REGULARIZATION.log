@@ -1,0 +1,130 @@
+# job_id=ADD_STAGE1_RETAIL_ROCKET_FDSA_REGULARIZATION dataset=retail_rocket model=fdsa stage=stage1
+# cmd=/venv/FMoE/bin/python /workspace/FeaturedMoE/experiments/hyperopt_tune.py --config-name tune_rr --search-algo tpe --max-evals 7 --tune-epochs 40 --tune-patience 5 --seed 910137 --run-group final_experiment_addtuning --run-axis add_stage1_regularization --run-phase ADD_STAGE1_RETAIL_ROCKET_FDSA_REGULARIZATION model=fdsa dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=4 log_wandb=false show_progress=false ++seed=910137 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00020145,0.00019049,0.00028486,0.00042596,0.00063696] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[5e-05,1e-05,1e-06] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[30,20,10] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice ++search.pooling_mode=["mean"] ++search_space_type_overrides.pooling_mode=choice ++search.hidden_size=[64] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[128] ++search_space_type_overrides.embedding_size=choice ++search.n_layers=[2] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[1] ++search_space_type_overrides.n_heads=choice ++search.hidden_dropout_prob=[0.12] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.12] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[112] ++search_space_type_overrides.attribute_hidden_size=choice ++search.lambda_attr=[0.0] ++search_space_type_overrides.lambda_attr=choice ++search.num_layers=[1] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1] ++search_space_type_overrides.num_heads=choice ++search.dropout_prob=[0.1] ++search_space_type_overrides.dropout_prob=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1728262 ts=2026-04-18T19:45:46
+[UniqueChoice] enabled: dedupe/remap duplicates across 45 finite combos
+
+=================================================================
+  Hyperopt  |  FDSA x retail_rocket
+  max_evals=7  epochs=40  patience=5  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/8192/8192
+  track=final_experiment_addtuning  axis=add_stage1_regularization  phase=ADD_STAGE1_RETAIL_ROCKET_FDSA_REGULARIZATION
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, learning_rate, weight_decay
+Tuned params(len>1): 3  (~45 discrete combos)
+Tuned groups: 3
+  [optimization]
+    learning_rate                   [0.00020145, 0.00019049, 0.00028486, 0.00042596, 0.00063696]  -> choice
+    weight_decay                    [5e-05, 1e-05, 1e-06]                     -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [30, 20, 10]                              -> choice
+Fixed params(singleton/non-list): 15
+Fixed groups: 15
+  [optimization]
+    hidden_dropout_prob             0.12                                    
+  [model_core]
+    attn_dropout_prob               0.12                                    
+    dropout_prob                    0.1                                     
+    dropout_ratio                   0.12                                    
+    embedding_size                  128                                     
+    hidden_size                     64                                      
+    inner_size                      320                                     
+    num_heads                       1                                       
+    num_layers                      1                                       
+  [other]
+    attribute_hidden_size           112                                     
+    lambda_attr                     0.0                                     
+    n_heads                         1                                       
+    n_layers                        2                                       
+    pooling_mode                    mean                                    
+    selected_features               ['category']                            
+
+[Wandb] disabled for this hyperopt run
+
+[1/7] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.000426, weight_decay=1e-05
+[OOM_RETRY] trial=1 retry=1/5 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.52 GiB of which 6.53 GiB is free. Including non-PyTorch memory, this process has 16.97 GiB memory in use. Of the allocated memory 14.75 GiB is allocated by PyTorch, and 1.76 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=1 retry=2/5 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.352600  best=0.352600  (early_stop@21, trial=7.0min, avg=7.9min/trial, total=7.9min, ETA=47.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.352600 cur_best_hr10=0.550400 cur_test_mrr20=0.350100 cur_test_hr10=0.538500 avg_epoch_time_sec=20.0063 test_eval_time_sec=1.2241 test_eval_batches_per_sec=8.9862 test_eval_targets_per_sec=17139.1077 run_best_mrr20=0.352600 run_best_hr10=0.550400 run_test_mrr20=0.350100 run_test_hr10=0.538500
+
+[2/7] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0002849, weight_decay=1e-05
+[OOM_RETRY] trial=2 retry=1/5 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.78 GiB is free. Including non-PyTorch memory, this process has 19.71 GiB memory in use. Of the allocated memory 14.75 GiB is allocated by PyTorch, and 4.50 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=2 retry=2/5 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.353400  best=0.353400  (early_stop@28, trial=9.4min, avg=9.0min/trial, total=18.0min, ETA=45.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.353400 cur_best_hr10=0.553300 cur_test_mrr20=0.349500 cur_test_hr10=0.537100 avg_epoch_time_sec=19.9547 test_eval_time_sec=1.2356 test_eval_batches_per_sec=8.9027 test_eval_targets_per_sec=16979.9262 run_best_mrr20=0.353400 run_best_hr10=0.553300 run_test_mrr20=0.349500 run_test_hr10=0.537100
+
+[3/7] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0001905, weight_decay=5e-05
+[OOM_RETRY] trial=3 retry=1/5 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.78 GiB is free. Including non-PyTorch memory, this process has 19.71 GiB memory in use. Of the allocated memory 14.75 GiB is allocated by PyTorch, and 4.50 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=3 retry=2/5 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+[CacheRecover] moved corrupted dataset cache -> saved/recbole_cache/retail_rocket_feature_added_session_len30/retail_rocket-SequentialDataset.pth.corrupt_1776542671
+[CacheRecover] rebuilding dataset after cache load failure: Ran out of input
+  -> MRR@20=0.343800  best=0.353400  (full@40, trial=13.4min, avg=10.8min/trial, total=32.4min, ETA=43.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.343800 cur_best_hr10=0.543100 cur_test_mrr20=0.340900 cur_test_hr10=0.530800 avg_epoch_time_sec=19.9849 test_eval_time_sec=1.2204 test_eval_batches_per_sec=9.0138 test_eval_targets_per_sec=17191.7385 run_best_mrr20=0.353400 run_best_hr10=0.553300 run_test_mrr20=0.349500 run_test_hr10=0.537100
+
+[4/7] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0002014, weight_decay=1e-06
+[OOM_RETRY] trial=4 retry=1/5 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.78 GiB is free. Including non-PyTorch memory, this process has 19.71 GiB memory in use. Of the allocated memory 14.75 GiB is allocated by PyTorch, and 4.50 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=4 retry=2/5 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+[CacheRecover] moved corrupted dataset cache -> saved/recbole_cache/retail_rocket_feature_added_session_len30/retail_rocket-SequentialDataset.pth.corrupt_1776543557
+[CacheRecover] rebuilding dataset after cache load failure: Ran out of input
+  -> MRR@20=0.361600  best=0.361600  (early_stop@37, trial=12.4min, avg=11.5min/trial, total=46.2min, ETA=34.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.361600 cur_best_hr10=0.560500 cur_test_mrr20=0.357900 cur_test_hr10=0.544900 avg_epoch_time_sec=20.0381 test_eval_time_sec=1.2209 test_eval_batches_per_sec=9.0100 test_eval_targets_per_sec=17184.5538 run_best_mrr20=0.361600 run_best_hr10=0.560500 run_test_mrr20=0.357900 run_test_hr10=0.544900
+
+[5/7] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.000637, weight_decay=1e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[6/7] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.0002014, weight_decay=1e-05
+[OOM_RETRY] trial=6 retry=1/5 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.79 GiB is free. Including non-PyTorch memory, this process has 19.71 GiB memory in use. Of the allocated memory 14.75 GiB is allocated by PyTorch, and 4.50 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=6 retry=2/5 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.354600  best=0.361600  (early_stop@35, trial=11.0min, avg=9.6min/trial, total=57.9min, ETA=9.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.354600 cur_best_hr10=0.556100 cur_test_mrr20=0.350900 cur_test_hr10=0.540100 avg_epoch_time_sec=18.6959 test_eval_time_sec=1.1917 test_eval_batches_per_sec=9.2309 test_eval_targets_per_sec=17605.7856 run_best_mrr20=0.361600 run_best_hr10=0.560500 run_test_mrr20=0.357900 run_test_hr10=0.544900
+
+[7/7] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0002014, weight_decay=5e-05
+[OOM_RETRY] trial=7 retry=1/5 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.52 GiB of which 3.78 GiB is free. Including non-PyTorch memory, this process has 19.71 GiB memory in use. Of the allocated memory 14.75 GiB is allocated by PyTorch, and 4.50 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=7 retry=2/5 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.343000  best=0.361600  (full@40, trial=13.5min, avg=10.3min/trial, total=1.20h, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.343000 cur_best_hr10=0.543000 cur_test_mrr20=0.341500 cur_test_hr10=0.532200 avg_epoch_time_sec=20.1537 test_eval_time_sec=1.2404 test_eval_batches_per_sec=8.8682 test_eval_targets_per_sec=16913.9920 run_best_mrr20=0.361600 run_best_hr10=0.560500 run_test_mrr20=0.357900 run_test_hr10=0.544900
+
+=================================================================
+  DONE  |  FDSA x retail_rocket
+  Best MRR@20 = 0.361600  |  6/7 trials OK
+  Best HR@10  = 0.560500
+  Test MRR@20 = 0.357900  (best-valid checkpoint)
+  Test HR@10  = 0.544900  (best-valid checkpoint)
+  Avg epoch time = 20.038 sec/epoch
+  Final test eval = 1.221 sec | batches/s=9.010 | targets/s=17184.554
+[RUN_METRICS] best_valid_mrr20=0.361600 best_valid_hr10=0.560500 test_mrr20=0.357900 test_hr10=0.544900 avg_epoch_time_sec=20.0381 test_eval_time_sec=1.2209 test_eval_batches_per_sec=9.0100 test_eval_targets_per_sec=17184.5538
+  Total time: 72.1 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 30
+    eval_batch_size: 2048
+    learning_rate: 0.00020145
+    train_batch_size: 1024
+    weight_decay: 1e-06
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/retail_rocket_FDSA_add_stage1_retail_rocket_fdsa_regularization_20260418_194546_703685_pid1728262.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/normal/add_stage1_regularization/ADD/retail_rocket/FDSA/retail_rocket_FDSA_add_stage1_retail_rocket_fdsa_regularization_20260418_194546_703685_pid1728262.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/special/add_stage1_regularization/ADD/retail_rocket/FDSA/retail_rocket_FDSA_add_stage1_retail_rocket_fdsa_regularization_20260418_194546_703685_pid1728262_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment_addtuning/special/add_stage1_regularization/ADD/retail_rocket/FDSA/retail_rocket_FDSA_add_stage1_retail_rocket_fdsa_regularization_20260418_194546_703685_pid1728262_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1728262 start=2026-04-18T19:45:46 end=2026-04-18T20:57:52

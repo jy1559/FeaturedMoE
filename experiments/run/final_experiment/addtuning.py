@@ -68,6 +68,10 @@ EXPERIMENTS_DIR = CODE_DIR.parents[1]
 HYPEROPT_TUNE_SCRIPT = EXPERIMENTS_DIR / "hyperopt_tune.py"
 
 EXISTING_TRACKS = {
+    "final_experiment_addtuning": {
+        "log_root": ARTIFACT_ROOT / "logs" / "final_experiment_addtuning",
+        "result_root": ARTIFACT_ROOT / "results" / "final_experiment_addtuning",
+    },
     "final_experiment": {
         "log_root": ARTIFACT_ROOT / "logs" / "final_experiment",
         "result_root": ARTIFACT_ROOT / "results" / "final_experiment",
@@ -952,7 +956,7 @@ def write_existing_summary_files(aggregate: Dict[str, Any]) -> None:
     lines = [
         "# Current Final Experiment Summary",
         "",
-        "Stage3 seed means are used when available. Missing stage3 cells fall back to the best stage1/2 test score.",
+        "Stage3 seed means are used when available. Otherwise the table uses the best test score found across existing stage1/2 runs, including the current final_experiment_addtuning track.",
         "",
         "| Dataset | " + " | ".join(MODEL_LABELS.get(model, model) for model in MODEL_ORDER) + " |",
         "|---|" + "|".join(["---"] * len(MODEL_ORDER)) + "|",
@@ -1301,7 +1305,7 @@ def refine_search_space(
     if stage in {"stage1", "stage2"}:
         lr_points = scaled_axis_budget(dataset, int(policy[f"{stage}_lr_points"]), minimum=3)
         max_other = scaled_axis_budget(dataset, int(policy[f"{stage}_other"]), minimum=2)
-        random_count = int(policy[f"{stage}_random"])
+        random_count = int(policy.get(f"{stage}_random", 0))
     else:
         lr_points = scaled_axis_budget(dataset, int(policy.get("lr_points", 6)), minimum=4)
         max_other = scaled_axis_budget(dataset, int(policy.get("other", 4)), minimum=3)

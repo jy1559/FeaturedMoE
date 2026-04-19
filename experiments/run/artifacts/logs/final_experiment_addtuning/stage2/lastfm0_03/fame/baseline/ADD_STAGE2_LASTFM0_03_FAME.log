@@ -1,0 +1,92 @@
+# job_id=ADD_STAGE2_LASTFM0_03_FAME dataset=lastfm0.03 model=fame stage=stage2
+# cmd=/venv/FMoE/bin/python /workspace/FeaturedMoE/experiments/hyperopt_tune.py --config-name tune_lfm_small --search-algo tpe --max-evals 8 --tune-epochs 70 --tune-patience 7 --seed 920021 --run-group final_experiment_addtuning --run-axis add_stage2_promote --run-phase ADD_STAGE2_LASTFM0_03_FAME model=fame dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=0 log_wandb=false show_progress=false ++seed=920021 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00019606,0.00027727,0.00039212] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[5e-05,0.0001] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[20,30] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[64,96] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[64,96] ++search_space_type_overrides.embedding_size=choice ++search.inner_size=[256,224] ++search_space_type_overrides.inner_size=choice ++search.num_layers=[2,3] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[2,4] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.1,0.12,0.05] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.12,0.1] ++search_space_type_overrides.attn_dropout_prob=choice ++search.num_experts=[3,2] ++search_space_type_overrides.num_experts=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1741417 ts=2026-04-19T04:05:38
+[UniqueChoice] enabled: dedupe/remap duplicates across 4608 finite combos
+
+=================================================================
+  Hyperopt  |  FAME x lastfm0.03
+  max_evals=8  epochs=70  patience=7  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=2048/4096/4096
+  track=final_experiment_addtuning  axis=add_stage2_promote  phase=ADD_STAGE2_LASTFM0_03_FAME
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, embedding_size, hidden_dropout_prob, hidden_size, inner_size, learning_rate, num_experts, num_heads, num_layers, weight_decay
+Tuned params(len>1): 11  (~4608 discrete combos)
+Tuned groups: 11
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.12, 0.05]                         -> choice
+    learning_rate                   [0.00019606, 0.00027727, 0.00039212]      -> choice
+    weight_decay                    [5e-05, 0.0001]                           -> choice
+  [model_core]
+    attn_dropout_prob               [0.12, 0.1]                               -> choice
+    embedding_size                  [64, 96]                                  -> choice
+    hidden_size                     [64, 96]                                  -> choice
+    inner_size                      [256, 224]                                -> choice
+    num_heads                       [2, 4]                                    -> choice
+    num_layers                      [2, 3]                                    -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [20, 30]                                  -> choice
+    num_experts                     [3, 2]                                    -> choice
+Fixed params(singleton/non-list): 1
+Fixed groups: 1
+  [model_core]
+    dropout_ratio                   0.12                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/8] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, embedding_size=64, hidden_dropout_prob=0.05, hidden_size=96, inner_size=256, learning_rate=0.0002773, num_experts=2, num_heads=4, num_layers=2, weight_decay=5e-05
+  -> MRR@20=0.233600  best=0.233600  (full@70, trial=24.2min, avg=24.4min/trial, total=24.4min, ETA=2.84h)
+[TRIAL_METRICS] cur_best_mrr20=0.233600 cur_best_hr10=0.277300 cur_test_mrr20=0.230300 cur_test_hr10=0.279200 avg_epoch_time_sec=20.7234 test_eval_time_sec=0.0975 test_eval_batches_per_sec=10.2573 test_eval_targets_per_sec=35274.7829 run_best_mrr20=0.233600 run_best_hr10=0.277300 run_test_mrr20=0.230300 run_test_hr10=0.279200
+
+[2/8] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.12, embedding_size=96, hidden_dropout_prob=0.1, hidden_size=64, inner_size=256, learning_rate=0.0001961, num_experts=2, num_heads=4, num_layers=2, weight_decay=5e-05
+  -> MRR@20=0.164000  best=0.233600  (full@70, trial=24.2min, avg=24.3min/trial, total=48.6min, ETA=2.43h)
+[TRIAL_METRICS] cur_best_mrr20=0.164000 cur_best_hr10=0.199800 cur_test_mrr20=0.158500 cur_test_hr10=0.204400 avg_epoch_time_sec=20.7344 test_eval_time_sec=0.0964 test_eval_batches_per_sec=10.3688 test_eval_targets_per_sec=35658.2148 run_best_mrr20=0.233600 run_best_hr10=0.277300 run_test_mrr20=0.230300 run_test_hr10=0.279200
+
+[3/8] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, embedding_size=96, hidden_dropout_prob=0.1, hidden_size=96, inner_size=256, learning_rate=0.0003921, num_experts=2, num_heads=4, num_layers=2, weight_decay=0.0001
+  -> MRR@20=0.293000  best=0.293000  (full@70, trial=24.5min, avg=24.4min/trial, total=1.22h, ETA=2.03h)
+[TRIAL_METRICS] cur_best_mrr20=0.293000 cur_best_hr10=0.341700 cur_test_mrr20=0.285600 cur_test_hr10=0.339900 avg_epoch_time_sec=20.9598 test_eval_time_sec=0.0992 test_eval_batches_per_sec=10.0830 test_eval_targets_per_sec=34675.5024 run_best_mrr20=0.293000 run_best_hr10=0.341700 run_test_mrr20=0.285600 run_test_hr10=0.339900
+
+[4/8] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, embedding_size=96, hidden_dropout_prob=0.12, hidden_size=96, inner_size=256, learning_rate=0.0001961, num_experts=2, num_heads=4, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.162600  best=0.293000  (full@70, trial=27.6min, avg=25.2min/trial, total=1.68h, ETA=1.68h)
+[TRIAL_METRICS] cur_best_mrr20=0.162600 cur_best_hr10=0.197900 cur_test_mrr20=0.158200 cur_test_hr10=0.202300 avg_epoch_time_sec=23.6381 test_eval_time_sec=0.1018 test_eval_batches_per_sec=9.8234 test_eval_targets_per_sec=33782.7282 run_best_mrr20=0.293000 run_best_hr10=0.341700 run_test_mrr20=0.285600 run_test_hr10=0.339900
+
+[5/8] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, embedding_size=96, hidden_dropout_prob=0.12, hidden_size=96, inner_size=224, learning_rate=0.0003921, num_experts=3, num_heads=4, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.290100  best=0.293000  (early_stop@68, trial=30.1min, avg=26.2min/trial, total=2.18h, ETA=1.31h)
+[TRIAL_METRICS] cur_best_mrr20=0.290100 cur_best_hr10=0.337500 cur_test_mrr20=0.279200 cur_test_hr10=0.331900 avg_epoch_time_sec=26.5680 test_eval_time_sec=0.1030 test_eval_batches_per_sec=9.7053 test_eval_targets_per_sec=33376.3987 run_best_mrr20=0.293000 run_best_hr10=0.341700 run_test_mrr20=0.285600 run_test_hr10=0.339900
+[TIME_BUDGET] reached limit=2.000h after 5/8 trials (elapsed=2.18h). Stopping new trials and finalizing current best.
+
+=================================================================
+  DONE  |  FAME x lastfm0.03
+  Best MRR@20 = 0.293000  |  5/8 trials OK
+  Best HR@10  = 0.341700
+  Test MRR@20 = 0.285600  (best-valid checkpoint)
+  Test HR@10  = 0.339900  (best-valid checkpoint)
+  Stop reason = time_budget(2.000h) reached at 2.18h
+  Avg epoch time = 20.960 sec/epoch
+  Final test eval = 0.099 sec | batches/s=10.083 | targets/s=34675.502
+[RUN_METRICS] best_valid_mrr20=0.293000 best_valid_hr10=0.341700 test_mrr20=0.285600 test_hr10=0.339900 avg_epoch_time_sec=20.9598 test_eval_time_sec=0.0992 test_eval_batches_per_sec=10.0830 test_eval_targets_per_sec=34675.5024
+  Total time: 130.9 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 30
+    attn_dropout_prob: 0.12
+    embedding_size: 96
+    hidden_dropout_prob: 0.1
+    hidden_size: 96
+    inner_size: 256
+    learning_rate: 0.00039212
+    num_experts: 2
+    num_heads: 4
+    num_layers: 2
+    weight_decay: 0.0001
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/lastfm0.03_FAME_add_stage2_lastfm0_03_fame_20260419_040539_151067_pid1741417.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/normal/add_stage2_promote/ADD/lastfm0.03/FAME/lastfm0.03_FAME_add_stage2_lastfm0_03_fame_20260419_040539_151067_pid1741417.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/special/add_stage2_promote/ADD/lastfm0.03/FAME/lastfm0.03_FAME_add_stage2_lastfm0_03_fame_20260419_040539_151067_pid1741417_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment_addtuning/special/add_stage2_promote/ADD/lastfm0.03/FAME/lastfm0.03_FAME_add_stage2_lastfm0_03_fame_20260419_040539_151067_pid1741417_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1741417 start=2026-04-19T04:05:38 end=2026-04-19T06:16:32

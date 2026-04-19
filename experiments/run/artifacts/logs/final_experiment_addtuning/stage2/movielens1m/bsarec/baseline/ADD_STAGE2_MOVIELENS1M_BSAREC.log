@@ -1,0 +1,96 @@
+# job_id=ADD_STAGE2_MOVIELENS1M_BSAREC dataset=movielens1m model=bsarec stage=stage2
+# cmd=/venv/FMoE/bin/python /workspace/FeaturedMoE/experiments/hyperopt_tune.py --config-name tune_ml --search-algo tpe --max-evals 6 --tune-epochs 70 --tune-patience 7 --seed 920025 --run-group final_experiment_addtuning --run-axis add_stage2_promote --run-phase ADD_STAGE2_MOVIELENS1M_BSAREC model=bsarec dataset=movielens1m eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=4 log_wandb=false show_progress=false ++seed=920025 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00056203,0.00087962,0.00137668] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-05,1e-06] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[20,10] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[64,96] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[96,112] ++search_space_type_overrides.embedding_size=choice ++search.inner_size=[224,256] ++search_space_type_overrides.inner_size=choice ++search.num_layers=[2,1] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,2] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.15,0.13] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.15,0.12] ++search_space_type_overrides.attn_dropout_prob=choice ++search.bsarec_alpha=[0.5,0.55] ++search_space_type_overrides.bsarec_alpha=choice ++search.bsarec_c=[2,3] ++search_space_type_overrides.bsarec_c=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1742530 ts=2026-04-19T04:25:55
+[UniqueChoice] enabled: dedupe/remap duplicates across 6144 finite combos
+
+=================================================================
+  Hyperopt  |  BSARec x movielens1m
+  max_evals=6  epochs=70  patience=7  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/4096/4096
+  track=final_experiment_addtuning  axis=add_stage2_promote  phase=ADD_STAGE2_MOVIELENS1M_BSAREC
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, bsarec_alpha, bsarec_c, embedding_size, hidden_dropout_prob, hidden_size, inner_size, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 12  (~6144 discrete combos)
+Tuned groups: 12
+  [optimization]
+    hidden_dropout_prob             [0.15, 0.13]                              -> choice
+    learning_rate                   [0.00056203, 0.00087962, 0.00137668]      -> choice
+    weight_decay                    [1e-05, 1e-06]                            -> choice
+  [model_core]
+    attn_dropout_prob               [0.15, 0.12]                              -> choice
+    embedding_size                  [96, 112]                                 -> choice
+    hidden_size                     [64, 96]                                  -> choice
+    inner_size                      [224, 256]                                -> choice
+    num_heads                       [1, 2]                                    -> choice
+    num_layers                      [2, 1]                                    -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [20, 10]                                  -> choice
+    bsarec_alpha                    [0.5, 0.55]                               -> choice
+    bsarec_c                        [2, 3]                                    -> choice
+Fixed params(singleton/non-list): 1
+Fixed groups: 1
+  [model_core]
+    dropout_ratio                   0.12                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/6] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, bsarec_alpha=0.55, bsarec_c=2, embedding_size=112, hidden_dropout_prob=0.13, hidden_size=96, inner_size=256, learning_rate=0.0008796, num_heads=1, num_layers=1, weight_decay=1e-05
+  -> MRR@20=0.088600  best=0.088600  (full@70, trial=4.4min, avg=4.6min/trial, total=4.6min, ETA=23.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.088600 cur_best_hr10=0.203200 cur_test_mrr20=0.061100 cur_test_hr10=0.138500 avg_epoch_time_sec=3.7609 test_eval_time_sec=0.0450 test_eval_batches_per_sec=22.1998 test_eval_targets_per_sec=47929.4480 run_best_mrr20=0.088600 run_best_hr10=0.203200 run_test_mrr20=0.061100 run_test_hr10=0.138500
+
+[2/6] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, bsarec_alpha=0.55, bsarec_c=3, embedding_size=96, hidden_dropout_prob=0.13, hidden_size=64, inner_size=224, learning_rate=0.001377, num_heads=2, num_layers=1, weight_decay=1e-05
+  -> MRR@20=0.086400  best=0.088600  (early_stop@57, trial=3.7min, avg=4.1min/trial, total=8.3min, ETA=16.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.086400 cur_best_hr10=0.197200 cur_test_mrr20=0.058900 cur_test_hr10=0.139400 avg_epoch_time_sec=3.8885 test_eval_time_sec=0.0453 test_eval_batches_per_sec=22.0696 test_eval_targets_per_sec=47648.2504 run_best_mrr20=0.088600 run_best_hr10=0.203200 run_test_mrr20=0.061100 run_test_hr10=0.138500
+
+[3/6] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, bsarec_alpha=0.55, bsarec_c=2, embedding_size=112, hidden_dropout_prob=0.13, hidden_size=64, inner_size=256, learning_rate=0.001377, num_heads=2, num_layers=1, weight_decay=1e-05
+  -> MRR@20=0.088800  best=0.088800  (early_stop@69, trial=4.4min, avg=4.2min/trial, total=12.7min, ETA=12.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.088800 cur_best_hr10=0.199500 cur_test_mrr20=0.059600 cur_test_hr10=0.155200 avg_epoch_time_sec=3.8102 test_eval_time_sec=0.0441 test_eval_batches_per_sec=22.6825 test_eval_targets_per_sec=48971.4264 run_best_mrr20=0.088800 run_best_hr10=0.199500 run_test_mrr20=0.059600 run_test_hr10=0.155200
+
+[4/6] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, bsarec_alpha=0.5, bsarec_c=2, embedding_size=96, hidden_dropout_prob=0.13, hidden_size=96, inner_size=256, learning_rate=0.0008796, num_heads=1, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.089600  best=0.089600  (early_stop@65, trial=6.5min, avg=4.8min/trial, total=19.2min, ETA=9.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.089600 cur_best_hr10=0.204100 cur_test_mrr20=0.058700 cur_test_hr10=0.138900 avg_epoch_time_sec=5.9850 test_eval_time_sec=0.0448 test_eval_batches_per_sec=22.2973 test_eval_targets_per_sec=48139.9108 run_best_mrr20=0.089600 run_best_hr10=0.204100 run_test_mrr20=0.058700 run_test_hr10=0.138900
+
+[5/6] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, bsarec_alpha=0.55, bsarec_c=3, embedding_size=96, hidden_dropout_prob=0.13, hidden_size=64, inner_size=256, learning_rate=0.001377, num_heads=1, num_layers=1, weight_decay=1e-05
+  -> MRR@20=0.089200  best=0.089600  (full@70, trial=4.3min, avg=4.7min/trial, total=23.5min, ETA=4.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.089200 cur_best_hr10=0.205500 cur_test_mrr20=0.058900 cur_test_hr10=0.141700 avg_epoch_time_sec=3.6766 test_eval_time_sec=0.0458 test_eval_batches_per_sec=21.8464 test_eval_targets_per_sec=47166.2856 run_best_mrr20=0.089600 run_best_hr10=0.204100 run_test_mrr20=0.058700 run_test_hr10=0.138900
+
+[6/6] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, bsarec_alpha=0.55, bsarec_c=2, embedding_size=112, hidden_dropout_prob=0.13, hidden_size=96, inner_size=224, learning_rate=0.000562, num_heads=2, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.084000  best=0.089600  (full@70, trial=8.0min, avg=5.3min/trial, total=31.7min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.084000 cur_best_hr10=0.180600 cur_test_mrr20=0.054800 cur_test_hr10=0.132400 avg_epoch_time_sec=6.8710 test_eval_time_sec=0.0470 test_eval_batches_per_sec=21.2581 test_eval_targets_per_sec=45896.1924 run_best_mrr20=0.089600 run_best_hr10=0.204100 run_test_mrr20=0.058700 run_test_hr10=0.138900
+
+=================================================================
+  DONE  |  BSARec x movielens1m
+  Best MRR@20 = 0.089600  |  6/6 trials OK
+  Best HR@10  = 0.204100
+  Test MRR@20 = 0.058700  (best-valid checkpoint)
+  Test HR@10  = 0.138900  (best-valid checkpoint)
+  Avg epoch time = 5.985 sec/epoch
+  Final test eval = 0.045 sec | batches/s=22.297 | targets/s=48139.911
+[RUN_METRICS] best_valid_mrr20=0.089600 best_valid_hr10=0.204100 test_mrr20=0.058700 test_hr10=0.138900 avg_epoch_time_sec=5.9850 test_eval_time_sec=0.0448 test_eval_batches_per_sec=22.2973 test_eval_targets_per_sec=48139.9108
+  Total time: 31.7 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 10
+    attn_dropout_prob: 0.15
+    bsarec_alpha: 0.5
+    bsarec_c: 2
+    embedding_size: 96
+    hidden_dropout_prob: 0.13
+    hidden_size: 96
+    inner_size: 256
+    learning_rate: 0.00087962
+    num_heads: 1
+    num_layers: 2
+    weight_decay: 1e-05
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/movielens1m_BSARec_add_stage2_movielens1m_bsarec_20260419_042555_951545_pid1742530.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/normal/add_stage2_promote/ADD/movielens1m/BSARec/movielens1m_BSARec_add_stage2_movielens1m_bsarec_20260419_042555_951545_pid1742530.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/special/add_stage2_promote/ADD/movielens1m/BSARec/movielens1m_BSARec_add_stage2_movielens1m_bsarec_20260419_042555_951545_pid1742530_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment_addtuning/special/add_stage2_promote/ADD/movielens1m/BSARec/movielens1m_BSARec_add_stage2_movielens1m_bsarec_20260419_042555_951545_pid1742530_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1742530 start=2026-04-19T04:25:55 end=2026-04-19T04:57:35

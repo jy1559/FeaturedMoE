@@ -5,9 +5,9 @@
 - run_group: final_experiment_addtuning
 - run_axis: add_stage1_architecture
 - run_phase: ADD_STAGE1_BEAUTY_BSAREC_ARCHITECTURE
-- best_mrr@20: 0.0067
-- test_mrr@20: 0.0034
-- test_hr@10: 0.0115
+- best_mrr@20: 0.013
+- test_mrr@20: 0.0057
+- test_hr@10: 0.0143
 
 ## Artifacts
 
