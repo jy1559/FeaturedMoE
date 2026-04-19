@@ -85,11 +85,11 @@ All addtuning jobs inherit the existing safeguards: OOM retries halve train/eval
 
 | Stage | Jobs | Light | Medium | Heavy | GPU-hours | Est. Wall-hours | Longest Job |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| stage1 | 144 | 40 | 56 | 48 | 51.62 | 6.45 | 1.99 |
-| stage2 | 36 | 10 | 14 | 12 | 27.09 | 3.39 | 2.00 |
-| stage3 | 62 | 10 | 28 | 24 | 9.83 | 1.23 | 0.71 |
-| stage4 | 20 | 4 | 9 | 7 | 11.72 | 2.00 | 2.00 |
-| stage5 | 34 | 7 | 16 | 11 | 3.89 | 0.56 | 0.56 |
+| stage1 | 144 | 40 | 56 | 48 | 70.91 | 8.86 | 2.00 |
+| stage2 | 36 | 10 | 14 | 12 | 31.90 | 3.99 | 2.00 |
+| stage3 | 62 | 10 | 28 | 24 | 15.67 | 1.96 | 1.20 |
+| stage4 | 20 | 4 | 9 | 7 | 11.15 | 2.00 | 2.00 |
+| stage5 | 34 | 7 | 16 | 11 | 3.87 | 0.62 | 0.62 |
 
-Total estimated GPU-hours: 104.14
-Total estimated wall-hours on 8 GPUs: 13.62
+Total estimated GPU-hours: 133.51
+Total estimated wall-hours on 8 GPUs: 17.43
