@@ -3,6 +3,11 @@ set -euo pipefail
 
 # Clean + rerun Q2~Q5 with per-question dataset/seed/hparam budgets.
 # Intended for an already-running tmux session.
+#
+# Note:
+# - CLEAN_FIRST=1 removes existing q2~q5 log roots before launch.
+# - RESUME_FLAG defaults to --no-resume-from-logs here, so this entrypoint is
+#   intentionally destructive unless you override both knobs.
 
 REPO_ROOT="/workspace/FeaturedMoE"
 PY_BIN="${RUN_PYTHON_BIN:-/venv/FMoE/bin/python}"
@@ -20,7 +25,7 @@ DRY_RUN_FLAG="${DRY_RUN_FLAG:-}"
 # ----- Q2 (multi-dataset; split lastfm profile) -----
 Q2_MAIN_DATASETS="${Q2_MAIN_DATASETS:-KuaiRecLargeStrictPosV2_0.2,retail_rocket,foursquare}"
 Q2_LFM_DATASET="${Q2_LFM_DATASET:-lastfm0.03}"
-Q2_TOPK="${Q2_T OPK:-2}"
+Q2_TOPK="${Q2_TOPK:-2}"
 Q2_SEEDS="${Q2_SEEDS:-1,2,3}"
 Q2_MAX_EVALS="${Q2_MAX_EVALS:-4}"
 Q2_LFM_SEEDS="${Q2_LFM_SEEDS:-1,2}"

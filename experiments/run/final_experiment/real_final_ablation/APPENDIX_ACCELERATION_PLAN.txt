@@ -1,0 +1,225 @@
+RouteRec real_final_ablation acceleration memo
+Date: 2026-04-20
+
+Scope
+- Summarize the speed-related decisions from the recent debugging and patch session.
+- Extend the same reasoning to appendix A-K runs.
+- Focus on preserving paper-facing outputs while reducing unnecessary runtime and disk writes.
+
+1. What was already changed in code
+
+Main-body changes already applied
+- Disable new on-disk dataset/dataloader cache writes.
+- Keep in-memory cache enabled and expand max_in_memory_data_cache from 1 to 4.
+- Disable session split cache writes under saved/.
+- Set reproducibility to false by default for faster runtime.
+- Enable cudnn benchmark through Hydra-safe override form.
+- Add question-specific logging policy in real_final_ablation/common.py.
+  - Q2 keeps special and diag logging because q2_routing_profile.csv depends on diag_raw_test_json.
+  - Q3 keeps generic special metrics but disables FMoE diag/special/family-ablation logging.
+  - Q5 disables training-time special/diag/family-ablation logging and keeps only the postprocess path that actually matters.
+- Add a resume-safe shell wrapper.
+- Fix the Q2_TOPK shell typo.
+- Fix the Hydra override bug that caused status=fail for every launched run.
+
+Why these changes matter
+- Disk usage no longer grows from recbole cache writes under saved/recbole_cache.
+- Repeated trial startup cost should drop because more dataset/dataloader bundles stay in RAM inside the same process.
+- Q3 no longer pays for FMoE-specific diagnostic payloads that the current notebook pipeline does not consume.
+- Q5 no longer pays for training-time diagnostic payloads that are not needed for case/intervention postprocess.
+- The run can resume cleanly without deleting completed q2/q3 work.
+
+2. Main-body interpretation from the conversation
+
+Observed bottlenecks
+- Training time dominates evaluation time.
+- For a representative KuaiRecLargeStrictPosV2_0.2 run, avg_epoch_time_sec was around 15 to 18 seconds, while test_eval_time_sec was around 0.17 to 0.21 seconds.
+- The strongest repeated overhead signal was data rebuild/cache miss behavior, not final evaluation.
+- Real_final_ablation was previously forcing FMoE special/diag logging on all Q2/Q3/Q5 route jobs even though only part of that output is actually required for the paper notebooks.
+
+Notebook dependency summary
+- Q2 needs diag_raw_test_json because the postrun pipeline rebuilds q2_routing_profile.csv from it.
+- Q3 notebook outputs are built from summary/result metrics and do not require diag_raw_test_json.
+- Q5 needs case-eval and intervention outputs, but those are post-training artifacts and do not require the old always-on training-time FMoE diag logging.
+
+3. How appendix currently works
+
+Appendix orchestration structure
+- The appendix suite lives under experiments/run/final_experiment/real_final_ablation/appendix.
+- appendix/common.py imports and reuses real_final_ablation/common.py for common_arg_parser, build_train_rows, and run_jobs.
+- That means the main-body runtime changes already propagate to appendix sections that launch training through run_jobs.
+
+Sections that already inherit the new speedups automatically
+- special_bins.py
+- structural_ablation.py
+- sparse_routing.py
+- objective_variants.py
+- behavior_slices.py
+- targeted_interventions.py
+- optional_transfer.py when actual training is enabled
+
+These sections inherit
+- disk cache disabled
+- in-memory cache size 4
+- reproducibility false
+- cudnn benchmark enabled
+- question-specific logging policy only if they map to the same question path through the reused main common build_route_command logic
+
+Sections that are mostly export/postprocess and are not the main training bottleneck
+- full_results_export.py
+- export_appendix_bundle.py
+- fill_real_data.py
+- routing_diagnostics.py as a collector/postprocess stage
+
+Sections with separate benchmark logic
+- cost_summary.py
+  - This does not use run_jobs in the same way as the route sections.
+  - It reuses existing summary rows when resume_from_logs is on.
+  - It is already intentionally lightweight, but still pays actual model build/train/infer cost for the measured benchmark rows.
+
+Sections that are effectively placeholders or low priority
+- optional_transfer.py
+  - The code explicitly says transfer is scaffolded and disabled by default.
+  - fill_real_data.py also notes there are no real transfer experiments and writes a placeholder schema.
+  - This section should stay skipped unless the paper really needs it.
+
+4. Appendix-specific acceleration opportunities
+
+A. Highest-value appendix acceleration
+- Prioritize only the appendix sections that produce figures/tables you actually expect to keep in the paper revision.
+- Default appendix section order in run_appendix_suite.py is:
+  full_results,special_bins,structural,sparse,objective,cost,diagnostics,behavior_slices,cases,transfer
+- This should not be treated as mandatory if the current draft only needs a subset.
+
+Recommended practical priority
+- Keep: full_results, structural, sparse, objective, cost
+- Run only when needed: special_bins, diagnostics, behavior_slices, cases
+- Skip by default: transfer
+
+Reason
+- structural, sparse, objective directly support the method and ablation appendix tables.
+- cost is cheap compared with broad training sweeps and fills the efficiency appendix slot.
+- special_bins, behavior_slices, cases, diagnostics are postprocess-heavy because they depend on case-eval style artifacts.
+- transfer is currently scaffolded, not a real experimental dependency.
+
+B. Reuse main-body data instead of retraining where possible
+- fill_real_data.py already reuses Q2/Q3/Q5 outputs and special_bins artifacts to populate appendix CSVs.
+- This is the right direction for speed.
+- If a required appendix table can be derived from existing q2/q3/q5 outputs, do that instead of launching a fresh appendix training family.
+
+Concrete implication
+- Treat fill_real_data.py style reuse as preferred for paper refreshes.
+- Treat new appendix training sweeps as second choice.
+
+C. Restrict appendix sections aggressively
+- run_appendix_suite.py already supports --sections.
+- Use this instead of running the full appendix chain.
+
+Recommended examples
+- Structural only:
+  --sections structural
+- Structural + sparse + objective:
+  --sections structural,sparse,objective
+- Paper-facing compact appendix without heavy case postprocess:
+  --sections full_results,structural,sparse,objective,cost
+
+D. Keep resume enabled for appendix too
+- run_appendix_suite.py defaults to --resume-from-logs.
+- The appendix README states it keeps the same resume behavior.
+- Never pair appendix reruns with manual log deletion unless you intentionally want to invalidate prior appendix results.
+
+E. Avoid heavy postprocess sections unless figures are still alive in the draft
+- special_bins, behavior_slices, cases, and diagnostics have case-eval/intervention style dependencies.
+- These sections can cost much more wall-clock than plain metric-only sections because they do extra export/collection work.
+- Only run them when the corresponding appendix figure/table is still expected to survive into the submission.
+
+F. Keep cost_summary minimal
+- cost_summary.py already defaults to small benchmark settings.
+- To keep it fast, do not widen benchmark_epochs or include extra datasets/models unless the appendix really needs them.
+- Resume should be left on so previously measured rows are reused.
+
+5. Suggested appendix run strategy after the current main-body run
+
+Recommended staged plan
+
+Stage 1: finish main body first
+- Resume Q2-Q5 and let q3/q4/q5 complete with the new runtime settings.
+- Do not start appendix while main-body GPUs are still busy unless you deliberately split GPUs.
+
+Stage 2: populate appendix with lowest-cost, highest-signal sections first
+- Run only:
+  full_results,structural,sparse,objective,cost
+- This gives you the appendix sections most likely to stay in the paper with relatively controlled runtime.
+
+Stage 3: only then decide whether the semantic appendix is still necessary
+- Add special_bins,diagnostics,behavior_slices,cases only if the corresponding appendix figures are still intended for the submission.
+
+Stage 4: leave transfer off unless explicitly needed
+- transfer is currently scaffolded and should not consume runtime by default.
+
+6. Concrete appendix commands
+
+Resume-safe compact appendix run
+cd /workspace/FeaturedMoE
+/venv/FMoE/bin/python experiments/run/final_experiment/real_final_ablation/appendix/run_appendix_suite.py \
+  --datasets KuaiRecLargeStrictPosV2_0.2,beauty,foursquare,retail_rocket,movielens1m,lastfm0.03 \
+  --top-k-configs 1 \
+  --seeds 1 \
+  --gpus 0,1,2,3,4,5,6,7 \
+  --sections full_results,structural,sparse,objective,cost \
+  --resume-from-logs
+
+If only the most important method appendix ablations are needed
+cd /workspace/FeaturedMoE
+/venv/FMoE/bin/python experiments/run/final_experiment/real_final_ablation/appendix/run_appendix_suite.py \
+  --datasets KuaiRecLargeStrictPosV2_0.2,beauty \
+  --top-k-configs 1 \
+  --seeds 1 \
+  --gpus 0,1,2,3 \
+  --sections structural,sparse,objective \
+  --resume-from-logs
+
+If you want appendix bundle export only from already finished runs
+cd /workspace/FeaturedMoE
+/venv/FMoE/bin/python experiments/run/final_experiment/real_final_ablation/appendix/export_appendix_bundle.py
+
+If you want reuse-oriented appendix CSV filling from existing q2/q3/q5 and special_bins outputs
+cd /workspace/FeaturedMoE
+/venv/FMoE/bin/python experiments/run/final_experiment/real_final_ablation/appendix/fill_real_data.py
+
+7. Estimated speed impact for appendix
+
+Already-applied changes should help appendix training sections roughly as follows
+- structural / sparse / objective: about 15% to 30% wall-clock reduction is plausible, especially on large datasets with repeated trial startup.
+- special_bins / behavior_slices / cases: training portion should also improve, but total end-to-end gain can be smaller because postprocess/case-eval remains a visible share.
+- cost_summary: little change from the main-body training patches because this section is already a narrow benchmark script.
+- transfer: not relevant unless the scaffold is replaced by real runs.
+
+The biggest appendix speed lever is not one more micro-optimization.
+It is section selection:
+- Running only full_results,structural,sparse,objective,cost instead of the full appendix suite can save far more time than low-level runtime tuning.
+
+8. Additional code changes worth considering later if appendix is still too slow
+
+Not yet applied, but likely useful
+- Add a dedicated shell wrapper for appendix resume, analogous to the main-body resume shell wrapper.
+- Add a suite-level flag to skip heavy postprocess sections automatically unless explicitly requested.
+- Add forwarding of case-eval-fast style flags through run_appendix_suite.py for behavior-heavy sections if those figures remain necessary.
+- Introduce a small appendix preset shell script with:
+  - CLEAN disabled
+  - resume enabled
+  - transfer omitted
+  - compact section list
+- Expand reuse-first filling so more appendix tables come from main-body outputs instead of fresh appendix retraining.
+
+9. Bottom line
+
+Best practical recommendation
+- Finish main-body resume first.
+- For appendix, do not run the full A-K chain by default.
+- Use the appendix suite with --sections and --resume-from-logs.
+- Prefer the compact section list:
+  full_results,structural,sparse,objective,cost
+- Add special_bins,diagnostics,behavior_slices,cases only if those appendix figures are still required for the paper.
+- Leave transfer off.
+- Prefer fill_real_data.py style reuse whenever a table can be built from existing q2/q3/q5 outputs.

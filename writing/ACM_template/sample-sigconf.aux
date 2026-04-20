@@ -10,142 +10,201 @@
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
 \newlabel{fig:intro-behavioral-features}{{1}{1}{Different users and sessions can require different computational paths}{figure.caption.5}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
-\citation{hidasi2016gru4rec,tang2018caser,wu2019srgnn,kang2018sasrec,sun2019bert4rec}
-\citation{li2020tisasrec,xie2020cl4srec,wang2023multiplecontrast,qiu2022duorec,du2023fearec,shin2024bsarec,liu2025sigma}
-\citation{li2017narm,liu2018stamp,ying2018shan,ma2019hgn,li2019mind,cen2020comirec}
-\citation{li2020tisasrec,zhang2019fdsa,xie2022difsr,du2023fearec}
+\citation{hidasi2016gru4rec,tang2018caser,wu2019srgnn,kang2018sasrec,sun2019bert4rec,li2020tisasrec,xie2020cl4srec,wang2023multiplecontrast,qiu2022duorec,du2023fearec,shin2024bsarec,liu2025sigma}
 \citation{jacobs1991adaptive,jordan1994hme,shazeer2017moe,fedus2022switch}
 \citation{ma2018mmoe,tang2020ple,liu2025fame,bian2023m3srec,zhang2025hm4sr}
+\citation{li2017narm,liu2018stamp,ying2018shan,ma2019hgn,li2019mind,cen2020comirec,quadrana2017hrnn,li2020tisasrec,zhang2019fdsa,xie2022difsr,du2023fearec,bauer2024hybridsession}
+\citation{ma2018mmoe,tang2020ple,liu2025fame,bian2023m3srec,zhang2025hm4sr,zhou2022expertchoice,zoph2022stmoe}
 \@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{2}{section.2}\protected@file@percent }
 \newlabel{sec:related}{{2}{2}{Related Work}{section.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Sequential Recommendation Backbones}{2}{subsection.2.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Heterogeneous User State Modeling}{2}{subsection.2.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Feature-Aware Sequential Recommendation}{2}{subsection.2.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}MoE in Recommendation}{2}{subsection.2.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3}Preliminary}{2}{section.3}\protected@file@percent }
-\newlabel{sec:prelim}{{3}{2}{Preliminary}{section.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Problem Statement}{2}{subsection.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}MoE Background for Sequential Models}{3}{subsection.3.2}\protected@file@percent }
-\newlabel{eq:moe-basic}{{1}{3}{MoE Background for Sequential Models}{equation.3.1}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4}Method}{3}{section.4}\protected@file@percent }
-\newlabel{sec:method}{{4}{3}{Method}{section.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}RouteRec Overview}{3}{subsection.4.1}\protected@file@percent }
-\newlabel{sec:problem-framework}{{4.1}{3}{RouteRec Overview}{subsection.4.1}{}}
-\newlabel{eq:stage-routing}{{3}{3}{RouteRec Overview}{equation.4.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Behavioral Features from Raw Signals}{3}{subsection.4.2}\protected@file@percent }
-\newlabel{sec:feature-construction}{{4.2}{3}{Behavioral Features from Raw Signals}{subsection.4.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Unified Router Composition}{3}{subsection.4.3}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided MoE stages. (b) All stages use the same scalar-group conditional routing composition: a group-level distribution and a conditional intra-group distribution are multiplied to form expert probabilities. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by router formula.}}{4}{figure.caption.6}\protected@file@percent }
-\newlabel{fig:framework}{{2}{4}{Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided MoE stages. (b) All stages use the same scalar-group conditional routing composition: a group-level distribution and a conditional intra-group distribution are multiplied to form expert probabilities. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by router formula}{figure.caption.6}{}}
-\newlabel{eq:group-conditional-product}{{9}{4}{Unified Router Composition}{equation.4.9}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Stage Instantiation by Temporal Scope}{4}{subsection.4.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Macro and mid (session-level routing).}{4}{section*.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Micro (token-level routing).}{4}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Shared-Path Sequential Modeling and Conditional Computation}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Multi-Scope Behavioral Signals in Sequential Recommendation}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Expert Routing Semantics and Inspectability}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided sparse routing stages. (b) All stages use the same hierarchical sparse routing principle: group-level scores select a subset of semantic groups, then conditional intra-group scores select a subset of experts inside each chosen group before forming the active expert mixture. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by the basic sparse routing logic. This figure is a framework-level view; the exact serial paper instantiation is specified in Method Section 3.3 and Appendix\nonbreakingspace \ref {app:method-details}.}}{3}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:framework}{{2}{3}{Overall RouteRec framework. (a) RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided sparse routing stages. (b) All stages use the same hierarchical sparse routing principle: group-level scores select a subset of semantic groups, then conditional intra-group scores select a subset of experts inside each chosen group before forming the active expert mixture. (c) Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by the basic sparse routing logic. This figure is a framework-level view; the exact serial paper instantiation is specified in Method Section 3.3 and Appendix~\ref {app:method-details}}{figure.caption.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Method}{3}{section.3}\protected@file@percent }
+\newlabel{sec:method}{{3}{3}{Method}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}RouteRec Overview}{3}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:problem-framework}{{3.1}{3}{RouteRec Overview}{subsection.3.1}{}}
+\newlabel{eq:stage-routing}{{2}{3}{RouteRec Overview}{equation.3.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Portable Behavioral Cues}{4}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:feature-construction}{{3.2}{4}{Portable Behavioral Cues}{subsection.3.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Coarse-to-Fine Multi-Stage Routing}{4}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Macro and mid (sequence-wise routing).}{4}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Micro (position-wise routing).}{4}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Behavior-Guided Sparse Expert Allocation}{4}{subsection.3.4}\protected@file@percent }
 \citation{zoph2022stmoe}
-\citation{hidasi2016gru4rec,kang2018sasrec,li2020tisasrec}
-\citation{qiu2022duorec,du2023fearec,shin2024bsarec,liu2025sigma}
-\citation{xie2022difsr,zhang2019fdsa,liu2025fame}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Training Objective}{5}{subsection.4.5}\protected@file@percent }
-\newlabel{sec:training-objective}{{4.5}{5}{Training Objective}{subsection.4.5}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5}Experiments}{5}{section.5}\protected@file@percent }
-\newlabel{sec:experiments}{{5}{5}{Experiments}{section.5}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Experimental Setup}{5}{subsection.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Overall Performance: Does Behavior-Guided Routing Help?}{5}{subsection.5.2}\protected@file@percent }
-\newlabel{sec:overall-performance}{{5.2}{5}{Overall Performance: Does Behavior-Guided Routing Help?}{subsection.5.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}What Should Control Routing?}{5}{subsection.5.3}\protected@file@percent }
-\newlabel{sec:routing-control}{{5.3}{5}{What Should Control Routing?}{subsection.5.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Main overall results in the text. We report HR@10, NDCG@10, and MRR@20 in the main paper, and defer the full $k\in \{5,10,20\}$ grid to Appendix\nonbreakingspace A. Bold and underlined values denote the best and second-best results.}}{6}{table.caption.9}\protected@file@percent }
-\newlabel{tab:main-overall}{{1}{6}{Main overall results in the text. We report HR@10, NDCG@10, and MRR@20 in the main paper, and defer the full $k\in \{5,10,20\}$ grid to Appendix~A. Bold and underlined values denote the best and second-best results}{table.caption.9}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Routing-control comparison. (a) Average MRR@20 across shared FFN, hidden-only, mixed, and behavior-guided routing. (b) Routing similarity over feature-similarity buckets.}}{6}{figure.caption.10}\protected@file@percent }
-\newlabel{fig:routing-control-panels}{{3}{6}{Routing-control comparison. (a) Average MRR@20 across shared FFN, hidden-only, mixed, and behavior-guided routing. (b) Routing similarity over feature-similarity buckets}{figure.caption.10}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Why Is the Staged RouteRec Structure Effective?}{6}{subsection.5.4}\protected@file@percent }
-\newlabel{sec:stage-structure}{{5.4}{6}{Why Is the Staged RouteRec Structure Effective?}{subsection.5.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Are Lightweight Cues Enough?}{6}{subsection.5.5}\protected@file@percent }
-\newlabel{sec:lightweight-cues}{{5.5}{6}{Are Lightweight Cues Enough?}{subsection.5.5}{}}
+\citation{jannach2022sessions,quadrana2017hrnn,latifi2021sessionaware}
+\citation{li2017narm,wu2019srgnn}
+\citation{quadrana2017hrnn,lacic2020jobsessions,borgbruun2022insurance}
+\citation{ji2023leakage,gusak2025timesplit}
+\newlabel{eq:group-conditional-product}{{8}{5}{Behavior-Guided Sparse Expert Allocation}{equation.3.8}{}}
+\newlabel{eq:sparse-route}{{9}{5}{Behavior-Guided Sparse Expert Allocation}{equation.3.9}{}}
+\newlabel{eq:sparse-stage-routing}{{10}{5}{Behavior-Guided Sparse Expert Allocation}{equation.3.10}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Training Objective}{5}{subsection.3.5}\protected@file@percent }
+\newlabel{sec:training-objective}{{3.5}{5}{Training Objective}{subsection.3.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Experiments}{5}{section.4}\protected@file@percent }
+\newlabel{sec:experiments}{{4}{5}{Experiments}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Experimental Setup}{5}{subsection.4.1}\protected@file@percent }
+\citation{latifi2021sessionaware,li2017narm,wu2019srgnn}
+\citation{hidasi2016gru4rec,kang2018sasrec,li2020tisasrec,qiu2022duorec,du2023fearec,shin2024bsarec,liu2025fame,xie2022difsr,zhang2019fdsa}
+\citation{galuzzi2020bayesopt}
+\citation{kang2018sasrec,li2020tisasrec}
+\citation{shin2024bsarec}
+\citation{xie2022difsr}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Q1. Does RouteRec Improve Ranking Quality?}{6}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:overall-performance}{{4.2}{6}{Q1. Does RouteRec Improve Ranking Quality?}{subsection.4.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Seen-target test results under the sessionized temporal protocol. Datasets marked with $^\dagger $ are sampled processed subsets (KuaiRec 20\%, LastFM 3\%). For each method, we report the seen-target test metrics of the run achieving the highest mean seen-target test score over the nine reported metrics. Avg.\nonbreakingspace Rank is computed over all rows in this table, where lower is better. The RouteRec column is shaded for readability.}}{6}{table.caption.9}\protected@file@percent }
+\newlabel{tab:main-overall}{{1}{6}{Seen-target test results under the sessionized temporal protocol. Datasets marked with $^\dagger $ are sampled processed subsets (KuaiRec 20\%, LastFM 3\%). For each method, we report the seen-target test metrics of the run achieving the highest mean seen-target test score over the nine reported metrics. Avg.~Rank is computed over all rows in this table, where lower is better. The RouteRec column is shaded for readability}{table.caption.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Routing-control comparison across two dataset groups. Both panels use the same five variants and differ only in dataset grouping, isolating how the routing-control choice behaves in dynamic versus more stable settings.}}{7}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:routing-control-panels}{{3}{7}{Routing-control comparison across two dataset groups. Both panels use the same five variants and differ only in dataset grouping, isolating how the routing-control choice behaves in dynamic versus more stable settings}{figure.caption.10}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Q2. What Should Control Routing?}{7}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:routing-control}{{4.3}{7}{Q2. What Should Control Routing?}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Q3. Why Is RouteRec's Three-Part Design Effective?}{7}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:stage-structure}{{4.4}{7}{Q3. Why Is RouteRec's Three-Part Design Effective?}{subsection.4.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Design-justification ablations. Panel (a) compares the final three-stage design against reduced temporal decompositions, and Panel (b) compares flat versus hierarchical and dense versus sparse routing organizations.}}{8}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:stage-structure-panels}{{4}{8}{Design-justification ablations. Panel (a) compares the final three-stage design against reduced temporal decompositions, and Panel (b) compares flat versus hierarchical and dense versus sparse routing organizations}{figure.caption.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Q4. Is RouteRec Practical as a Sparse Design?}{8}{subsection.4.5}\protected@file@percent }
+\newlabel{sec:efficiency}{{4.5}{8}{Q4. Is RouteRec Practical as a Sparse Design?}{subsection.4.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Q5. What Does the Learned Router Actually Capture?}{8}{subsection.4.6}\protected@file@percent }
+\newlabel{sec:behavior-regimes}{{4.6}{8}{Q5. What Does the Learned Router Actually Capture?}{subsection.4.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Conclusion}{8}{section.5}\protected@file@percent }
+\newlabel{sec:conclusion}{{5}{8}{Conclusion}{section.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Representative routing semantics. Cases are defined by simple post hoc statistics: repeat-heavy, fast exploratory, and narrow-focus. Each panel shows how stage-wise semantic-group emphasis shifts across regimes.}}{9}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:behavior-regime-panels}{{5}{9}{Representative routing semantics. Cases are defined by simple post hoc statistics: repeat-heavy, fast exploratory, and narrow-focus. Each panel shows how stage-wise semantic-group emphasis shifts across regimes}{figure.caption.12}{}}
 \bibstyle{ACM-Reference-Format}
 \bibdata{refs}
-\bibcite{bian2023m3srec}{{1}{2023}{{Bian et~al\mbox  {.}}}{{}}}
-\bibcite{celma2010music}{{2}{2010}{{Celma}}{{}}}
-\bibcite{cen2020comirec}{{3}{2020}{{Cen et~al\mbox  {.}}}{{}}}
-\bibcite{du2023fearec}{{4}{2023}{{Du et~al\mbox  {.}}}{{}}}
-\bibcite{fedus2022switch}{{5}{2022}{{Fedus et~al\mbox  {.}}}{{}}}
-\bibcite{gao2022kuairec}{{6}{2022}{{Gao et~al\mbox  {.}}}{{}}}
-\bibcite{harper2015movielens}{{7}{2015}{{Harper and Konstan}}{{}}}
-\bibcite{hidasi2016gru4rec}{{8}{2016}{{Hidasi et~al\mbox  {.}}}{{}}}
-\bibcite{jacobs1991adaptive}{{9}{1991}{{Jacobs et~al\mbox  {.}}}{{}}}
-\bibcite{jordan1994hme}{{10}{1994}{{Jordan and Jacobs}}{{}}}
-\bibcite{kang2018sasrec}{{11}{2018}{{Kang and McAuley}}{{}}}
-\bibcite{li2019mind}{{12}{2019}{{Li et~al\mbox  {.}}}{{}}}
-\bibcite{li2017narm}{{13}{2017}{{Li et~al\mbox  {.}}}{{}}}
-\bibcite{li2020tisasrec}{{14}{2020}{{Li et~al\mbox  {.}}}{{}}}
-\bibcite{liu2025fame}{{15}{2025b}{{Liu et~al\mbox  {.}}}{{}}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Stage and layout ablations. (a) Stage removal. (b) Dense replacement versus staged routing. (c) Wrapper-map and stage-order variants.}}{7}{figure.caption.11}\protected@file@percent }
-\newlabel{fig:stage-structure-panels}{{4}{7}{Stage and layout ablations. (a) Stage removal. (b) Dense replacement versus staged routing. (c) Wrapper-map and stage-order variants}{figure.caption.11}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Cue-family ablations. (a) Average MRR@20 under cue removal. (b) Gain retention relative to the full cue set.}}{7}{figure.caption.12}\protected@file@percent }
-\newlabel{fig:cue-ablation-panels}{{5}{7}{Cue-family ablations. (a) Average MRR@20 under cue removal. (b) Gain retention relative to the full cue set}{figure.caption.12}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{7}{section.6}\protected@file@percent }
-\newlabel{sec:conclusion}{{6}{7}{Conclusion}{section.6}{}}
-\@writefile{toc}{\contentsline {section}{References}{7}{section*.14}\protected@file@percent }
-\bibcite{liu2018stamp}{{16}{2018}{{Liu et~al\mbox  {.}}}{{}}}
-\bibcite{liu2025sigma}{{17}{2025a}{{Liu et~al\mbox  {.}}}{{}}}
-\bibcite{ma2019hgn}{{18}{2019}{{Ma et~al\mbox  {.}}}{{}}}
-\bibcite{ma2018mmoe}{{19}{2018}{{Ma et~al\mbox  {.}}}{{}}}
-\bibcite{mcauley2015amazon}{{20}{2015}{{McAuley et~al\mbox  {.}}}{{}}}
-\bibcite{qiu2022duorec}{{21}{2022}{{Qiu et~al\mbox  {.}}}{{}}}
-\bibcite{retailrocket2015dataset}{{22}{2015}{{Retail Rocket}}{{}}}
-\bibcite{shazeer2017moe}{{23}{2017}{{Shazeer et~al\mbox  {.}}}{{}}}
-\bibcite{shin2024bsarec}{{24}{2024}{{Shin et~al\mbox  {.}}}{{}}}
-\bibcite{sun2019bert4rec}{{25}{2019}{{Sun et~al\mbox  {.}}}{{}}}
-\bibcite{tang2020ple}{{26}{2020}{{Tang et~al\mbox  {.}}}{{}}}
-\bibcite{tang2018caser}{{27}{2018}{{Tang and Wang}}{{}}}
-\bibcite{wang2023multiplecontrast}{{28}{2023}{{Wang et~al\mbox  {.}}}{{}}}
-\bibcite{wang2021sessionsurvey}{{29}{2021}{{Wang et~al\mbox  {.}}}{{}}}
-\bibcite{wang2019seqsurvey}{{30}{2019}{{Wang et~al\mbox  {.}}}{{}}}
-\bibcite{wu2019srgnn}{{31}{2019}{{Wu et~al\mbox  {.}}}{{}}}
-\bibcite{xie2020cl4srec}{{32}{2020}{{Xie et~al\mbox  {.}}}{{}}}
-\bibcite{xie2022difsr}{{33}{2022}{{Xie et~al\mbox  {.}}}{{}}}
-\bibcite{yang2010foursquare}{{34}{2013}{{Yang et~al\mbox  {.}}}{{}}}
-\bibcite{ying2018shan}{{35}{2018}{{Ying et~al\mbox  {.}}}{{}}}
-\bibcite{zhang2025hm4sr}{{36}{2025}{{Zhang et~al\mbox  {.}}}{{}}}
-\bibcite{zhang2019fdsa}{{37}{2019}{{Zhang et~al\mbox  {.}}}{{}}}
-\bibcite{zoph2022stmoe}{{38}{2022}{{Zoph et~al\mbox  {.}}}{{}}}
+\bibcite{bauer2024hybridsession}{{1}{2024}{{Bauer and Jannach}}{{}}}
+\bibcite{bian2023m3srec}{{2}{2023}{{Bian et~al\mbox  {.}}}{{}}}
+\bibcite{borgbruun2022insurance}{{3}{2022}{{Bruun et~al\mbox  {.}}}{{}}}
+\bibcite{celma2010music}{{4}{2010}{{Celma}}{{}}}
+\bibcite{cen2020comirec}{{5}{2020}{{Cen et~al\mbox  {.}}}{{}}}
+\bibcite{du2023fearec}{{6}{2023}{{Du et~al\mbox  {.}}}{{}}}
+\bibcite{fedus2022switch}{{7}{2022}{{Fedus et~al\mbox  {.}}}{{}}}
+\bibcite{galuzzi2020bayesopt}{{8}{2020}{{Galuzzi et~al\mbox  {.}}}{{}}}
+\bibcite{gao2022kuairec}{{9}{2022}{{Gao et~al\mbox  {.}}}{{}}}
+\bibcite{gusak2025timesplit}{{10}{2025}{{Gusak et~al\mbox  {.}}}{{}}}
+\bibcite{harper2015movielens}{{11}{2015}{{Harper and Konstan}}{{}}}
+\bibcite{hidasi2016gru4rec}{{12}{2016}{{Hidasi et~al\mbox  {.}}}{{}}}
+\bibcite{jacobs1991adaptive}{{13}{1991}{{Jacobs et~al\mbox  {.}}}{{}}}
+\bibcite{jannach2022sessions}{{14}{2022}{{Jannach et~al\mbox  {.}}}{{}}}
+\bibcite{ji2023leakage}{{15}{2023}{{Ji et~al\mbox  {.}}}{{}}}
+\bibcite{jordan1994hme}{{16}{1994}{{Jordan and Jacobs}}{{}}}
+\bibcite{kang2018sasrec}{{17}{2018}{{Kang and McAuley}}{{}}}
+\bibcite{lacic2020jobsessions}{{18}{2020}{{Lacic et~al\mbox  {.}}}{{}}}
+\bibcite{latifi2022seqstudy}{{19}{2022}{{Latifi et~al\mbox  {.}}}{{}}}
+\bibcite{latifi2021sessionaware}{{20}{2021}{{Latifi et~al\mbox  {.}}}{{}}}
+\bibcite{li2019mind}{{21}{2019}{{Li et~al\mbox  {.}}}{{}}}
+\bibcite{li2017narm}{{22}{2017}{{Li et~al\mbox  {.}}}{{}}}
+\bibcite{li2020tisasrec}{{23}{2020}{{Li et~al\mbox  {.}}}{{}}}
+\bibcite{liu2025fame}{{24}{2025b}{{Liu et~al\mbox  {.}}}{{}}}
+\bibcite{liu2018stamp}{{25}{2018}{{Liu et~al\mbox  {.}}}{{}}}
+\bibcite{liu2025sigma}{{26}{2025a}{{Liu et~al\mbox  {.}}}{{}}}
+\bibcite{ma2019hgn}{{27}{2019}{{Ma et~al\mbox  {.}}}{{}}}
+\bibcite{ma2018mmoe}{{28}{2018}{{Ma et~al\mbox  {.}}}{{}}}
+\bibcite{mcauley2015amazon}{{29}{2015}{{McAuley et~al\mbox  {.}}}{{}}}
+\bibcite{qiu2022duorec}{{30}{2022}{{Qiu et~al\mbox  {.}}}{{}}}
+\bibcite{quadrana2017hrnn}{{31}{2017}{{Quadrana et~al\mbox  {.}}}{{}}}
+\bibcite{retailrocket2015dataset}{{32}{2015}{{Retail Rocket}}{{}}}
+\bibcite{shazeer2017moe}{{33}{2017}{{Shazeer et~al\mbox  {.}}}{{}}}
+\@writefile{toc}{\contentsline {section}{References}{10}{section*.14}\protected@file@percent }
+\bibcite{shin2024bsarec}{{34}{2024}{{Shin et~al\mbox  {.}}}{{}}}
+\bibcite{sun2019bert4rec}{{35}{2019}{{Sun et~al\mbox  {.}}}{{}}}
+\bibcite{tang2020ple}{{36}{2020}{{Tang et~al\mbox  {.}}}{{}}}
+\bibcite{tang2018caser}{{37}{2018}{{Tang and Wang}}{{}}}
+\bibcite{wang2023multiplecontrast}{{38}{2023}{{Wang et~al\mbox  {.}}}{{}}}
+\bibcite{wang2021sessionsurvey}{{39}{2021}{{Wang et~al\mbox  {.}}}{{}}}
+\bibcite{wang2019seqsurvey}{{40}{2019}{{Wang et~al\mbox  {.}}}{{}}}
+\bibcite{wu2019srgnn}{{41}{2019}{{Wu et~al\mbox  {.}}}{{}}}
+\bibcite{xie2020cl4srec}{{42}{2020}{{Xie et~al\mbox  {.}}}{{}}}
+\bibcite{xie2022difsr}{{43}{2022}{{Xie et~al\mbox  {.}}}{{}}}
+\bibcite{yang2010foursquare}{{44}{2013}{{Yang et~al\mbox  {.}}}{{}}}
+\bibcite{ying2018shan}{{45}{2018}{{Ying et~al\mbox  {.}}}{{}}}
+\bibcite{zhang2025hm4sr}{{46}{2025}{{Zhang et~al\mbox  {.}}}{{}}}
+\bibcite{zhang2019fdsa}{{47}{2019}{{Zhang et~al\mbox  {.}}}{{}}}
+\bibcite{zhou2022expertchoice}{{48}{2022}{{Zhou et~al\mbox  {.}}}{{}}}
+\bibcite{zoph2022stmoe}{{49}{2022}{{Zoph et~al\mbox  {.}}}{{}}}
+\citation{ji2023leakage,gusak2025timesplit}
 \citation{mcauley2015amazon,yang2010foursquare,gao2022kuairec,celma2010music,harper2015movielens,retailrocket2015dataset}
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Datasets used in the experiments.}}{9}{table.caption.15}\protected@file@percent }
-\newlabel{tab:appendix-datasets}{{2}{9}{Datasets used in the experiments}{table.caption.15}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {A}Dataset, Evaluation, and Full Results}{9}{appendix.A}\protected@file@percent }
-\newlabel{app:data-details}{{A}{9}{Dataset, Evaluation, and Full Results}{appendix.A}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Datasets and Protocol}{9}{subsection.A.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Full Ranking Results}{9}{subsection.A.2}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Extended stage and layout ablations. (a) Stage removal. (b) Dense replacement versus staged routing. (c) Wrapper-map and stage-order variants.}}{9}{figure.caption.17}\protected@file@percent }
-\newlabel{fig:appendix-stage-layout}{{6}{9}{Extended stage and layout ablations. (a) Stage removal. (b) Dense replacement versus staged routing. (c) Wrapper-map and stage-order variants}{figure.caption.17}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {B}Extended Stage and Layout Ablations}{9}{appendix.B}\protected@file@percent }
-\newlabel{app:stage-layout}{{B}{9}{Extended Stage and Layout Ablations}{appendix.B}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {C}Objective and Regularization Variants}{9}{appendix.C}\protected@file@percent }
-\newlabel{app:objective}{{C}{9}{Objective and Regularization Variants}{appendix.C}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D}Extended Diagnostics}{9}{appendix.D}\protected@file@percent }
-\newlabel{app:diagnostics}{{D}{9}{Extended Diagnostics}{appendix.D}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Full ranking results across all cutoffs.}}{10}{table.caption.16}\protected@file@percent }
-\newlabel{tab:appendix-full-overall}{{3}{10}{Full ranking results across all cutoffs}{table.caption.16}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {E}Behavior-Slice Analysis}{10}{appendix.E}\protected@file@percent }
-\newlabel{app:behavior-slices}{{E}{10}{Behavior-Slice Analysis}{appendix.E}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Objective and regularization variants.}}{11}{table.caption.18}\protected@file@percent }
-\newlabel{tab:appendix-objective}{{4}{11}{Objective and regularization variants}{table.caption.18}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Routing diagnostics. (a) Expert usage by stage. (b) Entropy and effective expert count. (c) Stage-wise route consistency. (d) Feature-bucket routing patterns.}}{11}{figure.caption.19}\protected@file@percent }
-\newlabel{fig:appendix-diagnostics}{{7}{11}{Routing diagnostics. (a) Expert usage by stage. (b) Entropy and effective expert count. (c) Stage-wise route consistency. (d) Feature-bucket routing patterns}{figure.caption.19}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Source-target transfer matrix.}}{11}{table.caption.21}\protected@file@percent }
-\newlabel{tab:appendix-transfer-matrix}{{5}{11}{Source-target transfer matrix}{table.caption.21}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {F}Extended Transfer Results}{11}{appendix.F}\protected@file@percent }
-\newlabel{app:transfer}{{F}{11}{Extended Transfer Results}{appendix.F}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Behavior-slice analysis. (a) Slice-wise ranking quality. (b) Relative gain and routing concentration by slice.}}{11}{figure.caption.20}\protected@file@percent }
-\newlabel{fig:appendix-behavior-slices}{{8}{11}{Behavior-slice analysis. (a) Slice-wise ranking quality. (b) Relative gain and routing concentration by slice}{figure.caption.20}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Transfer variants. (a) Low-resource transfer curves. (b) Frozen, finetuned, anchor, and router-granularity comparisons. (c) Multi-source order effects.}}{11}{figure.caption.22}\protected@file@percent }
-\newlabel{fig:appendix-transfer-panels}{{9}{11}{Transfer variants. (a) Low-resource transfer curves. (b) Frozen, finetuned, anchor, and router-granularity comparisons. (c) Multi-source order effects}{figure.caption.22}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Exact RouteRec Instantiation and Sparse Routing Formulation}{12}{appendix.A}\protected@file@percent }
+\newlabel{app:method-details}{{A}{12}{Exact RouteRec Instantiation and Sparse Routing Formulation}{appendix.A}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Main Paper Configuration}{12}{subsection.A.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Fixed main configuration used in the paper.}}{12}{table.caption.15}\protected@file@percent }
+\newlabel{tab:appendix-main-setting}{{2}{12}{Fixed main configuration used in the paper}{table.caption.15}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Implementation Specification and Minimal Execution Notes}{12}{subsection.A.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Implementation-level settings used in the selected paper track.}}{12}{table.caption.16}\protected@file@percent }
+\newlabel{tab:appendix-implementation-spec}{{3}{12}{Implementation-level settings used in the selected paper track}{table.caption.16}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Representative Behavioral Cue Families}{12}{subsection.A.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B}Dataset, Evaluation, and Full Ranking Results}{12}{appendix.B}\protected@file@percent }
+\newlabel{app:data-details}{{B}{12}{Dataset, Evaluation, and Full Ranking Results}{appendix.B}{}}
+\citation{jannach2022sessions,quadrana2017hrnn,latifi2021sessionaware}
+\citation{jannach2022sessions}
+\citation{quadrana2017hrnn,lacic2020jobsessions}
+\citation{borgbruun2022insurance}
+\citation{li2017narm,wu2019srgnn}
+\citation{ji2023leakage,gusak2025timesplit}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Representative cue summaries used by RouteRec in the main configuration. Each stage uses four semantic families with four scalar summaries per family; the table lists representative examples rather than every implementation detail.}}{13}{table.caption.17}\protected@file@percent }
+\newlabel{tab:appendix-feature-families}{{4}{13}{Representative cue summaries used by RouteRec in the main configuration. Each stage uses four semantic families with four scalar summaries per family; the table lists representative examples rather than every implementation detail}{table.caption.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.1}Datasets and Protocol}{13}{subsection.B.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Datasets used in the experiments. Datasets marked with $^\dagger $ are sampled processed subsets.}}{13}{table.caption.18}\protected@file@percent }
+\newlabel{tab:appendix-datasets}{{5}{13}{Datasets used in the experiments. Datasets marked with $^\dagger $ are sampled processed subsets}{table.caption.18}{}}
+\citation{latifi2021sessionaware,li2017narm,wu2019srgnn}
+\citation{latifi2021sessionaware,latifi2022seqstudy}
+\citation{galuzzi2020bayesopt}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.2}Model Selection and Tuning Protocol}{14}{subsection.B.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.3}Full Ranking Results}{14}{subsection.B.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Bounded candidate grids used in the final paper track.}}{15}{table.caption.19}\protected@file@percent }
+\newlabel{tab:appendix-final-grid}{{6}{15}{Bounded candidate grids used in the final paper track}{table.caption.19}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Full seen-target experimental results across all cutoffs. Datasets marked with $^\dagger $ are sampled processed subsets. For each method, we report the seen-target test metrics of the run achieving the highest mean seen-target test score over the nine reported metrics. Avg.\nonbreakingspace Rank is computed over all rows in this table, where lower is better. The RouteRec column is shaded for readability.}}{16}{table.caption.20}\protected@file@percent }
+\newlabel{tab:appendix-full-seen}{{7}{16}{Full seen-target experimental results across all cutoffs. Datasets marked with $^\dagger $ are sampled processed subsets. For each method, we report the seen-target test metrics of the run achieving the highest mean seen-target test score over the nine reported metrics. Avg.~Rank is computed over all rows in this table, where lower is better. The RouteRec column is shaded for readability}{table.caption.20}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Where RouteRec Helps Most: Special Bins}{17}{appendix.C}\protected@file@percent }
+\newlabel{app:special-bins}{{C}{17}{Where RouteRec Helps Most: Special Bins}{appendix.C}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Special-bin definitions and sample counts used in the appendix gain analysis.}}{17}{table.caption.21}\protected@file@percent }
+\newlabel{tab:appendix-special-bins}{{8}{17}{Special-bin definitions and sample counts used in the appendix gain analysis}{table.caption.21}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D}Extended Framework and Structural Ablations}{17}{appendix.D}\protected@file@percent }
+\newlabel{app:stage-layout}{{D}{17}{Extended Framework and Structural Ablations}{appendix.D}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {E}Sparse Routing Design Variants}{17}{appendix.E}\protected@file@percent }
+\newlabel{app:sparse-design}{{E}{17}{Sparse Routing Design Variants}{appendix.E}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Sparse routing design variants, ranging from a dense reference to progressively sparser hierarchical configurations under comparable total expert pools.}}{17}{table.caption.24}\protected@file@percent }
+\newlabel{tab:appendix-sparse-design}{{9}{17}{Sparse routing design variants, ranging from a dense reference to progressively sparser hierarchical configurations under comparable total expert pools}{table.caption.24}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {F}Objective and Regularization Variants}{17}{appendix.F}\protected@file@percent }
+\newlabel{app:objective}{{F}{17}{Objective and Regularization Variants}{appendix.F}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Objective and regularization variants.}}{17}{table.caption.25}\protected@file@percent }
+\newlabel{tab:appendix-objective}{{10}{17}{Objective and regularization variants}{table.caption.25}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Special-bin analysis reporting where the average RouteRec gain is concentrated across session-length and target-frequency regimes. These bins are coarse difficulty- and exposure-oriented partitions rather than semantically defined behavioral regimes; those behavior-centric slices are examined separately in Appendix\nonbreakingspace \ref {app:behavior-slices}.}}{18}{figure.caption.22}\protected@file@percent }
+\newlabel{fig:appendix-special-bins}{{6}{18}{Special-bin analysis reporting where the average RouteRec gain is concentrated across session-length and target-frequency regimes. These bins are coarse difficulty- and exposure-oriented partitions rather than semantically defined behavioral regimes; those behavior-centric slices are examined separately in Appendix~\ref {app:behavior-slices}}{figure.caption.22}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Extended structural ablations. (a) Semantic cue and family-group organization variants. (b) Stage-semantics, temporal-role controls, and layout variants.}}{18}{figure.caption.23}\protected@file@percent }
+\newlabel{fig:appendix-stage-layout}{{7}{18}{Extended structural ablations. (a) Semantic cue and family-group organization variants. (b) Stage-semantics, temporal-role controls, and layout variants}{figure.caption.23}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {G}Full Cost and Efficiency Summary}{18}{appendix.G}\protected@file@percent }
+\newlabel{app:efficiency}{{G}{18}{Full Cost and Efficiency Summary}{appendix.G}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Model cost and efficiency summary for all compared methods.}}{18}{table.caption.26}\protected@file@percent }
+\newlabel{tab:appendix-efficiency}{{11}{18}{Model cost and efficiency summary for all compared methods}{table.caption.26}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {H}Extended Routing Diagnostics}{19}{appendix.H}\protected@file@percent }
+\newlabel{app:diagnostics}{{H}{19}{Extended Routing Diagnostics}{appendix.H}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Routing diagnostics. (a) Group/expert usage heatmaps by stage. (b) Route entropy and effective expert count across variants. Targeted intervention results are reported separately in Appendix\nonbreakingspace \ref {app:qualitative-cases}.}}{19}{figure.caption.27}\protected@file@percent }
+\newlabel{fig:appendix-diagnostics}{{8}{19}{Routing diagnostics. (a) Group/expert usage heatmaps by stage. (b) Route entropy and effective expert count across variants. Targeted intervention results are reported separately in Appendix~\ref {app:qualitative-cases}}{figure.caption.27}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Extended Behavioral Slice Results}{19}{appendix.I}\protected@file@percent }
+\newlabel{app:behavior-slices}{{I}{19}{Extended Behavioral Slice Results}{appendix.I}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {12}{\ignorespaces Diagnostic slice definitions used in the behavior-regime analysis.}}{19}{table.caption.28}\protected@file@percent }
+\newlabel{tab:appendix-slice-definitions}{{12}{19}{Diagnostic slice definitions used in the behavior-regime analysis}{table.caption.28}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Extended behavior-regime analysis. (a) Slice-wise ranking quality across behavioral regimes. (b) Relative RouteRec gain over SASRec by behavioral slice.}}{19}{figure.caption.29}\protected@file@percent }
+\newlabel{fig:appendix-behavior-slices}{{9}{19}{Extended behavior-regime analysis. (a) Slice-wise ranking quality across behavioral regimes. (b) Relative RouteRec gain over SASRec by behavioral slice}{figure.caption.29}{}}
 \newlabel{tocindent-1}{0pt}
 \newlabel{tocindent0}{0pt}
-\newlabel{tocindent1}{7.06522pt}
+\newlabel{tocindent1}{7.25829pt}
 \newlabel{tocindent2}{14.13045pt}
 \newlabel{tocindent3}{0pt}
 \newlabel{tocindent4}{0pt}
 \newlabel{tocindent5}{0pt}
-\newlabel{TotPages}{{12}{12}{}{page.12}{}}
-\gdef \@abspage@last{12}
+\@writefile{toc}{\contentsline {section}{\numberline {J}Targeted Interventions and Qualitative Cases}{20}{appendix.J}\protected@file@percent }
+\newlabel{app:qualitative-cases}{{J}{20}{Targeted Interventions and Qualitative Cases}{appendix.J}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Targeted intervention analysis. (a) Score drop under cue-family perturbation for each behavioral regime. (b) Stage-wise routing profiles for the representative behavioral cases.}}{20}{figure.caption.30}\protected@file@percent }
+\newlabel{fig:appendix-interventions}{{10}{20}{Targeted intervention analysis. (a) Score drop under cue-family perturbation for each behavioral regime. (b) Stage-wise routing profiles for the representative behavioral cases}{figure.caption.30}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {13}{\ignorespaces Representative qualitative routing cases. Selected groups and experts are post hoc observations from the final model's routing decisions on each case type.}}{20}{table.caption.31}\protected@file@percent }
+\newlabel{tab:appendix-qualitative-cases}{{13}{20}{Representative qualitative routing cases. Selected groups and experts are post hoc observations from the final model's routing decisions on each case type}{table.caption.31}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {K}Optional Transfer Results}{20}{appendix.K}\protected@file@percent }
+\newlabel{app:transfer}{{K}{20}{Optional Transfer Results}{appendix.K}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Transfer analysis. Low-resource MRR@20 curves across data fractions comparing full fine-tune, finetuned router, anchor transfer, frozen router, and no-transfer baselines.}}{20}{figure.caption.32}\protected@file@percent }
+\newlabel{fig:appendix-transfer-panels}{{11}{20}{Transfer analysis. Low-resource MRR@20 curves across data fractions comparing full fine-tune, finetuned router, anchor transfer, frozen router, and no-transfer baselines}{figure.caption.32}{}}
+\newlabel{TotPages}{{20}{20}{}{page.20}{}}
+\gdef \@abspage@last{20}

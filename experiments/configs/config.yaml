@@ -38,8 +38,9 @@ save_dataset: false
 save_dataloaders: false
 enable_data_cache: true
 data_cache_dir: saved/recbole_cache
+enable_disk_data_cache: false     # keep cache reuse in RAM only; do not write dataset/dataloader cache files under saved/
 in_memory_data_cache: true
-max_in_memory_data_cache: 1
+max_in_memory_data_cache: 4
 cache_dataloaders: false          # keep false to avoid heavy dataloader pickle overhead on first run
 # Large-dataset cache policy:
 # - keep experiment MAX_ITEM_LIST_LENGTH unchanged
@@ -48,7 +49,7 @@ cache_dataloaders: false          # keep false to avoid heavy dataloader pickle 
 large_dataset_cache_policy_enabled: true
 large_dataset_cache_datasets: [lastfm, lastfm0.3, kuairec, kuairec0.3, kuaireclargestrictposv2, kuaireclargestrictposv2_0.2]
 large_dataset_cache_anchor_len: 50
-enable_session_split_cache: true  # cache converted session splits to skip interaction->sequence rebuild
+enable_session_split_cache: false # session split cache writes files under saved/, so keep it off on space-constrained servers
 use_fast_data_augmentation: true  # optimized SequentialDataset.data_augmentation patch
 sequence_convert_chunk_size: 16384  # interaction->sequence conversion chunk size (SESSION mode)
 fmoe_feature_fp16: true             # store mac_/mid_/mic_ sequence fields as fp16 for faster/lighter data build
@@ -260,7 +261,7 @@ eval_sampling:
 
 # ============ Misc ============
 seed: 42
-reproducibility: true
+reproducibility: false
 
 # ============ Logging ============
 log_wandb: false

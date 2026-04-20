@@ -37,28 +37,28 @@ DATASET_LABELS = {
 
 
 def apply_style() -> None:
-    sns.set_theme(style="whitegrid", context="notebook", font_scale=1.04)
+    sns.set_theme(style="whitegrid", context="notebook", font_scale=1.12)
     plt.rcParams.update(
         {
             "font.family": "DejaVu Serif",
             "figure.facecolor": "white",
             "axes.facecolor": PALETTE["paper"],
             "axes.edgecolor": PALETTE["muted"],
-            "axes.linewidth": 0.8,
+            "axes.linewidth": 0.85,
             "axes.labelcolor": PALETTE["ink"],
             "axes.titlecolor": PALETTE["ink"],
-            "axes.titlesize": 13,
+            "axes.titlesize": 13.8,
             "axes.titleweight": "semibold",
-            "axes.labelsize": 11.2,
+            "axes.labelsize": 11.8,
             "xtick.color": PALETTE["ink"],
             "ytick.color": PALETTE["ink"],
-            "xtick.labelsize": 10.2,
-            "ytick.labelsize": 10.2,
+            "xtick.labelsize": 10.8,
+            "ytick.labelsize": 10.8,
             "grid.color": PALETTE["grid"],
             "grid.linewidth": 0.8,
             "grid.alpha": 0.7,
             "legend.frameon": False,
-            "legend.fontsize": 9.5,
+            "legend.fontsize": 10.0,
             "figure.dpi": 130,
             "savefig.dpi": 220,
         }
@@ -98,6 +98,10 @@ def clean_axes(ax: plt.Axes, grid_axis: str = "y") -> plt.Axes:
     ax.spines["bottom"].set_color(PALETTE["muted"])
     ax.grid(axis=grid_axis, color=PALETTE["grid"], alpha=0.7)
     return ax
+
+
+def remove_panel_label_space(ax: plt.Axes) -> None:
+    ax.set_title(ax.get_title(), pad=8)
 
 
 def panel_label(ax: plt.Axes, label: str) -> None:

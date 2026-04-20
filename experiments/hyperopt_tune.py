@@ -709,6 +709,17 @@ def _put_data_cache(key: str, bundle, max_entries: int):
         _DATA_BUNDLE_CACHE.popitem(last=False)
 
 
+def _disable_disk_data_cache(cfg_dict: dict, *, reason: str | None = None):
+    cfg_dict["save_dataset"] = False
+    cfg_dict["save_dataloaders"] = False
+    cfg_dict["cache_dataloaders"] = False
+    cfg_dict["enable_session_split_cache"] = False
+    cfg_dict["dataset_save_path"] = ""
+    cfg_dict["dataloaders_save_path"] = ""
+    if reason:
+        print(reason)
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  CLI
 # ═══════════════════════════════════════════════════════════════════
@@ -2285,6 +2296,10 @@ def configure_data_cache(cfg_dict: dict):
     if not bool(cfg_dict.get("enable_data_cache", True)):
         return
 
+    if not bool(cfg_dict.get("enable_disk_data_cache", False)):
+        _disable_disk_data_cache(cfg_dict)
+        return
+
     dataset = str(cfg_dict.get("dataset", "dataset"))
     source_tag = _resolve_cache_source_tag(cfg_dict)
     max_len = _resolve_cache_max_len(cfg_dict)
@@ -2296,15 +2311,12 @@ def configure_data_cache(cfg_dict: dict):
     anchor_len = _get_large_dataset_cache_anchor_len(cfg_dict)
     if _is_large_dataset_cache_target(cfg_dict) and int(max_len) != int(anchor_len):
         # Keep experiment MAX_ITEM_LIST_LENGTH unchanged, but skip disk cache writes.
-        cfg_dict["save_dataset"] = False
-        cfg_dict["save_dataloaders"] = False
-        cfg_dict["cache_dataloaders"] = False
-        cfg_dict["enable_session_split_cache"] = False
-        cfg_dict["dataset_save_path"] = ""
-        cfg_dict["dataloaders_save_path"] = ""
-        print(
-            f"[CachePolicy] Disk cache OFF for {dataset} len={max_len} "
-            f"(anchor len={anchor_len} only)"
+        _disable_disk_data_cache(
+            cfg_dict,
+            reason=(
+                f"[CachePolicy] Disk cache OFF for {dataset} len={max_len} "
+                f"(anchor len={anchor_len} only)"
+            ),
         )
         return
 

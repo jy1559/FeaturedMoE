@@ -170,6 +170,119 @@ def _special_metric_rows(result_rows: list[dict[str, Any]]) -> list[dict[str, An
     return out
 
 
+def _display_model_name(raw: str) -> str:
+    name = str(raw or "").strip().lower()
+    if name in {"featured_moe_n3", "featured_moe_n3_tune", "routerec", "routerec_full"}:
+        return "RouteRec"
+    if name == "sasrec":
+        return "SASRec"
+    if name == "fame":
+        return "FAME"
+    return str(raw or "")
+
+
+def _special_bins_rows(result_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    pop_group_map = {
+        "<=5": "tail (1-5)",
+        "6-20": "mid (6-20)",
+        "21-100": "head (21+)",
+        ">100": "head (21+)",
+        "rare_1_5": "tail (1-5)",
+        "21_100": "head (21+)",
+        "101+": "head (21+)",
+    }
+    for row in result_rows:
+        payload = _load_json(str(row.get("result_path", "")))
+        slices = ((payload.get("test_special_metrics") or {}).get("slices") or {})
+        model_label = _display_model_name(str(row.get("model", "")))
+        for source_key in ("session_len", "session_len_legacy"):
+            block = slices.get(source_key) or {}
+            if not isinstance(block, dict):
+                continue
+            for group, metric_row in block.items():
+                out.append(
+                    {
+                        "dataset": row.get("dataset", ""),
+                        "model": model_label,
+                        "bin_type": "session",
+                        "group": str(group),
+                        "test_seen_mrr20": _safe_float((metric_row or {}).get("mrr@20")),
+                    }
+                )
+            if block:
+                break
+        for source_key in ("target_popularity_abs_legacy", "target_popularity_abs"):
+            block = slices.get(source_key) or {}
+            if not isinstance(block, dict):
+                continue
+            for group, metric_row in block.items():
+                mapped_group = pop_group_map.get(str(group), str(group))
+                out.append(
+                    {
+                        "dataset": row.get("dataset", ""),
+                        "model": model_label,
+                        "bin_type": "freq",
+                        "group": mapped_group,
+                        "test_seen_mrr20": _safe_float((metric_row or {}).get("mrr@20")),
+                    }
+                )
+            if block:
+                break
+    return out
+
+
+def _behavior_slice_rows(
+    quality_rows: list[dict[str, Any]],
+    profile_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    score_by_key: dict[tuple[str, str], float] = {}
+    for row in quality_rows:
+        if str(row.get("eval_split", "test")).strip().lower() != "test":
+            continue
+        score_by_key[(str(row.get("dataset", "")), str(row.get("group", "")))] = _safe_float(
+            row.get("test_seen_mrr20")
+        )
+    conc_acc: defaultdict[tuple[str, str], list[float]] = defaultdict(list)
+    for row in profile_rows:
+        if str(row.get("eval_split", "test")).strip().lower() != "test":
+            continue
+        dataset = str(row.get("dataset", ""))
+        group = str(row.get("group", ""))
+        family = group.rsplit("_", 1)[0] if "_" in group else group
+        if str(row.get("routed_family", "")) != family:
+            continue
+        conc_acc[(dataset, group)].append(_safe_float(row.get("usage_share")))
+    out: list[dict[str, Any]] = []
+    for key, score in score_by_key.items():
+        concentration_vals = conc_acc.get(key, [])
+        out.append(
+            {
+                "dataset": key[0],
+                "model": "RouteRec",
+                "group": key[1].replace("exposure_plus", "exploration_plus"),
+                "test_seen_mrr20": score,
+                "route_concentration": sum(concentration_vals) / len(concentration_vals) if concentration_vals else 0.0,
+            }
+        )
+    return out
+
+
+def _normalize_intervention_name(raw: str) -> tuple[str, str]:
+    text = str(raw or "").strip()
+    mapping = {
+        "full": ("full", "Full cues"),
+        "feature_zero_all": ("feature_zero_all", "Zero all cues"),
+        "feature_zero_tempo": ("zero_tempo", "Zero Tempo"),
+        "feature_zero_focus": ("zero_focus", "Zero Focus"),
+        "feature_zero_memory": ("zero_memory", "Zero Memory"),
+        "feature_zero_exposure": ("zero_exposure", "Zero Exposure"),
+        "feature_shuffle_tempo": ("shuffle_tempo", "Shuffle Tempo"),
+        "feature_shuffle_focus": ("shuffle_focus", "Shuffle Focus"),
+    }
+    return mapping.get(text, (text, text))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export appendix notebook bundles.")
     parser.add_argument("--output-dir", default=str(DATA_ROOT))
@@ -192,14 +305,25 @@ def main() -> int:
 
     sparse_diag_rows = _router_diag_rows(sparse_rows)
     structural_diag_rows = _router_diag_rows(structural_rows)
-    behavior_case_quality = _concat_case_tables(LOG_ROOT / "behavior_slices" / "behavior_slices_case_eval_index.csv", dataset_filter, "case_quality_summary.csv")
-    behavior_case_profile = _concat_case_tables(LOG_ROOT / "behavior_slices" / "behavior_slices_case_eval_index.csv", dataset_filter, "case_feature_profiles.csv")
-    special_bins_case = _concat_case_tables(LOG_ROOT / "special_bins" / "special_bins_case_eval_index.csv", dataset_filter, "case_quality_summary.csv")
+    behavior_case_quality = _concat_case_tables(LOG_ROOT / "behavior_slices" / "behavior_slices_case_eval_index.csv", dataset_filter, "case_eval_performance.csv")
+    behavior_case_profile = _concat_case_tables(LOG_ROOT / "behavior_slices" / "behavior_slices_case_eval_index.csv", dataset_filter, "case_eval_routing_profile.csv")
     diagnostic_case_profile = _concat_case_tables(LOG_ROOT / "diagnostics" / "diagnostics_case_eval_index.csv", dataset_filter, "case_eval_routing_profile.csv")
     qualitative_cases = _concat_case_tables(LOG_ROOT / "cases" / "cases_case_eval_index.csv", dataset_filter, "case_eval_routing_profile.csv")
     intervention_rows = _intervention_rows(LOG_ROOT / "cases" / "cases_intervention_index.csv", dataset_filter)
     objective_special = _special_metric_rows(objective_rows)
     transfer_rows = read_csv_rows(LOG_ROOT / "transfer" / "summary.csv")
+    special_bins_rows = _special_bins_rows(_collect_summary_results("special_bins", dataset_filter))
+    behavior_slice_quality_rows = _behavior_slice_rows(behavior_case_quality, behavior_case_profile)
+    normalized_intervention_rows: list[dict[str, Any]] = []
+    for row in intervention_rows:
+        intervention_name, intervention_label = _normalize_intervention_name(str(row.get("intervention", "")))
+        normalized_intervention_rows.append(
+            {
+                **row,
+                "intervention": intervention_name,
+                "intervention_label": intervention_label,
+            }
+        )
 
     if dataset_filter:
         dataset_stats = [row for row in dataset_stats if str(row.get("dataset", "")) in dataset_filter]
@@ -216,12 +340,23 @@ def main() -> int:
     write_csv_rows(output_dir / "appendix_objective_special_metrics.csv", objective_special, ["dataset", "question", "setting_key", "split", "special_block", "metric", "value"])
     write_csv_rows(output_dir / "appendix_cost_summary.csv", cost_rows, ["question", "dataset_scope", "dataset", "model_name", "model", "status", "benchmark_epochs", "build_sec", "train_sec", "infer_sec", "total_params", "active_params", "train_time_ratio", "infer_time_ratio"])
     write_csv_rows(output_dir / "appendix_routing_diagnostics.csv", structural_diag_rows + sparse_diag_rows, ["dataset", "question", "setting_key", "setting_label", "variant_label", "stage_key", "group_entropy_mean", "group_n_eff", "group_top1_max_frac"])
-    write_csv_rows(output_dir / "appendix_special_bins.csv", special_bins_case, ["dataset", "group", "metric", "split", "best_valid_seen_mrr20", "test_seen_mrr20"])
-    write_csv_rows(output_dir / "appendix_behavior_slice_quality.csv", behavior_case_quality, ["dataset", "group", "eval_split", "test_seen_mrr20", "route_concentration"])
-    write_csv_rows(output_dir / "appendix_behavior_slice_profiles.csv", behavior_case_profile, ["dataset", "group", "feature_name", "feature_value"])
-    write_csv_rows(output_dir / "appendix_case_routing_profile.csv", qualitative_cases, ["dataset", "group", "stage_name", "routed_family", "usage_share"])
+    write_csv_rows(output_dir / "appendix_special_bins.csv", special_bins_rows, ["dataset", "model", "bin_type", "group", "test_seen_mrr20"])
+    write_csv_rows(output_dir / "appendix_behavior_slice_quality.csv", behavior_slice_quality_rows, ["dataset", "model", "group", "test_seen_mrr20", "route_concentration"])
+    write_csv_rows(output_dir / "appendix_behavior_slice_profiles.csv", behavior_case_profile, ["dataset", "group", "stage_name", "routed_family", "usage_share"])
+    write_csv_rows(
+        output_dir / "appendix_case_routing_profile.csv",
+        [
+            {
+                **row,
+                "group": str(row.get("group", "")).replace("exposure_plus", "exploration_plus"),
+            }
+            for row in qualitative_cases
+            if str(row.get("eval_split", "test")).strip().lower() == "test"
+        ],
+        ["dataset", "group", "stage_name", "routed_family", "usage_share"],
+    )
     write_csv_rows(output_dir / "appendix_diagnostic_case_profile.csv", diagnostic_case_profile, ["dataset", "group", "stage_name", "routed_family", "usage_share"])
-    write_csv_rows(output_dir / "appendix_intervention_summary.csv", intervention_rows, ["dataset", "intervention", "intervention_label", "target_family", "test_mrr20", "test_seen_mrr20"])
+    write_csv_rows(output_dir / "appendix_intervention_summary.csv", normalized_intervention_rows, ["dataset", "intervention", "intervention_label", "target_family", "test_mrr20", "test_seen_mrr20"])
     write_csv_rows(output_dir / "appendix_transfer_summary.csv", transfer_rows, ["dataset", "setting_key", "status"])
 
     run_index: list[dict[str, Any]] = []

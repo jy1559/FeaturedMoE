@@ -181,6 +181,41 @@ def _postprocess_requirements_for_summary(question: str, summary_row: dict[str, 
     return requirements
 
 
+def _question_logging_policy(question: str) -> dict[str, bool]:
+    question_key = str(question or "").strip().lower()
+    if question_key == "q2":
+        return {
+            "special_logging": True,
+            "log_unseen_target_metrics": True,
+            "fmoe_diag_logging": True,
+            "fmoe_special_logging": True,
+            "fmoe_feature_family_ablation_logging": True,
+        }
+    if question_key == "q3":
+        return {
+            "special_logging": True,
+            "log_unseen_target_metrics": True,
+            "fmoe_diag_logging": False,
+            "fmoe_special_logging": False,
+            "fmoe_feature_family_ablation_logging": False,
+        }
+    if question_key == "q5":
+        return {
+            "special_logging": False,
+            "log_unseen_target_metrics": False,
+            "fmoe_diag_logging": False,
+            "fmoe_special_logging": False,
+            "fmoe_feature_family_ablation_logging": False,
+        }
+    return {
+        "special_logging": False,
+        "log_unseen_target_metrics": False,
+        "fmoe_diag_logging": False,
+        "fmoe_special_logging": False,
+        "fmoe_feature_family_ablation_logging": False,
+    }
+
+
 def _row_identity_matches(index_row: dict[str, str], summary_row: dict[str, Any]) -> bool:
     result_path = str(summary_row.get("result_path", "") or "").strip()
     index_result_path = str(index_row.get("result_path", "") or "").strip()
@@ -1067,6 +1102,7 @@ def build_route_command(row: dict[str, Any], gpu_id: str, *, search_algo: str) -
     search, types = build_search_entries(row.get("search_space") or {}, row.get("fixed_context") or {})
     for key, stype in dict(row.get("search_space_types") or {}).items():
         types[key] = str(stype)
+    logging_policy = _question_logging_policy(str(row.get("question", "")))
     cmd = [
         python_bin(),
         "hyperopt_tune.py",
@@ -1104,19 +1140,24 @@ def build_route_command(row: dict[str, Any], gpu_id: str, *, search_algo: str) -
         "++history_group_field=user_id",
         "++eval_sampling.mode=full",
         "++eval_sampling.auto_full_threshold=999999999",
-        "++special_logging=true",
+        f"++special_logging={'true' if logging_policy['special_logging'] else 'false'}",
         "++exclude_unseen_target_from_main_eval=true",
-        "++log_unseen_target_metrics=true",
+        f"++log_unseen_target_metrics={'true' if logging_policy['log_unseen_target_metrics'] else 'false'}",
         f"gpu_id={gpu_id}",
         "log_wandb=false",
         "show_progress=false",
         "enable_tf32=true",
+        "reproducibility=false",
+        "++enable_cudnn_benchmark=true",
         "fmoe_debug_logging=false",
-        "fmoe_diag_logging=true",
-        "fmoe_special_logging=true",
-        "fmoe_feature_family_ablation_logging=true",
+        f"fmoe_diag_logging={'true' if logging_policy['fmoe_diag_logging'] else 'false'}",
+        f"fmoe_special_logging={'true' if logging_policy['fmoe_special_logging'] else 'false'}",
+        f"fmoe_feature_family_ablation_logging={'true' if logging_policy['fmoe_feature_family_ablation_logging'] else 'false'}",
         "fmoe_feature_ablation_logging=false",
         "fmoe_eval_logging_timing=final_only",
+        "enable_disk_data_cache=false",
+        "enable_session_split_cache=false",
+        "max_in_memory_data_cache=4",
         f"++fmoe_logging_output_root={hydra_literal('run/artifacts/logging')}",
         f"++fmoe_logging_layout={hydra_literal('axis_dataset_arch_hparam')}",
         f"++fmoe_phase={hydra_literal(str(row['question']).upper())}",

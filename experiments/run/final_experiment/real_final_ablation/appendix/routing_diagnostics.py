@@ -30,7 +30,10 @@ def main() -> int:
     case_rows: list[dict[str, str]] = []
     for question in source_questions:
         ok_rows = [row for row in read_summary_rows(question) if str(row.get("status", "")).lower() == "ok"]
-        for summary_row in select_postprocess_rows(ok_rows, postprocess_all=bool(args.postprocess_all)):
+        selected_rows = ok_rows if question in {"sparse", "structural"} else select_postprocess_rows(
+            ok_rows, postprocess_all=bool(args.postprocess_all)
+        )
+        for summary_row in selected_rows:
             existing = find_completed_case_eval_row("diagnostics", summary_row)
             if existing is not None:
                 case_rows.append(existing)

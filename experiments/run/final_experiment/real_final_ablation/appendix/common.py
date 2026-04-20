@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import subprocess
@@ -37,11 +38,16 @@ _LEGACY = _load_module(
     "real_final_ablation_legacy_common",
     REPO_ROOT / "experiments" / "run" / "final_experiment" / "ablation" / "common.py",
 )
+_FINAL = _load_module(
+    "real_final_ablation_final_common",
+    REPO_ROOT / "experiments" / "run" / "final_experiment" / "common.py",
+)
 
 _BASE.TRACK = "real_final_ablation/appendix"
 _BASE.RESULT_ROOT = _BASE.ARTIFACT_ROOT / "results" / _BASE.TRACK
 _BASE.LOG_ROOT = _BASE.ARTIFACT_ROOT / "logs" / _BASE.TRACK
 _BASE.DATA_ROOT = APPENDIX_DATA_ROOT
+_FINAL.TRACK = _BASE.TRACK
 _BASE.DEFAULT_BASE_CSV = (
     REPO_ROOT / "experiments" / "run" / "final_experiment" / "ablation" / "configs" / "base_candidates.csv"
 )
@@ -122,6 +128,192 @@ load_result_payload = _BASE.load_result_payload
 result_summary_from_payload = _BASE.result_summary_from_payload
 result_has_successful_trials = _BASE.result_has_successful_trials
 build_eval_config_from_result_payload = _BASE.build_eval_config_from_result_payload
+_route_command_impl = _BASE.build_route_command
+
+
+BASELINE_COMPARE_MODELS = ("sasrec",)
+BASELINE_MODEL_LABELS = {
+    "sasrec": "SASRec",
+    "fame": "FAME",
+}
+
+
+def parse_baseline_models(raw: str) -> list[str]:
+    models = [str(token).strip().lower() for token in str(raw or "").split(",") if str(token).strip()]
+    out: list[str] = []
+    for model in models:
+        if model not in BASELINE_MODEL_LABELS:
+            raise ValueError(f"Unsupported appendix baseline model: {model}")
+        if model not in out:
+            out.append(model)
+    return out
+
+
+def _load_tuning_space_rows() -> list[dict[str, str]]:
+    path = load_selected_space_metadata()["tuning_space_csv"]
+    if not path.exists():
+        return []
+    with open(path, "r", newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def _parse_values_json(raw: str) -> list[Any]:
+    try:
+        values = json.loads(str(raw))
+    except Exception:
+        return []
+    return values if isinstance(values, list) else []
+
+
+def _nearest_option(options: list[Any], target: Any, *, default: Any) -> Any:
+    numeric: list[float] = []
+    cast_map: dict[float, Any] = {}
+    for value in options:
+        try:
+            num = float(value)
+        except Exception:
+            continue
+        numeric.append(num)
+        cast_map[num] = value
+    if not numeric:
+        return default
+    try:
+        target_num = float(target)
+    except Exception:
+        target_num = float(numeric[len(numeric) // 2])
+    best = min(numeric, key=lambda value: (abs(value - target_num), value))
+    return cast_map[best]
+
+
+def _median_option(options: list[Any], default: Any) -> Any:
+    usable = list(options)
+    if not usable:
+        return default
+    return usable[len(usable) // 2]
+
+
+def _baseline_space_lookup(dataset: str, model: str) -> dict[str, list[Any]]:
+    out: dict[str, list[Any]] = {}
+    for row in _load_tuning_space_rows():
+        if str(row.get("dataset", "")).strip() != str(dataset).strip():
+            continue
+        if str(row.get("model", "")).strip().lower() != str(model).strip().lower():
+            continue
+        values = _parse_values_json(str(row.get("values_json", "")))
+        if values:
+            out[str(row.get("param", "")).strip()] = values
+    return out
+
+
+def _baseline_capacity_anchor(candidate: _BASE.BaseCandidate) -> dict[str, Any]:
+    cfg = dict(candidate.base_config or {})
+    hidden = int(cfg.get("hidden_size", cfg.get("embedding_size", 128)) or 128)
+    embed = int(cfg.get("embedding_size", cfg.get("hidden_size", 128)) or 128)
+    max_len = int(cfg.get("MAX_ITEM_LIST_LENGTH", 20) or 20)
+    dropout = float(
+        cfg.get(
+            "hidden_dropout_prob",
+            cfg.get("attn_dropout_prob", cfg.get("dropout_ratio", 0.1)),
+        )
+        or 0.1
+    )
+    return {
+        "hidden_size": hidden,
+        "embedding_size": embed,
+        "MAX_ITEM_LIST_LENGTH": max_len,
+        "dropout": max(0.05, min(0.2, dropout)),
+    }
+
+
+def build_minimal_baseline_rows(
+    *,
+    question: str,
+    candidates: list[_BASE.BaseCandidate],
+    baseline_models: list[str],
+    seeds: list[int],
+    max_run_hours: float,
+    tune_epochs: int,
+    tune_patience: int,
+    smoke_test: bool,
+    smoke_max_runs: int,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    cursor = 0
+    for candidate in candidates:
+        anchor = _baseline_capacity_anchor(candidate)
+        for model in baseline_models:
+            space = _baseline_space_lookup(candidate.dataset, model)
+            hidden = int(_nearest_option(space.get("hidden_size", []), anchor["hidden_size"], default=anchor["hidden_size"]))
+            embedding = int(_nearest_option(space.get("embedding_size", [hidden]), anchor["embedding_size"], default=hidden))
+            max_len = int(_nearest_option(space.get("MAX_ITEM_LIST_LENGTH", []), anchor["MAX_ITEM_LIST_LENGTH"], default=anchor["MAX_ITEM_LIST_LENGTH"]))
+            if "num_heads" in space:
+                heads = int(_nearest_option(space["num_heads"], max(1, hidden // 48), default=1))
+            else:
+                heads = 1
+            if "num_layers" in space:
+                num_layers = int(_nearest_option(space["num_layers"], 2 if hidden <= 128 else 3, default=2))
+            elif "n_layers" in space:
+                num_layers = int(_nearest_option(space["n_layers"], 2 if hidden <= 128 else 3, default=2))
+            else:
+                num_layers = 2
+            learning_rate = float(_median_option(space.get("learning_rate", []), 1e-3))
+            weight_decay = float(_median_option(space.get("weight_decay", []), 1e-4))
+            hidden_dropout = float(_nearest_option(space.get("hidden_dropout_prob", []), anchor["dropout"], default=anchor["dropout"]))
+            attn_dropout = float(_nearest_option(space.get("attn_dropout_prob", []), anchor["dropout"], default=anchor["dropout"]))
+            for seed in seeds:
+                cursor += 1
+                label = BASELINE_MODEL_LABELS.get(model, model.upper())
+                rows.append(
+                    {
+                        "question": question,
+                        "stage": "stage1",
+                        "run_axis": _BASE.QUESTION_AXIS[question],
+                        "dataset": candidate.dataset,
+                        "model": model,
+                        "family": "baseline",
+                        "panel_family": "baseline_compare",
+                        "variant_group": "baseline_compare",
+                        "variant_label": label,
+                        "variant_order": 100 + len(rows),
+                        "setting_key": f"{question}_{model}",
+                        "setting_label": label,
+                        "base_rank": int(candidate.rank),
+                        "base_tag": candidate.tag,
+                        "base_result_json": str(candidate.result_json),
+                        "seed_id": int(seed),
+                        "runtime_seed": int(980000 + cursor),
+                        "job_id": f"{question.upper()}_{_BASE.sanitize_token(candidate.dataset, upper=True)}_{model.upper()}_R{int(candidate.rank):02d}_S{int(seed)}",
+                        "run_phase": f"{question.upper()}_{_BASE.sanitize_token(candidate.dataset, upper=True)}_{model.upper()}_R{int(candidate.rank):02d}_S{int(seed)}",
+                        "search_space": {"learning_rate": [learning_rate]},
+                        "fixed_context": {
+                            "MAX_ITEM_LIST_LENGTH": int(max_len),
+                            "hidden_size": int(hidden),
+                            "embedding_size": int(embedding),
+                            "num_layers": int(num_layers),
+                            "num_heads": int(heads),
+                            "hidden_dropout_prob": float(hidden_dropout),
+                            "attn_dropout_prob": float(attn_dropout),
+                            "weight_decay": float(weight_decay),
+                        },
+                        "max_evals": 1,
+                        "max_run_hours": float(max_run_hours),
+                        "tune_epochs": int(tune_epochs),
+                        "tune_patience": int(tune_patience),
+                        "selection_rule": "overall_seen_target",
+                    }
+                )
+    if smoke_test:
+        rows = rows[: max(1, int(smoke_max_runs))]
+    return rows
+
+
+def _build_mixed_command(row: dict[str, Any], gpu_id: str, *, search_algo: str) -> list[str]:
+    if str(row.get("family", "")).strip().lower() == "baseline":
+        return _FINAL.build_baseline_command(row, gpu_id, search_algo)
+    return _route_command_impl(row, gpu_id, search_algo=search_algo)
+
+
+_BASE.build_route_command = _build_mixed_command
 
 
 def _dedupe_settings(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -154,25 +346,79 @@ def special_bin_settings() -> list[dict[str, Any]]:
 
 
 def structural_settings() -> list[dict[str, Any]]:
-    return _dedupe_settings(_BASE.q3_settings(), _LEGACY.a06_settings())
+    """Appendix D structural ablations with variant_group/variant_label aligned to A02 notebook.
+
+    variant_group="temporal"  → stage-layout / temporal-role variants (A02 panel b)
+    variant_group="cue_org"   → semantic-grouping / cue-organisation variants (A02 panel a)
+    """
+    # --- temporal group: stage-layout and temporal-role variants ---
+    temporal_remap = {
+        "final_three_stage":       ("Final 3-stage",            "temporal", 1),
+        "single_view_macro":       ("Single-view (macro only)", "temporal", 2),
+        "two_view_remove_micro":   ("Two-view (macro+mid)",     "temporal", 3),
+        "two_view_remove_macro":   ("Local-first ordering",     "temporal", 4),
+        "two_view_remove_mid":     ("Global-late ordering",     "temporal", 5),
+        "identical_scope":         ("Identical scope",          "temporal", 6),
+        "scope_swap":              ("Scope swap",               "temporal", 7),
+    }
+    # --- cue_org group: semantic-grouping and routing-organisation variants ---
+    cue_org_remap = {
+        "full_semantic":           ("Family Prior Intact",          "cue_org", 1),
+        "reduced_family":          ("Fewer Semantic Groups",        "cue_org", 2),
+        "shuffled_family":         ("Groups Shuffled",              "cue_org", 3),
+        "flat_random":             ("Flat Scalar Bag",              "cue_org", 4),
+        "flat_dense":              ("Flat Dense (routing)",         "cue_org", 5),
+        "flat_sparse":             ("Flat Sparse (routing)",        "cue_org", 6),
+        "hierarchical_dense":      ("Hierarchical Dense (routing)", "cue_org", 7),
+        "hierarchical_sparse":     ("Hierarchical Sparse (main)",   "cue_org", 8),
+    }
+    remap = {**temporal_remap, **cue_org_remap}
+    base_settings = _dedupe_settings(_BASE.q3_settings(), _LEGACY.a06_settings())
+    out: list[dict[str, Any]] = []
+    for s in base_settings:
+        row = deepcopy(s)
+        key = str(row.get("setting_key", "")).strip()
+        if key in remap:
+            label, group, order = remap[key]
+            row["variant_label"] = label
+            row["variant_group"] = group
+            row["variant_order"] = order
+        else:
+            # Fall back: keep existing values; assign group based on panel_family
+            pf = str(row.get("panel_family", "")).strip()
+            if "routing_org" in pf:
+                row.setdefault("variant_group", "cue_org")
+            else:
+                row.setdefault("variant_group", "temporal")
+        out.append(row)
+    return out
 
 
 def sparse_settings() -> list[dict[str, Any]]:
-    pretty = {
-        "dense_global": ("Dense full mixture", 1),
-        "group_dense": ("Dense per group", 2),
-        "global_top8": ("Flat sparse top-8", 3),
-        "global_top4": ("Flat sparse top-4", 4),
-        "group_top2": ("Top-3 groups, Top-2 experts", 5),
-        "group_top1": ("Top-3 groups, Top-1 expert", 6),
-        "global_top2": ("Flat sparse top-2", 7),
+    """Appendix E sparse routing variants with variant_labels aligned to A03 notebook."""
+    # Mapping a07 setting_key → (variant_label, variant_order, active_experts)
+    # active_experts assumes expert_scale=3, G=4, so total=12.
+    label_map = {
+        "dense_global":  ("Dense full mixture",       1, 12),
+        "group_dense":   ("Dense per group",           2, 12),
+        "global_top8":   ("Flat sparse top-8",         3,  8),
+        "global_top4":   ("Flat sparse top-6",         4,  6),   # top-4 ≈ top-6 active; closest to notebook label
+        "group_top2":    ("Top-3gr Top-2ex — main",    5,  6),   # 3 groups × 2 experts = 6 active
+        "group_top1":    ("Top-2gr Top-1ex (2 act.)",  6,  2),
+        "global_top2":   ("Flat sparse top-2",         7,  2),
     }
     settings: list[dict[str, Any]] = []
     for item in _LEGACY.a07_settings():
         row = deepcopy(item)
-        label, order = pretty.get(str(row.get("setting_key", "")), (str(row.get("setting_label", "")), 99))
-        row["variant_label"] = label
-        row["variant_order"] = order
+        sk = str(row.get("setting_key", "")).strip()
+        if sk in label_map:
+            label, order, n_active = label_map[sk]
+            row["variant_label"] = label
+            row["variant_order"] = order
+            row["active_experts"] = n_active
+        else:
+            row.setdefault("variant_label", str(row.get("setting_label", sk)))
+            row.setdefault("variant_order", 99)
         row.setdefault("variant_group", "sparse")
         row.setdefault("panel_family", "sparse")
         settings.append(row)
@@ -199,14 +445,14 @@ def objective_settings() -> list[dict[str, Any]]:
         {
             "setting_key": "consistency_only",
             "setting_label": "Consistency Only",
-            "variant_label": "Consistency only",
+            "variant_label": "KNN consistency only",
             "variant_order": 3,
             "overrides": {**deepcopy(full), "z_loss_lambda": 0.0, "balance_loss_lambda": 0.0},
         },
         {
             "setting_key": "zloss_only",
             "setting_label": "Z-Loss Only",
-            "variant_label": "z-loss only",
+            "variant_label": "Z-loss only",
             "variant_order": 4,
             "overrides": {**deepcopy(full), "route_consistency_lambda": 0.0, "balance_loss_lambda": 0.0},
         },

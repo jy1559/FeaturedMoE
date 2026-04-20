@@ -27,6 +27,20 @@ Populate the folder by running:
 /venv/FMoE/bin/python experiments/run/final_experiment/real_final_ablation/export_q2_q5_bundle.py
 ```
 
+## Post-Run Pipeline
+
+For the full post-run flow after Q2/Q3/Q5 experiments finish, use:
+
+- [pipeline/Q2_Q3_Q5_POSTRUN_CHECKLIST.md](/workspace/FeaturedMoE/writing/260419_real_final_exp/pipeline/Q2_Q3_Q5_POSTRUN_CHECKLIST.md)
+- [pipeline/postrun_q2_q5_pipeline.py](/workspace/FeaturedMoE/writing/260419_real_final_exp/pipeline/postrun_q2_q5_pipeline.py)
+
+Recommended command:
+
+```bash
+cd /workspace/FeaturedMoE
+/venv/FMoE/bin/python writing/260419_real_final_exp/pipeline/postrun_q2_q5_pipeline.py
+```
+
 ## Notes
 
 - The notebooks are intentionally lightweight and paper-slot oriented.
