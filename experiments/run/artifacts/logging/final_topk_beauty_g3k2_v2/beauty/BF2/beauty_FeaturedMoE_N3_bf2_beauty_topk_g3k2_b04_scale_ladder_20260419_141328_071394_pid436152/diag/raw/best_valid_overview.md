@@ -1,0 +1,22 @@
+# Diagnostic Overview
+
+- split: best_valid
+- feature_mode: runtime:unknown|ablation:none
+
+## Base Metrics
+
+| stage | n_eff | cv_usage | top1_max | entropy | jitter_adj |
+|---|---:|---:|---:|---:|---:|
+| macro@1 | 8.1774 | 0.9781 | 0.7623 | 2.0641 | 0.0000 |
+
+## KNN Core
+
+| stage | knn_js | knn_score | group_knn_js | group_knn_score | intra_group_knn_mean_js | intra_group_knn_mean_score |
+|---|---:|---:|---:|---:|---:|---:|
+| macro@1 | 0.0059 | 0.9941 | 0.0003 | 0.9997 | 0.0062 | 0.9938 |
+
+## Feature-Group KNN
+
+| stage | tempo_knn_js | tempo_knn_score | focus_knn_js | focus_knn_score | memory_knn_js | memory_knn_score | exposure_knn_js | exposure_knn_score | family_top_share |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| macro@1 | 0.0076 | 0.9924 | 0.0073 | 0.9927 | 0.0067 | 0.9934 | 0.0108 | 0.9892 | 0.1372 |
