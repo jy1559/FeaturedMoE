@@ -224,6 +224,128 @@ def _build_q5_intervention_summary(index_csv: Path, dataset_filter: set[str]) ->
     return out
 
 
+def _build_q4_efficacy_rows(index_csv: Path, dataset_filter: set[str]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for index_row in _read_csv(index_csv):
+        if dataset_filter and str(index_row.get("dataset", "")) not in dataset_filter:
+            continue
+        manifest_path = str(index_row.get("intervention_manifest", "")).strip()
+        if not manifest_path:
+            continue
+        for row in _read_csv(Path(manifest_path)):
+            merged = dict(index_row)
+            merged.update(row)
+            out.append(merged)
+
+    intact_by_anchor: dict[tuple[str, str, str], float] = {}
+    for row in out:
+        if str(row.get("intervention", "")) != "intact":
+            continue
+        anchor = (str(row.get("dataset", "")), str(row.get("base_rank", "")), str(row.get("seed_id", "")))
+        intact_by_anchor[anchor] = _safe_float(row.get("test_seen_mrr20"), 0.0)
+
+    normalized: list[dict[str, Any]] = []
+    for row in out:
+        anchor = (str(row.get("dataset", "")), str(row.get("base_rank", "")), str(row.get("seed_id", "")))
+        intact = intact_by_anchor.get(anchor, 0.0)
+        current = _safe_float(row.get("test_seen_mrr20"), 0.0)
+        normalized.append(
+            {
+                "question": "q4",
+                "dataset": row.get("dataset", ""),
+                "base_rank": row.get("base_rank", ""),
+                "seed_id": row.get("seed_id", ""),
+                "intervention": row.get("intervention", ""),
+                "intervention_label": row.get("intervention_label", ""),
+                "status": row.get("status", ""),
+                "best_valid_seen_mrr20": row.get("best_valid_seen_mrr20", ""),
+                "test_seen_mrr20": row.get("test_seen_mrr20", ""),
+                "delta_vs_intact": (intact - current) if intact > 0 and current >= 0 else "",
+                "result_file": row.get("result_file", ""),
+            }
+        )
+    normalized.sort(key=lambda item: (str(item.get("dataset", "")), str(item.get("base_rank", "")), str(item.get("seed_id", "")), str(item.get("intervention", ""))))
+    return normalized
+
+
+def _q4_variant_order(setting_key: str) -> int:
+    order = {
+        "full": 1,
+        "remove_category": 2,
+        "remove_time": 3,
+        "portable_core": 4,
+    }
+    return int(order.get(str(setting_key), 99))
+
+
+def _build_q4_portability_table(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    allowed_setting_keys = {"full", "remove_category", "remove_time", "portable_core"}
+    deduped_rows: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        if str(row.get("setting_key", "")) not in allowed_setting_keys:
+            continue
+        key = (
+            str(row.get("dataset", "")),
+            str(row.get("setting_key", "")),
+            str(row.get("base_rank", "")),
+            str(row.get("seed_id", "")),
+        )
+        deduped_rows[key] = row
+    rows = list(deduped_rows.values())
+
+    full_seen_by_anchor: dict[tuple[str, str, str], float] = {}
+    for row in rows:
+        if str(row.get("setting_key", "")) != "full":
+            continue
+        anchor = (str(row.get("dataset", "")), str(row.get("base_rank", "")), str(row.get("seed_id", "")))
+        full_seen_by_anchor[anchor] = _safe_float(row.get("test_seen_mrr20"), 0.0)
+
+    table: list[dict[str, Any]] = []
+    for row in rows:
+        anchor = (str(row.get("dataset", "")), str(row.get("base_rank", "")), str(row.get("seed_id", "")))
+        full_seen_mrr20 = full_seen_by_anchor.get(anchor, 0.0)
+        current_seen_mrr20 = _safe_float(row.get("test_seen_mrr20"), 0.0)
+        retention = current_seen_mrr20 / full_seen_mrr20 if full_seen_mrr20 > 0 else ""
+        table.append(
+            {
+                "question": "q4",
+                "dataset": row.get("dataset", ""),
+                "setting_key": row.get("setting_key", ""),
+                "setting_label": row.get("setting_label", row.get("variant_label", "")),
+                "variant_order": _q4_variant_order(str(row.get("setting_key", ""))),
+                "base_rank": row.get("base_rank", ""),
+                "seed_id": row.get("seed_id", ""),
+                "status": row.get("status", ""),
+                "best_valid_seen_mrr20": row.get("best_valid_seen_mrr20", ""),
+                "test_seen_mrr20": row.get("test_seen_mrr20", ""),
+                "test_seen_mean": row.get("test_seen_mean", ""),
+                "retention_vs_full": retention,
+                "result_path": row.get("result_path", ""),
+            }
+        )
+    table.sort(key=lambda item: (str(item.get("dataset", "")), int(item.get("variant_order", 99)), str(item.get("base_rank", "")), str(item.get("seed_id", ""))))
+    return table
+
+
+def _fallback_q4_portability_rows(dataset_filter: set[str]) -> list[dict[str, Any]]:
+    allowed_setting_keys = {"full", "remove_category", "remove_time", "portable_core"}
+    rows = _read_csv(LOG_ROOT / "q4_portability" / "summary.csv")
+    if dataset_filter:
+        rows = [row for row in rows if str(row.get("dataset", "")) in dataset_filter]
+    deduped_rows: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        if str(row.get("setting_key", "")) not in allowed_setting_keys:
+            continue
+        key = (
+            str(row.get("dataset", "")),
+            str(row.get("setting_key", "")),
+            str(row.get("base_rank", "")),
+            str(row.get("seed_id", "")),
+        )
+        deduped_rows[key] = row
+    return list(deduped_rows.values())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export real-final Q2~Q5 outputs.")
     parser.add_argument("--output-dir", default=str(DATA_ROOT))
@@ -236,7 +358,11 @@ def main() -> int:
 
     q2_rows = _collect_summary_rows("q2", dataset_filter)
     q3_rows = _collect_summary_rows("q3", dataset_filter)
-    q4_rows = _read_csv(LOG_ROOT / "q4" / "summary.csv")
+    q4_rows = _collect_summary_rows("q4_portability", dataset_filter)
+    if not q4_rows:
+        q4_rows = _fallback_q4_portability_rows(dataset_filter)
+    q4_table = _build_q4_portability_table(q4_rows)
+    q4_efficacy = _build_q4_efficacy_rows(LOG_ROOT / "q4_portability" / "q4_efficacy_index.csv", dataset_filter)
     q5_rows = _collect_summary_rows("q5", dataset_filter)
 
     q5_case_profile = _concat_case_export(LOG_ROOT / "q5" / "q5_case_eval_index.csv", "case_eval_routing_profile.csv", dataset_filter)
@@ -247,7 +373,21 @@ def main() -> int:
     _write_csv(output_dir / "q2_quality.csv", q2_rows, ["dataset", "variant_label", "test_ndcg20", "test_hit10", "base_rank", "seed_id"])
     _write_csv(output_dir / "q3_temporal_decomp.csv", q3_temporal, ["dataset", "variant_label", "variant_group", "variant_order", "test_ndcg20", "test_hit10", "base_rank", "seed_id"])
     _write_csv(output_dir / "q3_routing_org.csv", q3_routing_org, ["dataset", "variant_label", "variant_group", "variant_order", "test_ndcg20", "test_hit10", "base_rank", "seed_id"])
-    _write_csv(output_dir / "q4_efficiency_table.csv", q4_rows, ["dataset_scope", "dataset", "model_name", "total_params", "active_params", "train_time_ratio", "infer_time_ratio", "status"])
+    _write_csv(
+        output_dir / "q4_portability_table.csv",
+        q4_table,
+        ["dataset", "setting_key", "setting_label", "variant_order", "base_rank", "seed_id", "best_valid_seen_mrr20", "test_seen_mrr20", "test_seen_mean", "retention_vs_full", "status"],
+    )
+    _write_csv(
+        output_dir / "q4_efficiency_table.csv",
+        q4_table,
+        ["dataset", "setting_key", "setting_label", "variant_order", "base_rank", "seed_id", "best_valid_seen_mrr20", "test_seen_mrr20", "test_seen_mean", "retention_vs_full", "status"],
+    )
+    _write_csv(
+        output_dir / "q4_feature_efficacy.csv",
+        q4_efficacy,
+        ["dataset", "base_rank", "seed_id", "intervention", "intervention_label", "best_valid_seen_mrr20", "test_seen_mrr20", "delta_vs_intact", "status"],
+    )
     _write_csv(output_dir / "q5_case_heatmap.csv", q5_case_heatmap, ["dataset", "case_name", "case_type", "stage", "group_name", "expert_rank_or_slot", "selected_mass", "base_rank", "seed_id"])
     _write_csv(output_dir / "q5_intervention_summary.csv", q5_intervention_summary, ["dataset", "intervention", "intervention_label", "target_family", "test_mrr20", "test_seen_mrr20", "base_rank", "seed_id"])
 
@@ -266,7 +406,9 @@ def main() -> int:
                     "q2_quality": len(q2_rows),
                     "q3_temporal_decomp": len(q3_temporal),
                     "q3_routing_org": len(q3_routing_org),
-                    "q4_efficiency_table": len(q4_rows),
+                    "q4_portability_table": len(q4_table),
+                    "q4_efficiency_table": len(q4_table),
+                    "q4_feature_efficacy": len(q4_efficacy),
                     "q5_case_heatmap": len(q5_case_heatmap),
                     "q5_intervention_summary": len(q5_intervention_summary),
                 },

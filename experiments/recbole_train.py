@@ -43,6 +43,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "4"
 os.environ["NUMEXPR_NUM_THREADS"] = "4"
 
 import torch
+import numpy as np
 torch.set_num_threads(4)
 
 # Apply RecBole 1.2.1 bugfix before importing RecBole
@@ -1357,34 +1358,107 @@ def run_checkpoint_evaluation(
             return out
         return set()
 
-    def _filter_loader_by_session_ids(loader_obj, allowed_session_ids: set[int]) -> None:
-        if not allowed_session_ids:
-            return
+    def _slice_rows(value, keep_indices: list[int]):
+        if value is None:
+            return value
+        if torch.is_tensor(value):
+            index_tensor = torch.as_tensor(keep_indices, dtype=torch.long, device=value.device)
+            return value[index_tensor]
+        if isinstance(value, np.ndarray):
+            return value[np.asarray(keep_indices, dtype=np.int64)]
+        if isinstance(value, list):
+            return [value[idx] for idx in keep_indices]
+        try:
+            return value[keep_indices]
+        except Exception:
+            return value
+
+    def _extract_loader_sequence_session_ids(loader_obj):
         dataset_obj = getattr(loader_obj, "dataset", None)
         if dataset_obj is None:
-            return
+            return []
         inter_feat = getattr(dataset_obj, "inter_feat", None)
         if inter_feat is None:
-            return
+            return []
         try:
-            sess = inter_feat["session_id"]
+            sess_all = inter_feat["session_id"]
         except Exception:
-            return
-        # sess is typically a torch tensor of integer ids.
+            return []
+        target_index = getattr(loader_obj, "target_index", None)
+        if target_index is None:
+            target_index = getattr(dataset_obj, "target_index", None)
+        seq_sess = sess_all
+        if target_index is not None:
+            try:
+                target_index_tensor = target_index
+                if not torch.is_tensor(target_index_tensor):
+                    target_index_tensor = torch.as_tensor(target_index_tensor, dtype=torch.long)
+                else:
+                    target_index_tensor = target_index_tensor.long()
+                seq_sess = sess_all[target_index_tensor]
+            except Exception:
+                seq_sess = sess_all
         try:
-            sess_list = sess.tolist()
+            return [int(x) for x in seq_sess.tolist()]
         except Exception:
-            return
-        mask_list = [int(sid) in allowed_session_ids for sid in sess_list]
-        tensor_kwargs = {}
-        if hasattr(sess, "device"):
-            tensor_kwargs["device"] = sess.device
-        mask = torch.tensor(mask_list, dtype=torch.bool, **tensor_kwargs)
+            return []
+
+    def _filter_loader_by_session_ids(loader_obj, allowed_session_ids: set[int]):
+        stats = {
+            "requested_session_ids": int(len(allowed_session_ids or set())),
+            "loader_sequences_before": 0,
+            "loader_sequences_after": 0,
+            "matched_sequences": 0,
+        }
+        if not allowed_session_ids:
+            return loader_obj, stats
+        dataset_obj = getattr(loader_obj, "dataset", None)
+        session_ids = _extract_loader_sequence_session_ids(loader_obj)
+        stats["loader_sequences_before"] = int(len(session_ids))
+        if not session_ids:
+            return loader_obj, stats
+        keep_indices = [idx for idx, session_id in enumerate(session_ids) if session_id in allowed_session_ids]
+        stats["matched_sequences"] = int(len(keep_indices))
+        if len(keep_indices) == len(session_ids):
+            stats["loader_sequences_after"] = int(len(session_ids))
+            return loader_obj, stats
+        if getattr(loader_obj, "is_sequential", False) and dataset_obj is not None:
+            filtered_dataset = copy.copy(dataset_obj)
+            inter_feat = getattr(dataset_obj, "inter_feat", None)
+            if inter_feat is not None:
+                filtered_dataset.inter_feat = inter_feat[keep_indices]
+            filtered_loader = loader_obj.__class__(
+                loader_obj.config,
+                filtered_dataset,
+                getattr(loader_obj, "_sampler", None),
+                shuffle=False,
+            )
+            stats["loader_sequences_after"] = int(len(keep_indices))
+            return filtered_loader, stats
+        for holder in (dataset_obj, loader_obj):
+            if holder is None:
+                continue
+            for attr_name in ("uid_list", "item_list_index", "target_index", "item_list_length", "same_target_index"):
+                if not hasattr(holder, attr_name):
+                    continue
+                attr_value = getattr(holder, attr_name)
+                try:
+                    if len(attr_value) != len(session_ids):
+                        continue
+                except Exception:
+                    continue
+                setattr(holder, attr_name, _slice_rows(attr_value, keep_indices))
+        if hasattr(loader_obj, "data_preprocess") and callable(loader_obj.data_preprocess):
+            try:
+                loader_obj.data_preprocess()
+            except Exception:
+                pass
         try:
-            dataset_obj.inter_feat = inter_feat[mask]
+            loader_obj.pr = 0
         except Exception:
-            # Best-effort fallback: if Interaction slicing is not supported.
-            return
+            pass
+        stats["loader_sequences_after"] = int(len(keep_indices))
+        return loader_obj, stats
 
     cfg_local = cfg_i.copy()
     cfg_local['log_wandb'] = False
@@ -1425,6 +1499,7 @@ def run_checkpoint_evaluation(
         except Exception:
             case_filter_root_raw = ""
 
+    case_filter_stats = {}
     if case_filter_root_raw:
         try:
             case_filter_root = Path(case_filter_root_raw).expanduser().resolve()
@@ -1441,11 +1516,13 @@ def run_checkpoint_evaluation(
                 valid_allowed = _tokens_to_internal_ids(valid_data.dataset, "session_id", valid_tokens) if valid_tokens else set()
                 test_allowed = _tokens_to_internal_ids(test_data.dataset, "session_id", test_tokens) if test_tokens else set()
 
-                _filter_loader_by_session_ids(valid_data, valid_allowed)
-                _filter_loader_by_session_ids(test_data, test_allowed)
-        except Exception:
+                valid_data, case_filter_stats["valid"] = _filter_loader_by_session_ids(valid_data, valid_allowed)
+                test_data, case_filter_stats["test"] = _filter_loader_by_session_ids(test_data, test_allowed)
+                case_filter_stats["valid"]["raw_subset_sessions"] = int(len(valid_tokens))
+                case_filter_stats["test"]["raw_subset_sessions"] = int(len(test_tokens))
+        except Exception as exc:
             # Never fail evaluation purely because case-eval filtering couldn't be applied.
-            pass
+            case_filter_stats["error"] = str(exc)
 
     model_cls = get_model(config['model'])
     model = model_cls(config, train_data.dataset).to(config['device'])
@@ -1478,6 +1555,8 @@ def run_checkpoint_evaluation(
         epoch_count=0,
         eval_show=True,
     )
+    if case_filter_stats:
+        result["case_eval_filter_stats"] = case_filter_stats
     result["best_checkpoint_file"] = str(Path(checkpoint_path).resolve())
     if run_logger is not None and hasattr(run_logger, "output_path"):
         result["logging_output_dir"] = str(run_logger.output_path)

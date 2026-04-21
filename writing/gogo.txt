@@ -1,0 +1,395 @@
+
+
+네, 굳이 없는 필연성을 있는 것처럼 쓰면 오히려 더 위험합니다.
+이 경우엔 “강한 necessity claim”으로 가는 것보다, 명확한 design gap + testable hypothesis + clean control interface로 가는 편이 훨씬 안전하고도 논문답습니다.
+
+당신이 이미 적어둔 규칙에서도 핵심은 비슷합니다.
+즉, “different behavior requires different paths”를 자명한 사실처럼 두지 말고, conditional computation이 가능해졌을 때 무엇이 routing을 drive해야 하는가라는 설계 질문으로 바꾸라는 쪽입니다. 또한 interpretability는 주동기가 아니라, representation path와 routing control path를 분리했을 때 따라오는 보조 장점으로 두는 것이 맞습니다.
+
+그래서 제 결론부터 말하면:
+
+어떻게 가는 게 맞나
+
+강하게 가야 하는 건 “필요성”이 아니라 “질문과 기여의 선명도”입니다.
+
+즉 이런 식입니다.
+
+세션 구조가 다르다
+기존은 그 차이를 주로 representation에 반영한다
+그런데 MoE를 쓰면 이제 computation도 input-dependent하게 바꿀 수 있다
+그럼 여기서 새 질문이 생긴다: 그 computation choice를 무엇이 drive해야 하는가?
+우리는 그 control input을 hidden state가 아니라 explicit behavioral cues로 둔다
+이 선택이 더 납득 가능한 control interface를 만들고, 실제로 성능/분석 측면에서도 의미가 있다
+
+이건 과장이 아닙니다.
+이건 “반드시 이래야 한다”가 아니라, 기존이 충분히 던지지 않았던 설계 질문을 명확히 세우고, 그에 대한 일관된 답을 제시한다는 주장입니다.
+
+이 프레이밍이면 논문 톤도 살고, 허공에 뜨는 느낌도 줄어듭니다.
+
+shared computation 한계는 어떻게 넣을까
+
+여기서도 “shared computation is fundamentally wrong”로 가면 안 됩니다.
+대신 shared computation leaves an untested design assumption 정도로 두는 게 좋습니다.
+
+핵심은 이겁니다.
+
+기존 방법도 behavioral information을 활용할 수 있다.
+하지만 그 정보는 주로 hidden representation을 바꾸는 데 쓰이고, 어떤 transformation을 적용할지를 직접 결정하지는 않는다.
+
+이걸 조금 더 논문식으로 풀면, shared computation의 한계는 아래 셋 중 하나로 잡을 수 있습니다.
+
+후보 A. uniform transformation limitation
+
+가장 무난하고 안전합니다.
+
+핵심 문장:
+
+Shared computation does not prevent the model from representing heterogeneous behaviors, but it applies the same transformation family to all prefixes.
+
+좋은 점:
+
+과장 아님
+기존 방법을 깎아내리지 않음
+“representation vs computation” 대비가 가장 선명함
+
+약한 점:
+
+임팩트는 조금 덜 셈
+
+이걸 이어서:
+
+If behavioral context is useful not only for representation but also for deciding which transformation is most appropriate, then shared computation may leave capacity under-specialized.
+
+이 정도면 충분히 납득 가능합니다.
+“may”를 싫어하면 “leaves this possibility untested”로 바꾸면 더 좋습니다.
+
+후보 B. control entanglement limitation
+
+MoE와 더 잘 붙습니다. 개인적으로 가장 추천합니다.
+
+핵심 문장:
+
+Once MoE introduces conditional computation, the key question is no longer only what to represent, but also what should control the computation path.
+
+이어서:
+
+Hidden-state-only routing ties this control decision to the same latent vector used for prediction, entangling representation and control.
+
+좋은 점:
+
+RouteRec의 two-path design과 바로 연결됨
+hidden-state routing 대비가 분명함
+interpretability도 자연스럽게 따라옴
+
+약한 점:
+
+shared computation 자체의 비판이라기보단, MoE를 쓸 때의 routing design problem에 가깝습니다
+
+그래도 지금 논문에는 이게 제일 맞습니다.
+왜냐하면 당신 논문의 진짜 중심은 “공유 연산이 절대적으로 잘못됐다”가 아니라, conditional computation을 하기로 했다면 control input을 어떻게 둘 것이냐이기 때문입니다.
+
+후보 C. specialization bottleneck
+
+조금 더 강하지만, 실험이 받쳐줘야 합니다.
+
+핵심 문장:
+
+Under a fully shared block, any adaptation to structurally different sessions must be absorbed within one parameterization. This leaves no explicit mechanism for behavior-dependent specialization.
+
+좋은 점:
+
+“왜 expert가 필요한가”가 더 잘 드러남
+
+위험:
+
+리뷰어가 “그 specialization이 꼭 필요하다는 증거 있나?”라고 물을 수 있음
+
+그래서 이건 메인 한 문장으로 쓰기보다는, 뒤의 supporting sentence로 쓰는 게 좋습니다.
+
+제일 추천하는 중심 동기
+
+당신 논문에는 A+B 혼합형이 제일 좋습니다.
+
+한 줄로 쓰면:
+
+Existing sequence models largely use behavioral context to enrich representations under shared computation. We ask a different question: in sessionized sequential recommendation with accessible cross-session history, can ordinary behavioral cues explicitly control conditional computation?
+
+이 문장 좋은 이유:
+
+“그래서 뭘 하고 싶은데?”에 바로 답함
+기존과의 차이가 선명함
+과장하지 않음
+RouteRec 구조와 정확히 맞음
+
+조금 더 RouteRec스럽게 쓰면:
+
+RouteRec studies whether behavioral context should influence not only what a model represents, but also which sparse expert transformation it applies.
+
+이건 아주 좋습니다.
+이게 사실상 논문의 한 문장 요약이 될 수 있습니다.
+
+“그래서 뭘 하고 싶은데?”를 해결하는 중심 thesis 후보군
+1안. computation control gap
+
+가장 추천
+
+핵심 메시지:
+
+Behavioral context has been used to improve representation. RouteRec asks whether it can also serve as an explicit control signal for conditional computation.
+
+장점:
+
+가장 깔끔함
+abstract, intro, method가 한 줄로 연결됨
+challenge(C1/C2/C3)도 자연스럽게 붙음
+
+추천도: 가장 높음
+
+2안. decoupled control interface
+
+MoE 논문다운 맛이 제일 남
+
+핵심 메시지:
+
+In MoE-based sequence models, routing is usually driven by hidden states optimized for prediction. RouteRec decouples routing control from representation by routing on explicit behavioral cues.
+
+장점:
+
+two-path separation을 강하게 살릴 수 있음
+hidden-state routing과의 차별점이 뚜렷함
+
+주의:
+
+“왜 decouple해야 하죠?”라는 반문에 대비해, “explicit control interface”와 “inspectable routing”을 꼭 붙여야 함
+
+추천도: 높음
+
+3안. multi-scale behavioral alignment
+
+당신 모델의 macro/mid/micro를 가장 잘 살림
+
+핵심 메시지:
+
+Behavioral evidence is distributed across different temporal scopes, but routing decisions are often made from a single latent view. RouteRec aligns routing with macro, mid, and micro behavioral scopes.
+
+장점:
+
+stage design 설명이 쉬워짐
+C2가 강해짐
+
+주의:
+
+high-level hook으로는 약간 덜 직관적임
+main hook보다는 second-layer motivation에 더 적합
+
+추천도: 보조 hook으로 좋음
+
+4안. portable cue-driven routing
+
+ordinary logs만으로 cue 만든다는 점을 살리는 버전
+
+핵심 메시지:
+
+Can universally available interaction logs provide a portable control interface for expert routing, without requiring side-information encoders or rich metadata?
+
+장점:
+
+practicality/portability가 생김
+dataset generality를 말하기 좋음
+
+주의:
+
+이걸 너무 앞으로 빼면 논문이 “cheap feature engineering paper”처럼 보일 수 있음
+
+추천도: 보조 동기로 좋음
+
+제 추천 조합
+
+제일 밸런스 좋은 조합은:
+
+메인 hook = 1안 (computation control gap)
+중심 설계 원리 = 2안 (decoupled control interface)
+방법 설계 정당화 = 3안 (multi-scale alignment)
+실용성 보강 = 4안 (portable ordinary logs)
+
+즉 논문 전체 톤은 이렇게 가면 됩니다.
+
+기존은 behavioral context를 주로 representation에 쓴다
+우리는 computation control이라는 다른 질문을 던진다
+그 질문에 대한 답은 hidden-state가 아니라 explicit behavioral cues다
+그 cue는 temporal scope에 따라 다르게 구성돼야 한다
+그리고 routing은 진짜 route 차이가 생기도록 committed해야 한다
+
+이렇게 하면 Introduction부터 C1/C2/C3까지 한 줄로 이어집니다.
+
+challenge는 어떻게 더 강하게 만들까
+
+여기서도 “must-solve theorem”처럼 쓰지 말고,
+If we want cue-driven conditional computation to be meaningful, three design challenges arise
+이렇게 쓰면 됩니다.
+
+즉 challenge를 필수 문제가 아니라 설계가 성립하려면 부딪히는 긴장점(tension) 으로 쓰는 겁니다.
+
+C1 강화안: portability vs informativeness
+
+현재보다 훨씬 좋아질 포인트입니다.
+
+지금 식:
+
+ordinary logs에서 cues를 만들어야 한다
+
+강화 버전:
+
+Routing needs explicit control inputs, but the signals available across datasets are narrow: item identities, timestamps, and sometimes coarse categories. The challenge is to construct behavioral cues that remain portable across settings while still being informative enough to differentiate computation paths.
+
+좋은 점:
+
+왜 challenge인지 바로 보임
+그냥 “feature 만들자”가 아니라 tension이 생김
+C2 강화안: scope alignment
+
+현재도 방향은 맞는데, failure mode를 더 넣어야 합니다.
+
+강화 버전:
+
+Behavioral evidence is not equally visible at all temporal ranges. Cross-session repetition, within-session focus shifts, and local transition patterns emerge over different horizons. A single routing view can therefore mix incompatible evidence, making it unclear which behavioral property actually drives expert selection.
+
+좋은 점:
+
+왜 macro/mid/micro가 필요한지 바로 납득됨
+“blur”보다 훨씬 구체적임
+C3 강화안: commitment vs flexibility
+
+이건 지금도 꽤 괜찮은데 더 날카롭게 만들 수 있습니다.
+
+강화 버전:
+
+Even with cue-driven routing, behavior-dependent computation remains weak if routing spreads weight broadly across experts. To make route differences semantically meaningful, routing must remain selective enough to induce distinct computation paths while still retaining enough flexibility to adapt across sessions.
+
+좋은 점:
+
+sparse routing의 이유가 명확해짐
+단순 “harder to interpret”보다 논문스럽게 읽힘
+section 이름도 조금 바꾸는 게 좋음
+
+지금 “Problem and Challenges”도 나쁘진 않지만,
+당신이 말한 것처럼 challenge가 “must-solve problem”이 아니라면 더 정확한 제목이 있습니다.
+
+추천 순서:
+
+Problem Setting and Design Challenges
+Problem Setting and Design Questions
+Problem Setup and Design Challenges
+
+개인적으로는 Problem Setting and Design Challenges가 제일 좋습니다.
+“setting”이 먼저 오면 sessionized + cross-session history accessible setting을 박아주기 좋고, challenge도 과하지 않게 읽힙니다.
+
+setting 용어는 이렇게 명시하는 게 좋음
+
+“history accessible”를 단독 형용사처럼 쓰면 좀 어색합니다.
+아래 중 하나를 추천합니다.
+
+가장 추천
+
+sessionized sequential recommendation with accessible cross-session user history
+
+조금 더 쉬운 버전
+
+session-based next-item prediction with user-linked cross-session history
+
+introduction 첫 문장용
+
+We study a sessionized sequential recommendation setting where the current session is short but earlier sessions of the same user are available.
+
+이렇게 쓰면 reviewer가 setting을 헷갈릴 일이 훨씬 줄어듭니다.
+
+실제 Introduction 흐름은 이렇게 정리하면 좋음
+P1. setting + phenomenon
+
+짧은 session, user-linked earlier sessions available, structural heterogeneity
+
+P2. existing response
+
+기존은 time/context/feature를 mostly representation enrichment에 사용
+
+P3. the new question
+
+그런데 MoE가 conditional computation을 가능하게 만들면, behavioral context가 representation뿐 아니라 computation choice에도 쓰일 수 있는가?
+
+P4. RouteRec answer
+
+hidden state가 아니라 explicit behavioral cues를 routing control path에 넣고, representation path와 분리
+
+P5. why this is nontrivial
+
+ordinary logs only, multiple temporal scopes, committed routing 필요 → design challenges
+
+이 구조면 “그래서 뭘 하고 싶은데?”가 훨씬 빨리 해소됩니다.
+핵심은 P3를 더 선명하게 세우는 것입니다.
+
+한 문장 thesis 후보들
+
+아래 중 하나를 메인 thesis로 두고, 나머지는 보조로 붙이면 됩니다.
+
+후보 1
+
+We ask whether behavioral context in sessionized sequential recommendation should influence not only what the model represents, but also which computation path it applies.
+
+후보 2
+
+RouteRec treats behavioral context as an explicit control interface for conditional computation, rather than only as an input for representation enrichment.
+
+후보 3
+
+Instead of routing from hidden states alone, RouteRec routes from explicit behavioral cues computed from ordinary interaction logs.
+
+후보 4
+
+RouteRec studies cue-driven conditional computation for sessionized recommendation with accessible cross-session history.
+
+이 중에서는 1 + 2 조합이 가장 강하고 자연스럽습니다.
+
+어느 정도까지 “강하게” 써도 되나
+
+이 선은 지키는 게 좋습니다.
+
+써도 되는 말:
+
+leaves open
+leaves untested
+does not explicitly address
+does not provide an explicit control interface
+entangles representation and routing control
+makes expert selection harder to attribute to observable behavior
+
+조심할 말:
+
+cannot
+fundamentally fails
+is insufficient
+necessarily requires
+inherently better
+
+즉, 문제의 존재는 강하게, 해결의 필연성은 약하게, 기여의 선명도는 강하게 가 맞습니다.
+
+제일 실전적인 추천
+
+당장 문서에 반영할 때는 이렇게 하시면 됩니다.
+
+abstract 첫 두 문장에서 setting을 명확히 박기
+introduction 2~3문단 사이에
+“behavioral context를 computation control에 쓸 수 있는가?”
+이 질문을 더 또렷하게 세우기
+shared computation 한계는
+“uniform transformation under heterogeneous prefixes”
+정도로 절제해서 쓰기
+hidden-state-only routing 비판은
+“representation and control entanglement”
+하나로 압축하기
+challenge는 각각 tension 형태로 다시 쓰기
+portability vs informativeness
+scope alignment
+commitment vs flexibility
+
+원하시면 다음 답변에서는 제가 바로
+abstract 1개 버전 + introduction 핵심 3문단 버전 + C1/C2/C3 강화 문안까지 영어 문장으로 써드리겠습니다.

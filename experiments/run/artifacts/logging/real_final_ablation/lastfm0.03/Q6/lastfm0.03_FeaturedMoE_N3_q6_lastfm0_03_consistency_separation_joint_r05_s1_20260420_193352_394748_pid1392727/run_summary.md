@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: lastfm0.03
+- run_group: real_final_ablation
+- run_axis: q6_route_separation
+- run_phase: Q6_LASTFM0_03_CONSISTENCY_SEPARATION_JOINT_R05_S1
+- best_mrr@20: 0.3123
+- test_mrr@20: 0.3085
+- test_hr@10: 0.3889
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/lastfm0.03/Q6/lastfm0.03_FeaturedMoE_N3_q6_lastfm0_03_consistency_separation_joint_r05_s1_20260420_193352_394748_pid1392727/diag/raw/epoch_trace.csv
+- feature_ablation: 

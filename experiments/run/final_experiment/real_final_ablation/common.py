@@ -81,6 +81,7 @@ QUESTION_AXIS = {
     "q2": "q2_routing_control",
     "q3": "q3_design_justification",
     "q4": "q4_efficiency",
+    "q4_portability": "q4_portability",
     "q5": "q5_behavior_semantics",
 }
 
@@ -169,6 +170,8 @@ def _requires_intervention(question: str, summary_row: dict[str, Any]) -> bool:
     setting_key = str(summary_row.get("setting_key", "") or "").strip().lower()
     if question_key == "q5":
         return setting_key == "behavior_guided"
+    if question_key == "q4_portability":
+        return setting_key == "full"
     return False
 
 
@@ -719,11 +722,17 @@ def q4_portability_settings() -> list[dict[str, Any]]:
         {
             "setting_key": "full",
             "setting_label": "Full Cues",
+            "variant_group": "cue_portability",
+            "variant_label": "Full",
+            "variant_order": 1,
             "overrides": deepcopy(full),
         },
         {
             "setting_key": "remove_category",
-            "setting_label": "Remove Category",
+            "setting_label": "No Group Cues",
+            "variant_group": "cue_portability",
+            "variant_label": "No group",
+            "variant_order": 2,
             "overrides": {
                 **deepcopy(full),
                 "stage_feature_drop_keywords": ["cat", "theme", "overlap", "mismatch"],
@@ -731,20 +740,82 @@ def q4_portability_settings() -> list[dict[str, Any]]:
         },
         {
             "setting_key": "remove_time",
-            "setting_label": "Remove Time",
+            "setting_label": "No Time Cues",
+            "variant_group": "cue_portability",
+            "variant_label": "No time",
+            "variant_order": 3,
             "overrides": {
                 **deepcopy(full),
                 "stage_feature_drop_keywords": ["gap", "pace", "int", "age", "delta"],
             },
         },
         {
-            "setting_key": "sequence_only",
-            "setting_label": "Sequence Only",
+            "setting_key": "portable_core",
+            "setting_label": "Portable Core",
+            "variant_group": "cue_portability",
+            "variant_label": "Portable core",
+            "variant_order": 4,
             "overrides": {
                 **deepcopy(full),
-                "router_use_feature": False,
-                "expert_use_feature": False,
-                "stage_router_source": {stage: "hidden" for stage in STAGE_NAMES},
+                "stage_feature_drop_keywords": [
+                    "cat",
+                    "theme",
+                    "overlap",
+                    "mismatch",
+                    "gap",
+                    "pace",
+                    "int",
+                    "age",
+                    "delta",
+                ],
+            },
+        },
+    ]
+
+
+def q4_feature_efficacy_specs() -> list[dict[str, Any]]:
+    return [
+        {
+            "intervention": "intact",
+            "label": "Intact",
+            "overrides": {
+                "feature_perturb_mode": "none",
+                "feature_perturb_apply": "none",
+                "feature_perturb_family": [],
+                "feature_perturb_keywords": [],
+            },
+        },
+        {
+            "intervention": "zero_all",
+            "label": "Zero All",
+            "group": "cue_efficacy",
+            "overrides": {
+                "feature_perturb_mode": "zero",
+                "feature_perturb_apply": "eval",
+                "feature_perturb_family": [],
+                "feature_perturb_keywords": [],
+            },
+        },
+        {
+            "intervention": "position_permute",
+            "label": "Intra-Sequence Permute",
+            "group": "cue_efficacy",
+            "overrides": {
+                "feature_perturb_mode": "batch_permute",
+                "feature_perturb_apply": "eval",
+                "feature_perturb_family": [],
+                "feature_perturb_keywords": [],
+            },
+        },
+        {
+            "intervention": "cross_sample_permute",
+            "label": "Cross-Sample Permute",
+            "group": "cue_efficacy",
+            "overrides": {
+                "feature_perturb_mode": "global_permute",
+                "feature_perturb_apply": "eval",
+                "feature_perturb_family": [],
+                "feature_perturb_keywords": [],
             },
         },
     ]
@@ -1167,7 +1238,7 @@ def build_route_command(row: dict[str, Any], gpu_id: str, *, search_algo: str) -
         f"++phase_hparam_id={hydra_literal(str(row.get('base_rank', '')))}",
         f"++phase_seed_id={hydra_literal(int(row['seed_id']))}",
         f"++phase_run_id={hydra_literal(str(row['job_id']))}",
-        f"++artifact_export_final_checkpoint={hydra_literal(str(row.get('question', '')).strip().lower() == 'q5')}",
+        f"++artifact_export_final_checkpoint={hydra_literal(_requires_intervention(str(row.get('question', '')), row))}",
     ]
     for key, values in search.items():
         cmd.append(f"++search.{key}={hydra_literal(values)}")

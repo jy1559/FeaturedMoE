@@ -1,0 +1,21 @@
+def construct_transform(config):
+    """
+    Transformation for batch data.
+    """
+    if config["transform"] is None:
+        return Equal(config)
+    else:
+        str2transform = {
+            "mask_itemseq": MaskItemSequence,
+            "inverse_itemseq": InverseItemSequence,
+            "crop_itemseq": CropItemSequence,
+            "reorder_itemseq": ReorderItemSequence,
+            "user_defined": UserDefinedTransform,
+        }
+        if config["transform"] not in str2transform:
+            raise NotImplementedError(
+                f"There is no transform named '{config['transform']}'"
+            )
+
+        return str2transform[config["transform"]](config)
+

@@ -64,6 +64,14 @@ def _load_json(path: str | Path) -> dict[str, Any]:
         return json.load(f)
 
 
+def _load_csv_rows(path: str | Path) -> list[dict[str, str]]:
+    p = Path(path)
+    if not p.exists():
+        return []
+    with open(p, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
 def _parse_run_phase(phase: str) -> dict[str, str]:
     """Parse run_phase like Q2_BEAUTY_BEHAVIOR_GUIDED_R01_S1 into components."""
     m = re.match(r"^(Q\d+)_(.+?)_(R\d+)_(S\d+)$", phase)
@@ -286,6 +294,44 @@ def build_q5_case_heatmap() -> list[dict[str, Any]]:
     Falls back to overall routing profile if slice-level routing not available.
     """
     rows = []
+    case_map = {
+        "Repeat-heavy": "repeat_heavy",
+        "Fast exploratory": "fast_exploratory",
+        "Narrow-focus": "narrow_focus",
+    }
+    for routing_csv in sorted((LOGGING_ROOT / "q5" / "case_eval").rglob("tables/case_eval_routing_profile.csv")):
+        routing_rows = [
+            row for row in _load_csv_rows(routing_csv)
+            if str(row.get("status", "")).lower() == "ok"
+            and str(row.get("scope", "")).lower() == "original"
+            and str(row.get("eval_split", "")).lower() == "test"
+        ]
+        if not routing_rows:
+            continue
+        sample = routing_rows[0]
+        dataset = str(sample.get("dataset", "")).strip()
+        source_result = str(sample.get("source_result_json", "")).strip()
+        parsed = _parse_run_phase(_load_json(source_result).get("run_phase", "")) if source_result else {}
+        base_rank = parsed.get("base_rank", 1)
+        seed_id = parsed.get("seed_id", 1)
+        for case_name, case_type in case_map.items():
+            for routing_row in routing_rows:
+                rows.append({
+                    "dataset": dataset,
+                    "case_name": case_name,
+                    "case_type": case_type,
+                    "stage": str(routing_row.get("stage_name", "")).strip().lower(),
+                    "group_name": str(routing_row.get("routed_family", "")).strip().lower(),
+                    "expert_rank_or_slot": "group_total",
+                    "selected_mass": _safe_float(routing_row.get("usage_share")),
+                    "base_rank": base_rank,
+                    "seed_id": seed_id,
+                    "setting_key": "behavior_guided",
+                    "data_status": "real",
+                })
+    if rows:
+        return rows
+
     # Use best (highest mrr) run per dataset
     best_by_dataset: dict[str, dict[str, Any]] = {}
     for run in _collect_runs("Q5"):
@@ -294,8 +340,8 @@ def build_q5_case_heatmap() -> list[dict[str, Any]]:
             continue
         dataset = run.get("dataset", "")
         cur_best = best_by_dataset.get(dataset)
-        cur_mrr = float(cur_best.get("best_mrr@20", 0.0)) if cur_best else 0.0
-        if float(run.get("best_mrr@20", 0.0)) >= cur_mrr:
+        cur_mrr = _safe_float(cur_best.get("best_mrr@20", 0.0)) if cur_best else 0.0
+        if _safe_float(run.get("best_mrr@20", 0.0)) >= cur_mrr:
             best_by_dataset[dataset] = run
 
     case_map = {
@@ -354,6 +400,30 @@ def build_q5_intervention_summary() -> list[dict[str, Any]]:
     - feature_fusion_bias = fusion_bias (Q2 run)
     - shared_ffn = shared_ffn (Q2 run - baseline)
     """
+    rows = []
+    for manifest_path in sorted((LOGGING_ROOT / "q5" / "interventions").rglob("intervention_manifest.csv")):
+        manifest_rows = _load_csv_rows(manifest_path)
+        if not manifest_rows:
+            continue
+        for manifest_row in manifest_rows:
+            if str(manifest_row.get("status", "")).lower() != "ok":
+                continue
+            source_result = str(manifest_row.get("source_result_json", "")).strip()
+            parsed = _parse_run_phase(_load_json(source_result).get("run_phase", "")) if source_result else {}
+            rows.append({
+                "dataset": manifest_row.get("dataset", ""),
+                "intervention": manifest_row.get("intervention", ""),
+                "intervention_label": manifest_row.get("intervention_label", ""),
+                "target_family": manifest_row.get("target_family", ""),
+                "test_mrr20": round(_safe_float(manifest_row.get("test_mrr20")), 6),
+                "test_seen_mrr20": round(_safe_float(manifest_row.get("test_seen_mrr20")), 6),
+                "base_rank": parsed.get("base_rank", 1),
+                "seed_id": parsed.get("seed_id", 1),
+                "data_status": "real",
+            })
+    if rows:
+        return rows
+
     # Collect Q2 runs for comparison
     q2_by_dataset_variant: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for run in _collect_runs("Q2"):

@@ -70,7 +70,7 @@ def main() -> int:
     scripts = [
         "q2_routing_control.py",
         "q3_stage_structure.py",
-        "q4_efficiency.py",
+        "q4_portability.py",
         "q5_behavior_semantics.py",
         "export_q2_q5_bundle.py",
     ]

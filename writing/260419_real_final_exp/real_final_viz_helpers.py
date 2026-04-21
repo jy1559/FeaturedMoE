@@ -4,6 +4,8 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -30,7 +32,9 @@ DATASET_LABELS = {
     "beauty": "Beauty",
     "foursquare": "Foursquare",
     "KuaiRecLargeStrictPosV2_0.2": "KuaiRec",
+    "lastfm0.03": "LastFM",
     "movielens1m": "ML-1M",
+    "retail_rocket": "Retail Rocket",
 }
 
 FAMILY_COLORS = {
@@ -40,9 +44,14 @@ FAMILY_COLORS = {
     "exposure": PALETTE["rose"],
 }
 
+SUBFIG_SIZE = (7.8, 5.8)
+LEGEND_STRIP_SIZE = (15.6, 1.8)
+LEGEND_STRIP_HALF_SIZE = (7.65, 1.8)
+OURS_SUFFIX = "\n(Ours)"
+
 
 def apply_style() -> None:
-    sns.set_theme(style="whitegrid", context="notebook", font_scale=1.04)
+    sns.set_theme(style="whitegrid", context="notebook", font_scale=1.12)
     plt.rcParams.update(
         {
             "font.family": "DejaVu Serif",
@@ -52,18 +61,20 @@ def apply_style() -> None:
             "axes.linewidth": 0.8,
             "axes.labelcolor": PALETTE["ink"],
             "axes.titlecolor": PALETTE["ink"],
-            "axes.titlesize": 13,
+            "axes.titlesize": 16,
             "axes.titleweight": "semibold",
-            "axes.labelsize": 11.2,
+            "axes.labelsize": 20.5,
             "xtick.color": PALETTE["ink"],
             "ytick.color": PALETTE["ink"],
-            "xtick.labelsize": 10.2,
-            "ytick.labelsize": 10.2,
+            "xtick.labelsize": 18.5,
+            "ytick.labelsize": 18.5,
             "grid.color": PALETTE["grid"],
             "grid.linewidth": 0.8,
             "grid.alpha": 0.7,
-            "legend.frameon": False,
-            "legend.fontsize": 9.5,
+            "legend.frameon": True,
+            "legend.fontsize": 21.0,
+            "legend.facecolor": "white",
+            "legend.edgecolor": PALETTE["muted"],
             "figure.dpi": 130,
             "savefig.dpi": 220,
         }
@@ -95,6 +106,142 @@ def clean_axes(ax: plt.Axes, grid_axis: str = "y") -> plt.Axes:
     ax.spines["bottom"].set_color(PALETTE["muted"])
     ax.grid(axis=grid_axis, color=PALETTE["grid"], alpha=0.7)
     return ax
+
+
+def single_subfigure_axes(figsize: tuple[float, float] | None = None) -> tuple[plt.Figure, plt.Axes]:
+    apply_style()
+    fig, ax = plt.subplots(figsize=figsize or SUBFIG_SIZE)
+    fig.subplots_adjust(left=0.18, right=0.835, bottom=0.19, top=0.91)
+    clean_axes(ax)
+    return fig, ax
+
+
+def legend_strip_axes(figsize: tuple[float, float] | None = None) -> tuple[plt.Figure, plt.Axes]:
+    apply_style()
+    fig, ax = plt.subplots(figsize=figsize or LEGEND_STRIP_SIZE)
+    ax.axis("off")
+    return fig, ax
+
+
+def half_legend_strip_axes(figsize: tuple[float, float] | None = None) -> tuple[plt.Figure, plt.Axes]:
+    apply_style()
+    fig, ax = plt.subplots(figsize=figsize or LEGEND_STRIP_HALF_SIZE)
+    ax.axis("off")
+    return fig, ax
+
+
+def mark_ours_first(order: list[str]) -> list[str]:
+    if not order:
+        return order
+    marked = list(order)
+    marked[0] = f"{marked[0]}{OURS_SUFFIX}"
+    return marked
+
+
+def y_limits_like_q2(values: Iterable[float], lower_pad: float = 0.55, upper_pad: float = 0.18) -> tuple[float, float]:
+    series = pd.to_numeric(pd.Series(list(values)), errors="coerce").dropna()
+    if series.empty:
+        return (0.0, 1.0)
+    lo = float(series.min())
+    hi = float(series.max())
+    span = max(hi - lo, 0.004)
+    return lo - span * lower_pad, hi + span * upper_pad
+
+
+def metric_legend_handles() -> list[object]:
+    return [
+        Patch(facecolor="#8FA6DE", edgecolor="#6178AE", alpha=0.92, label="NDCG@20"),
+        Line2D(
+            [0],
+            [0],
+            color="#C33245",
+            marker="o",
+            linewidth=2.2,
+            markersize=6.5,
+            label="HR@10",
+        ),
+    ]
+
+
+def add_metric_legend(ax: plt.Axes, loc: str = "lower right") -> None:
+    ax.legend(
+        handles=metric_legend_handles(),
+        loc=loc,
+        frameon=True,
+        fancybox=False,
+        borderpad=0.48,
+        labelspacing=0.32,
+        handlelength=2.0,
+        handletextpad=0.62,
+        prop={"size": plt.rcParams["legend.fontsize"] - 2},
+    )
+
+
+def add_category_legend(
+    fig: plt.Figure,
+    labels: list[str],
+    colors: list[str],
+    ncol: int | None = None,
+    y: float = 1.02,
+) -> None:
+    handles = [Patch(facecolor=color, edgecolor="white", linewidth=0.8, label=label) for label, color in zip(labels, colors)]
+    fig.legend(
+        handles=handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, y),
+        ncol=ncol or len(handles),
+        frameon=False,
+        columnspacing=0.9,
+        handletextpad=0.4,
+        borderaxespad=0.0,
+    )
+
+
+def add_split_legends(
+    ax: plt.Axes,
+    category_labels: list[str],
+    category_colors: list[str],
+    metric_loc: str = "lower right",
+) -> None:
+    category_handles = [
+        Patch(facecolor=color, edgecolor="white", linewidth=0.8, label=label)
+        for label, color in zip(category_labels, category_colors)
+    ]
+    legend_top = ax.legend(
+        handles=category_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.17),
+        ncol=max(2, min(len(category_handles), 3)),
+        frameon=False,
+        columnspacing=0.9,
+        handletextpad=0.4,
+        borderaxespad=0.0,
+    )
+    ax.add_artist(legend_top)
+    add_metric_legend(ax, loc=metric_loc)
+
+
+def add_legend_strip(
+    ax: plt.Axes,
+    category_labels: list[str],
+    category_colors: list[str],
+    ncol: int | None = None,
+) -> None:
+    category_handles = [
+        Patch(facecolor=color, edgecolor="white", linewidth=0.8, label=label)
+        for label, color in zip(category_labels, category_colors)
+    ]
+    ax.legend(
+        handles=category_handles,
+        loc="center",
+        bbox_to_anchor=(0.5, 0.5),
+        ncol=ncol or len(category_handles),
+        frameon=False,
+        columnspacing=1.9,
+        handletextpad=0.9,
+        borderaxespad=0.0,
+        prop={"size": plt.rcParams["legend.fontsize"]},
+    )
 
 
 def panel_label(ax: plt.Axes, label: str) -> None:
@@ -201,6 +348,9 @@ def bar_line_panel(
     title: str | None = None,
     panel: str | None = None,
     xrotation: int = 20,
+    palette_override: dict[str, str] | None = None,
+    show_xticklabels: bool = True,
+    add_metric_legend_box: bool = False,
 ) -> tuple[plt.Axes, plt.Axes]:
     work = df.copy()
     work = work.dropna(subset=[category_col])
@@ -210,7 +360,7 @@ def bar_line_panel(
     else:
         order_values = order
 
-    palette = palette_for(order_values)
+    palette = palette_override or palette_for(order_values)
     x = np.arange(len(order_values), dtype=float)
     ndcg_vals = []
     hr_vals = []
@@ -233,19 +383,25 @@ def bar_line_panel(
     twin.plot(
         x,
         hr_vals,
-        color=PALETTE["ink"],
+        color="#C33245",
         marker="o",
-        linewidth=2.1,
-        markersize=5.4,
+        linewidth=2.2,
+        markersize=6.5,
+        markeredgecolor=PALETTE["ink"],
+        markeredgewidth=0.6,
         zorder=3,
     )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(order_values, rotation=xrotation, ha="right" if xrotation else "center")
+    if show_xticklabels:
+        ax.set_xticklabels(order_values, rotation=xrotation, ha="right" if xrotation else "center")
+    else:
+        ax.set_xticklabels([""] * len(order_values))
+        ax.tick_params(axis="x", length=0)
     ax.set_ylabel("NDCG@20")
     twin.set_ylabel("HR@10")
-    ax.set_ylim(*metric_limits(ndcg_vals, padding=0.18, floor=0.0))
-    twin.set_ylim(*metric_limits(hr_vals, padding=0.14, floor=0.0))
+    ax.set_ylim(*y_limits_like_q2(ndcg_vals))
+    twin.set_ylim(*y_limits_like_q2(hr_vals))
     ax.margins(x=0.06)
     clean_axes(ax)
     twin.grid(False)
@@ -255,4 +411,6 @@ def bar_line_panel(
         ax.set_title(title)
     if panel:
         panel_label(ax, panel)
+    if add_metric_legend_box:
+        add_metric_legend(ax, loc="lower right")
     return ax, twin

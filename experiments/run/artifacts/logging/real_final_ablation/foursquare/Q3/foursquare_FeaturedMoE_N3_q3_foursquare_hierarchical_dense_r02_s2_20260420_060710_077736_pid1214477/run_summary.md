@@ -5,9 +5,9 @@
 - run_group: real_final_ablation
 - run_axis: q3_design_justification
 - run_phase: Q3_FOURSQUARE_HIERARCHICAL_DENSE_R02_S2
-- best_mrr@20: 0.2019
-- test_mrr@20: 0.1671
-- test_hr@10: 0.3197
+- best_mrr@20: 0.2028
+- test_mrr@20: 0.1672
+- test_hr@10: 0.3189
 
 ## Artifacts
 
@@ -22,8 +22,8 @@
 - diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_hierarchical_dense_r02_s2_20260420_060710_077736_pid1214477/diag/tier_c_viz/viz_feature_pca.csv.gz
 - diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_hierarchical_dense_r02_s2_20260420_060710_077736_pid1214477/diag/tier_c_viz/viz_router_input_pca.csv.gz
 - diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_hierarchical_dense_r02_s2_20260420_060710_077736_pid1214477/diag/tier_c_viz/viz_group_feature_pca.csv.gz
-- diag_raw_trial_summary: 
-- diag_raw_best_valid: 
-- diag_raw_test: 
-- diag_raw_epoch_trace: 
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_hierarchical_dense_r02_s2_20260420_060710_077736_pid1214477/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_hierarchical_dense_r02_s2_20260420_060710_077736_pid1214477/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_hierarchical_dense_r02_s2_20260420_060710_077736_pid1214477/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_hierarchical_dense_r02_s2_20260420_060710_077736_pid1214477/diag/raw/epoch_trace.csv
 - feature_ablation: 

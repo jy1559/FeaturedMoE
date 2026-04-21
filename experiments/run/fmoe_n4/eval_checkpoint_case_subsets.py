@@ -17,11 +17,15 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 EXP_DIR = REPO_ROOT / "experiments"
 if str(EXP_DIR) not in sys.path:
     sys.path.insert(0, str(EXP_DIR))
+if str(Path(__file__).resolve().parents[1] / "final_experiment" / "real_final_ablation") not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "final_experiment" / "real_final_ablation"))
 
 from recbole_train import (  # noqa: E402
     _FEATURE_AWARE_MOE_MODELS,
+    _sync_model_dimensions,
     run_checkpoint_evaluation,
 )
+from common import build_eval_config_from_result_payload  # noqa: E402
 
 
 DEFAULT_CASE_ROOT = "/workspace/FeaturedMoE/Datasets/processed/feature_added_v4_case_eval_final_v1"
@@ -64,20 +68,32 @@ def _load_json(path: Path) -> dict:
         return json.load(f)
 
 
-def _resolve_inputs(args) -> tuple[Path, Path]:
+def _resolve_inputs(args) -> tuple[Path | None, Path, Path | None]:
     if args.source_run_dir:
         run_dir = Path(args.source_run_dir).expanduser().resolve()
         config_json = run_dir / "config.json"
         checkpoint_file = run_dir / "checkpoints" / "best_model_state.pth"
+        source_result_json = Path(args.source_result_json).expanduser().resolve() if args.source_result_json else None
+    elif args.config_json:
+        config_json = Path(args.config_json).expanduser().resolve()
+        checkpoint_file = Path(args.checkpoint_file).expanduser().resolve()
+        source_result_json = Path(args.source_result_json).expanduser().resolve() if args.source_result_json else None
+    elif args.source_result_json:
+        config_json = None
+        checkpoint_file = Path(args.checkpoint_file).expanduser().resolve()
+        source_result_json = Path(args.source_result_json).expanduser().resolve()
     else:
         config_json = Path(args.config_json).expanduser().resolve()
         checkpoint_file = Path(args.checkpoint_file).expanduser().resolve()
+        source_result_json = Path(args.source_result_json).expanduser().resolve() if args.source_result_json else None
 
-    if not config_json.exists():
+    if config_json is not None and not config_json.exists():
         raise FileNotFoundError(f"Config JSON not found: {config_json}")
     if not checkpoint_file.exists():
         raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_file}")
-    return config_json, checkpoint_file
+    if source_result_json is not None and not source_result_json.exists():
+        raise FileNotFoundError(f"Source result JSON not found: {source_result_json}")
+    return config_json, checkpoint_file, source_result_json
 
 
 def _dataset_exists(root: Path, dataset: str) -> bool:
@@ -143,6 +159,7 @@ def _build_targets(
 
 def _build_eval_cfg(source_cfg: dict, *, target: dict, gpu_id: int | None):
     cfg = deepcopy(source_cfg)
+    _sync_model_dimensions(cfg)
     # Important: keep the *source* data_path so the vocab (esp. item_id -> embedding row)
     # matches the checkpoint. For case-eval subsets we only filter valid/test interactions
     # after loading the original dataset, instead of rebuilding a smaller vocab.
@@ -215,8 +232,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run eval-only checkpoint passes for original and case-eval roots.")
     parser.add_argument("--source-run-dir", default="", help="RunLogger output dir containing config.json and checkpoints/best_model_state.pth")
     parser.add_argument("--config-json", default="", help="Explicit config.json path when source-run-dir is unavailable")
-    parser.add_argument("--checkpoint-file", default="", help="Explicit checkpoint path when source-run-dir is unavailable")
-    parser.add_argument("--source-result-json", default="", help="Optional source result json for provenance")
+    parser.add_argument("--checkpoint-file", default="", help="Explicit checkpoint path when source-run-dir or source-result-json is unavailable")
+    parser.add_argument("--source-result-json", default="", help="Optional source result json for provenance or config recovery")
     parser.add_argument("--case-root", default=DEFAULT_CASE_ROOT)
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--bundle-name", default="", help="Optional fixed bundle directory name under output-root for resumable runs")
@@ -231,8 +248,13 @@ def main() -> int:
     parser.add_argument("--max-targets", type=int, default=0)
     args = parser.parse_args()
 
-    config_json, checkpoint_file = _resolve_inputs(args)
-    source_cfg = _load_json(config_json)
+    config_json, checkpoint_file, source_result_json = _resolve_inputs(args)
+    if config_json is not None:
+        source_cfg = _load_json(config_json)
+    elif source_result_json is not None:
+        source_cfg = build_eval_config_from_result_payload(_load_json(source_result_json))
+    else:
+        raise RuntimeError("Either source-run-dir, config-json, or source-result-json must be provided.")
     dataset = str(args.dataset or source_cfg.get("dataset", "")).strip()
     if not dataset:
         raise RuntimeError("Dataset is empty after reading source config.")
