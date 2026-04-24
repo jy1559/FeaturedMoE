@@ -1,0 +1,55 @@
+# job_id=S1_MOVIELENS1M_BSAREC dataset=movielens1m model=bsarec stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ml --search-algo tpe --max-evals 24 --tune-epochs 35 --tune-patience 4 --seed 610018 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_MOVIELENS1M_BSAREC model=bsarec dataset=movielens1m eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=6 log_wandb=false show_progress=false ++seed=610018 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00025117,0.0003931,0.00061523,0.00096288,0.00150699] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-05,5e-05,0.0001,0.0002] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[112,128,160,192] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[112,128,160,192] ++search_space_type_overrides.embedding_size=choice ++search.num_layers=[2,3,4] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,2,4] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.attn_dropout_prob=choice ++search.bsarec_alpha=[0.35,0.5,0.55,0.7] ++search_space_type_overrides.bsarec_alpha=choice ++search.bsarec_c=[2,3,5,7] ++search_space_type_overrides.bsarec_c=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.15] ++search_space_type_overrides.dropout_ratio=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1629770 ts=2026-04-18T02:49:23
+[UniqueChoice] enabled: dedupe/remap duplicates across 2949120 finite combos
+
+=================================================================
+  Hyperopt  |  BSARec x movielens1m
+  max_evals=24  epochs=35  patience=4  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/4096/4096
+  track=final_experiment  axis=stage1_broad_search  phase=S1_MOVIELENS1M_BSAREC
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, bsarec_alpha, bsarec_c, embedding_size, hidden_dropout_prob, hidden_size, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 11  (~2949120 discrete combos)
+Tuned groups: 11
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.12, 0.15, 0.2]                    -> choice
+    learning_rate                   [0.00025117, 0.0003931, 0.00061523, 0.00096288, 0.00150699]  -> choice
+    weight_decay                    [1e-05, 5e-05, 0.0001, 0.0002]            -> choice
+  [model_core]
+    attn_dropout_prob               [0.1, 0.12, 0.15, 0.2]                    -> choice
+    embedding_size                  [112, 128, 160, 192]                      -> choice
+    hidden_size                     [112, 128, 160, 192]                      -> choice
+    num_heads                       [1, 2, 4]                                 -> choice
+    num_layers                      [2, 3, 4]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30, 50]                          -> choice
+    bsarec_alpha                    [0.35, 0.5, 0.55, 0.7]                    -> choice
+    bsarec_c                        [2, 3, 5, 7]                              -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    dropout_ratio                   0.15                                    
+    inner_size                      320                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.2, bsarec_alpha=0.7, bsarec_c=7, embedding_size=160, hidden_dropout_prob=0.15, hidden_size=128, learning_rate=0.001507, num_heads=2, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.095600  best=0.095600  (full@35, trial=3.6min, avg=3.8min/trial, total=3.8min, ETA=1.44h)
+[TRIAL_METRICS] cur_best_mrr20=0.095600 cur_best_hr10=0.206900 cur_test_mrr20=0.062800 cur_test_hr10=0.145000 avg_epoch_time_sec=6.0860 test_eval_time_sec=0.0514 test_eval_batches_per_sec=19.4436 test_eval_targets_per_sec=41978.8163 run_best_mrr20=0.095600 run_best_hr10=0.206900 run_test_mrr20=0.062800 run_test_hr10=0.145000
+
+[2/24] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, bsarec_alpha=0.55, bsarec_c=3, embedding_size=112, hidden_dropout_prob=0.12, hidden_size=112, learning_rate=0.001507, num_heads=1, num_layers=2, weight_decay=0.0001
+  -> MRR@20=0.091800  best=0.095600  (full@35, trial=1.4min, avg=2.7min/trial, total=5.3min, ETA=58.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.091800 cur_best_hr10=0.201800 cur_test_mrr20=0.061200 cur_test_hr10=0.147300 avg_epoch_time_sec=2.3531 test_eval_time_sec=0.0467 test_eval_batches_per_sec=21.4241 test_eval_targets_per_sec=46254.6410 run_best_mrr20=0.095600 run_best_hr10=0.206900 run_test_mrr20=0.062800 run_test_hr10=0.145000
+
+[3/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, bsarec_alpha=0.55, bsarec_c=5, embedding_size=192, hidden_dropout_prob=0.2, hidden_size=112, learning_rate=0.0003931, num_heads=2, num_layers=2, weight_decay=0.0002
+  -> MRR@20=0.065200  best=0.095600  (full@35, trial=2.3min, avg=2.5min/trial, total=7.6min, ETA=53.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.065200 cur_best_hr10=0.141500 cur_test_mrr20=0.048000 cur_test_hr10=0.110600 avg_epoch_time_sec=3.8569 test_eval_time_sec=0.0485 test_eval_batches_per_sec=20.6091 test_eval_targets_per_sec=44495.0659 run_best_mrr20=0.095600 run_best_hr10=0.206900 run_test_mrr20=0.062800 run_test_hr10=0.145000
+
+[4/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.12, bsarec_alpha=0.5, bsarec_c=5, embedding_size=128, hidden_dropout_prob=0.15, hidden_size=128, learning_rate=0.0009629, num_heads=4, num_layers=2, weight_decay=1e-05

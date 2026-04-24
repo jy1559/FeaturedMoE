@@ -1133,6 +1133,200 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     return result
 
 
+def run_checkpoint_evaluation(cfg_i, run_name: str, checkpoint_path: str, run_logger=None):
+    """Load a saved checkpoint and run evaluation under the current session-fixed config."""
+    cfg_local = cfg_i.copy()
+    cfg_local['log_wandb'] = False
+    model_name_local = str(cfg_local.get("model", "")).lower()
+    if model_name_local in _FEATURE_AWARE_MOE_MODELS and "fmoe_special_logging" not in cfg_local:
+        cfg_local["fmoe_special_logging"] = True
+        cfg_i["fmoe_special_logging"] = True
+
+    if cfg_local.get('loss_type', 'CE').upper() == 'CE':
+        cfg_local['train_neg_sample_args'] = None
+
+    configure_runtime_acceleration(cfg_local)
+    configure_data_cache(cfg_local)
+
+    argv_backup = sys.argv
+    sys.argv = sys.argv[:1]
+    try:
+        config = Config(model=cfg_local['model'], dataset=cfg_local['dataset'], config_dict=cfg_local)
+    finally:
+        sys.argv = argv_backup
+
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", category=FutureWarning, message=".*GradScaler.*")
+    init_seed(config['seed'], config['reproducibility'])
+
+    dataset = create_dataset(config)
+    train_data, valid_data, test_data = data_preparation(config, dataset)
+
+    model_cls = get_model(config['model'])
+    model = model_cls(config, train_data.dataset).to(config['device'])
+    if model_name_local in _FEATURE_AWARE_MOE_MODELS:
+        resolved = _collect_featured_moe_runtime_config(model)
+        if resolved:
+            cfg_i.update(resolved)
+            cfg_local.update(resolved)
+            try:
+                for key, value in resolved.items():
+                    config[key] = value
+            except Exception:
+                pass
+            if run_logger is not None and hasattr(run_logger, "update_config"):
+                try:
+                    run_logger.update_config(cfg_i)
+                except Exception:
+                    pass
+
+    trainer_cls = get_trainer(config['MODEL_TYPE'], config['model'])
+    trainer = trainer_cls(config, model)
+    setattr(trainer, '_disable_patch_logging', True)
+    trainer._fmoe_special_item_counts_train = _build_item_counts_from_loader(train_data)
+    trainer._main_eval_unseen_filter_stats = {}
+
+    checkpoint_obj = Path(checkpoint_path).expanduser().resolve()
+    if not checkpoint_obj.exists():
+        raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_obj}")
+    checkpoint_payload = torch.load(str(checkpoint_obj), map_location="cpu")
+    checkpoint_cfg = checkpoint_payload.get("config", {}) if isinstance(checkpoint_payload, dict) else {}
+    checkpoint_model = str(_cfg_get(checkpoint_cfg, "model", ""))
+    checkpoint_dataset = str(_cfg_get(checkpoint_cfg, "dataset", ""))
+    if checkpoint_model and checkpoint_model.lower() != str(config['model']).lower():
+        raise RuntimeError(
+            f"Checkpoint model mismatch: checkpoint={checkpoint_model} current={config['model']}"
+        )
+    if checkpoint_dataset and checkpoint_dataset != str(config['dataset']):
+        raise RuntimeError(
+            f"Checkpoint dataset mismatch: checkpoint={checkpoint_dataset} current={config['dataset']}"
+        )
+    try:
+        # Appendix/postprocess exports often persist a bare model state_dict instead of a
+        # full RecBole trainer checkpoint. Support both formats for eval-only restores.
+        if isinstance(checkpoint_payload, dict) and "epoch" in checkpoint_payload:
+            trainer.resume_checkpoint(str(checkpoint_obj))
+        else:
+            model.load_state_dict(checkpoint_payload, strict=True)
+            trainer.start_epoch = 0
+            trainer.cur_step = 0
+            trainer.best_valid_score = -float("inf")
+            trainer.best_valid_result = None
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "Checkpoint/model shape mismatch while restoring the evaluation model. "
+            "The processed dataset vocab or feature dimensions likely changed since training."
+        ) from exc
+
+    special_logging_enabled = bool(_cfg_get(config, "special_logging", cfg_i.get("special_logging", False)))
+    if model_name_local in _FEATURE_AWARE_MOE_MODELS:
+        special_logging_enabled = special_logging_enabled or bool(
+            _cfg_get(config, "fmoe_special_logging", cfg_i.get("fmoe_special_logging", True))
+        )
+    diag_logging_enabled = bool(_cfg_get(config, "fmoe_diag_logging", cfg_i.get("fmoe_diag_logging", False)))
+
+    start_time = time.time()
+    best_valid_special_metrics = None
+    valid_diag_metrics = None
+    test_special_metrics = None
+    test_diag_metrics = None
+
+    if special_logging_enabled:
+        from recbole_patch import begin_special_eval
+        begin_special_eval(trainer, valid_data, split_name="valid")
+    if diag_logging_enabled:
+        from recbole_patch import begin_diagnostic_eval
+        begin_diagnostic_eval(trainer, split_name="valid")
+    best_valid_result = trainer._valid_epoch(valid_data, show_progress=False)
+    if isinstance(best_valid_result, tuple):
+        best_valid_result = next((x for x in best_valid_result if isinstance(x, dict)), best_valid_result[0])
+    if special_logging_enabled:
+        from recbole_patch import end_special_eval
+        best_valid_special_metrics = end_special_eval(trainer)
+    if diag_logging_enabled:
+        from recbole_patch import end_diagnostic_eval
+        valid_diag_metrics = end_diagnostic_eval(trainer)
+
+    if special_logging_enabled:
+        from recbole_patch import begin_special_eval
+        begin_special_eval(trainer, test_data, split_name="test")
+    if diag_logging_enabled:
+        from recbole_patch import begin_diagnostic_eval
+        begin_diagnostic_eval(trainer, split_name="test")
+    test_result = trainer._valid_epoch(test_data, show_progress=False)
+    if isinstance(test_result, tuple):
+        test_result = next((x for x in test_result if isinstance(x, dict)), test_result[0])
+    if special_logging_enabled:
+        from recbole_patch import end_special_eval
+        test_special_metrics = end_special_eval(trainer)
+    if diag_logging_enabled:
+        from recbole_patch import end_diagnostic_eval
+        test_diag_metrics = end_diagnostic_eval(trainer)
+
+    elapsed_time = time.time() - start_time
+    valid_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "valid")
+    test_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "test")
+    valid_cold = _extract_cold_slice_metrics(best_valid_special_metrics)
+    test_cold = _extract_cold_slice_metrics(test_special_metrics)
+
+    result = {
+        'checkpoint_file': str(checkpoint_obj),
+        'best_valid_score': float((best_valid_result or {}).get(str(config['valid_metric']).lower(), 0.0) or 0.0),
+        'best_valid_result': best_valid_result or {},
+        'test_result': test_result or {},
+        'best_valid_special_metrics': best_valid_special_metrics or {},
+        'test_special_metrics': test_special_metrics or {},
+        'valid_diag': valid_diag_metrics or {},
+        'test_diag': test_diag_metrics or {},
+        'valid_seen_target_mrr20': float(((best_valid_special_metrics or {}).get('overall_seen_target') or {}).get('mrr@20', 0.0) or 0.0),
+        'test_seen_target_mrr20': float(((test_special_metrics or {}).get('overall_seen_target') or {}).get('mrr@20', 0.0) or 0.0),
+        'elapsed_time': elapsed_time,
+        'main_eval_filter': {
+            'valid': valid_main_filter,
+            'test': test_main_filter,
+        },
+        'cold_target_metrics': {
+            'valid': valid_cold,
+            'test': test_cold,
+        },
+        'checkpoint_config_snapshot': {
+            'model': checkpoint_model,
+            'dataset': checkpoint_dataset,
+            'benchmark_filename': _cfg_get(checkpoint_cfg, 'benchmark_filename', []),
+            'history_input_mode': _cfg_get(checkpoint_cfg, 'history_input_mode', ''),
+            'history_eval_policy': _cfg_get(checkpoint_cfg, 'history_eval_policy', ''),
+        },
+    }
+
+    if run_logger is not None:
+        try:
+            run_logger.log_special_metrics(
+                valid_special_metrics=best_valid_special_metrics,
+                test_special_metrics=test_special_metrics,
+            )
+            run_logger.log_final(
+                best_valid_result=best_valid_result or {},
+                test_result=test_result or {},
+                elapsed_time=elapsed_time,
+                extra={
+                    'checkpoint_file': str(checkpoint_obj),
+                    'model': cfg_i.get('model', ''),
+                    'dataset': cfg_i.get('dataset', ''),
+                    'main_eval_valid_seen_targets': int(valid_main_filter.get('seen_targets', 0)),
+                    'main_eval_test_seen_targets': int(test_main_filter.get('seen_targets', 0)),
+                },
+            )
+            run_logger.log_router_diagnostics(
+                valid_diag=valid_diag_metrics,
+                test_diag=test_diag_metrics,
+            )
+            result['logging_dir'] = str(run_logger.output_path)
+        except Exception:
+            pass
+
+    return result
+
+
 def main():
     args = get_args()
 

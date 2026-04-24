@@ -65,10 +65,23 @@ import sys
 
 # Parse gpu_id from CLI before torch import and pin visible CUDA device.
 _gpu_id = None
+_cpu_threads = 2
 for _arg in sys.argv[1:]:
     if _arg.startswith("gpu_id="):
         _gpu_id = _arg.split("=", 1)[1]
-        break
+    elif _arg.startswith("cpu_threads="):
+        try:
+            _cpu_threads = max(1, int(_arg.split("=", 1)[1]))
+        except Exception:
+            _cpu_threads = 1
+if "--cpu-threads" in sys.argv:
+    try:
+        _cpu_idx = sys.argv.index("--cpu-threads")
+        if _cpu_idx + 1 < len(sys.argv):
+            _cpu_threads = max(1, int(sys.argv[_cpu_idx + 1]))
+    except Exception:
+        _cpu_threads = 1
+_cpu_threads = max(1, int(os.environ.get("HYPEROPT_CPU_THREADS", _cpu_threads)))
 if _gpu_id is not None and _gpu_id != "":
     os.environ["CUDA_VISIBLE_DEVICES"] = str(_gpu_id)
 
@@ -76,10 +89,14 @@ for _v in (
     "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
     "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS",
 ):
-    os.environ[_v] = "4"
+    os.environ[_v] = str(_cpu_threads)
 
 import torch
-torch.set_num_threads(4)
+torch.set_num_threads(_cpu_threads)
+try:
+    torch.set_num_interop_threads(1)
+except Exception:
+    pass
 from tqdm import tqdm
 
 # RecBole 1.2.1 bugfix + custom model registration
@@ -757,6 +774,10 @@ def get_args():
         help="Random seed for TPE sampler (default: 42)",
     )
     parser.add_argument(
+        "--cpu-threads", dest="cpu_threads", type=int, default=_cpu_threads,
+        help="Cap BLAS/OpenMP/PyTorch CPU threads per hyperopt_tune process (default: 2).",
+    )
+    parser.add_argument(
         "--search-algo",
         dest="search_algo",
         choices=("tpe", "random"),
@@ -815,6 +836,8 @@ def get_args():
             raw_algo = tok.split("=", 1)[1].strip().lower()
             if raw_algo in {"tpe", "random"}:
                 args.search_algo = raw_algo
+        elif tok.startswith("cpu_threads="):
+            args.cpu_threads = max(1, int(tok.split("=", 1)[1]))
         elif tok.startswith("parent_result="):
             args.parent_result = tok.split("=", 1)[1]
         else:
@@ -4221,6 +4244,7 @@ def main():
     print(f"  max_evals={args.max_evals}  epochs={cfg.get('epochs')}  "
           f"patience={cfg.get('stopping_step')}  wandb={'ON' if log_wandb else 'off'}")
     print(f"  search_algo={str(args.search_algo).lower()}")
+    print(f"  cpu_threads={int(args.cpu_threads)}")
     if float(args.max_run_hours or 0.0) > 0.0:
         print(f"  max_run_hours={float(args.max_run_hours):.3f}  (stop launching new trials after current trial)")
     if int(args.oom_retry_limit or 0) > 0:
@@ -4260,6 +4284,7 @@ def main():
         "space_yaml": str(args.space_yaml) if args.space_yaml else "",
         "space_type_overrides": {k: str(v) for k, v in space_type_overrides.items()},
         "search_algo": str(args.search_algo).lower(),
+        "cpu_threads": int(args.cpu_threads),
         "max_run_hours": float(args.max_run_hours or 0.0),
         "oom_retry_limit": int(args.oom_retry_limit or 0),
     }

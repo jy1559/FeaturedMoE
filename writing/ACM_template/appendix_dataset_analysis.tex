@@ -1,0 +1,117 @@
+% Appendix: Dataset Analysis and Router Motivation
+\section{Dataset Analysis and Behavioral Indicators}
+\label{app:dataset-analysis}
+
+This section defines the four raw-log indicators used in Table~\ref{tab:routing-condition} and reports the full dataset-level axis profile. All indicators are computed from training logs before any model training. They are descriptive summaries of recurring behavioral axes in each corpus, not model-specific scores.
+
+\subsection{Indicator Definitions}
+\label{sec:b1}
+
+Each indicator is a dataset-level scalar derived from raw training logs. All use scale-free (ratio or normalized) forms so that datasets with different interaction volumes remain comparable.
+
+\begin{itemize}
+  \item \textbf{Temporal volatility} measures how variable session length is within the corpus. It is the coefficient of variation of session lengths across all sessions:
+  \[
+    \text{SessVol} = \frac{\mathrm{std}(\text{session\_len})}{\mathrm{mean}(\text{session\_len})}.
+  \]
+  A higher value means session pace and duration are more irregular, which raises the case for tempo-sensitive routing.
+
+  \item \textbf{Transition branching} measures how ambiguous local next-item transitions are. For each source item $i$, let $P_i(j)$ be the empirical probability of transitioning from $i$ to item $j$, and let $|\mathrm{supp}(P_i)|$ be the number of distinct observed next items. The normalized next-item entropy for item $i$ is
+  \[
+    H_{\mathrm{norm}}(i) = \frac{-\sum_j P_i(j)\log P_i(j)}{\log|\mathrm{supp}(P_i)|} \in [0, 1].
+  \]
+  The dataset-level score is the transition-count-weighted average over all items with at least two distinct next items:
+  \[
+    \text{Branch} = \frac{\sum_i n_i \, H_{\mathrm{norm}}(i)}{\sum_i n_i},
+  \]
+  where $n_i$ is the number of observed transitions from item $i$. A higher value means the same local state tends to branch into many different next items, making next-step intent more ambiguous.
+
+  \item \textbf{Memory variability} measures how unevenly repetition behavior is distributed across sessions. For each session, the repeat ratio is $\text{repeat\_ratio} = 1 - (\text{unique items} / \text{session length})$. The dataset-level score is the coefficient of variation of this ratio across all sessions:
+  \[
+    \text{RepeatVar} = \frac{\mathrm{std}(\text{repeat\_ratio})}{\mathrm{mean}(\text{repeat\_ratio})}.
+  \]
+  A value of zero means all sessions repeat at the same rate. A higher value means some sessions are strongly repeat-heavy while others are not, making repetition a more variable and routing-relevant axis.
+
+  \item \textbf{Context availability} measures how much cross-session history is available for macro-scope routing. It is a composite of three sub-indicators---the fraction of users with at least 2 sessions ($r_{\ge 2}$), the fraction with at least 5 sessions ($r_{\ge 5}$), and a clipped normalized session count $\min(\bar{s}/20,\,1)$ where $\bar{s}$ is the mean number of sessions per user:
+  \[
+    \text{CtxAvail} = \tfrac{1}{3}\!\left(r_{\ge 2} + r_{\ge 5} + \min\!\left(\bar{s}/20,\,1\right)\right).
+  \]
+  A higher value means more users have sufficient cross-session history for macro-scope routing to draw on. This is a support condition for routing, not a cue family.
+\end{itemize}
+
+\subsection{Full Dataset-Level Axis Profile}
+Table~\ref{tab:dataset-axes} extends the four indicators in the main text with additional raw-log summaries: Carryover (mean cross-session item overlap), Drift (fraction of sessions where at least half of items differ from the previous session), and PopConc (popularity concentration, measured as the Gini coefficient of item frequency).
+
+\begin{table}[H]
+  \centering
+  \caption{Full raw-log axis profile across datasets. All values are computed from training logs before model training. Gain is RouteRec's mean test-score gap from the strongest baseline; WinRate is the fraction of nine reported metrics where RouteRec ranks first.}
+  \label{tab:dataset-axes}
+  \tiny
+  \setlength{\tabcolsep}{2.8pt}
+  \renewcommand{\arraystretch}{1.02}
+  \resizebox{0.99\columnwidth}{!}{%
+  \begin{tabular}{@{}lrrrrrrrrr@{}}
+    \toprule
+    Dataset & \makecell{Temporal\\volatility} & \makecell{Transition\\branching} & \makecell{Memory\\variability} & \makecell{Context\\availability} & Carryover & Drift & PopConc & Gain & WinRate \\
+    \midrule
+    Beauty        & 0.694 & 0.843 & 0.000 & 0.059 & 0.000 & 1.000 & 0.509 & 0.0020 & 0.556 \\
+    Foursquare    & 0.944 & 0.688 & 1.961 & 0.988 & 0.159 & 0.841 & 0.647 & 0.0009 & 0.556 \\
+    KuaiRec       & 0.887 & 0.903 & 2.214 & 0.933 & 0.003 & 0.997 & 0.671 & 0.0182 & 1.000 \\
+    LastFM        & 0.739 & 0.630 & 2.036 & 0.990 & 0.072 & 0.928 & 0.456 & 0.0049 & 1.000 \\
+    ML-1M         & 0.381 & 0.839 & 0.000 & 0.264 & 0.000 & 1.000 & 0.699 & -0.0031 & 0.000 \\
+    Retail Rocket & 0.945 & 0.744 & 0.858 & 0.056 & 0.184 & 0.816 & 0.674 & 0.0055 & 0.667 \\
+    \bottomrule
+  \end{tabular}
+  }
+\end{table}
+
+The four indicators used in the main text cover distinct recurring behavioral axes: temporal structure (volatility), local transition structure (branching), repetition structure (memory variability), and the support condition for macro-scope routing (context availability). The three remaining columns extend these with cross-session continuity and popularity structure.
+
+\subsection{Supplementary Column Definitions}
+\label{sec:b3}
+
+\begin{itemize}
+  \item \textbf{Carryover} measures how much item content carries over between consecutive sessions. For each user, let $I_m$ be the item set of session $s_m$. The Jaccard overlap between adjacent sessions is $|I_{m-1} \cap I_m| / |I_{m-1} \cup I_m|$, and the dataset-level value is the mean over all consecutive session pairs $\mathcal{P}$:
+  \[
+    \text{Carryover} = \frac{1}{|\mathcal{P}|} \sum_{(m-1,\,m)\,\in\,\mathcal{P}} \frac{|I_{m-1} \cap I_m|}{|I_{m-1} \cup I_m|}.
+  \]
+  Near-zero values (Beauty, KuaiRec, ML-1M) indicate that consecutive sessions are almost entirely item-disjoint. Retail Rocket and Foursquare show moderate carryover, consistent with return visits to familiar locations or product categories.
+
+  \item \textbf{Drift} is the complement of Carryover: $\text{Drift} = 1 - \text{Carryover}$. It reflects the average fraction of cross-session content that is new rather than repeated. A value near 1 means consecutive sessions rarely share items.
+
+  \item \textbf{PopConc} (popularity concentration) measures how unevenly interactions are distributed across the item catalog. It is the Gini coefficient of the empirical item frequency distribution $\{f_i\}$:
+  \[
+    \text{PopConc} = \frac{\sum_i \sum_j |f_i - f_j|}{2\,N\,\sum_i f_i},
+  \]
+  where $N$ is the number of items. Values range from 0 (uniform distribution) to 1 (all interactions on one item). ML-1M and Retail Rocket have the highest concentration (0.699 and 0.674), reflecting popular movie and product head effects. LastFM is the lowest (0.456), consistent with broader artist listening patterns.
+\end{itemize}
+
+\noindent\textbf{Gain} and \textbf{WinRate} are result-side summaries, not input-side behavioral indicators. Gain is the mean signed difference between RouteRec's score and the score of the strongest per-metric baseline, averaged over all reported metrics for that dataset. WinRate is the fraction of the nine reported metric values where RouteRec ranks first among all compared methods.
+
+\subsection{Directional Rank Correlations}
+
+Table~\ref{tab:rank-correlation} reports Spearman rank correlations between each candidate axis and RouteRec's performance measures across the six datasets. Because only six datasets are compared, these values are directional evidence rather than statistical tests. In addition to the axes defined in Sections~\ref{sec:b1} and \ref{sec:b3}, we include \textbf{memory intensity} (RepeatInt), the mean repeat ratio across sessions: $\text{RepeatInt} = \mathrm{mean}(\text{repeat\_ratio})$. It captures the average level of repetition rather than its variability, and is the axis most strongly correlated with gain.
+
+\begin{table}[H]
+  \centering
+  \caption{Spearman rank correlations between raw-log behavioral axes and RouteRec performance across six datasets. All axis values are computed from training logs before model training.}
+  \label{tab:rank-correlation}
+  \scriptsize
+  \setlength{\tabcolsep}{5pt}
+  \renewcommand{\arraystretch}{1.07}
+  \begin{tabularx}{\columnwidth}{@{}lYY@{}}
+    \toprule
+    Behavioral axis & With Gain & With WinRate \\
+    \midrule
+    Memory intensity (RepeatInt)      & \textbf{0.841} & 0.761 \\
+    Memory variability (RepeatVar)    & 0.667 & \textbf{0.851} \\
+    Temporal volatility (SessVol)     & 0.543 & 0.441 \\
+    Carryover                         & 0.377 & 0.403 \\
+    Transition branching (Branch)     & 0.257 & $-$0.088 \\
+    Context availability (CtxAvail)   & $-$0.086 & 0.353 \\
+    Popularity concentration (PopConc) & $-$0.143 & $-$0.441 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Memory variability and memory intensity show the highest rank correlations with gain, consistent with KuaiRec and LastFM (high variability, positive gain) versus Beauty and ML-1M (zero variability, mixed results). Temporal volatility also shows a positive directional correlation. Transition branching is harder to interpret from rank correlation alone: it is highest in KuaiRec where gains are also largest, but similarly high in ML-1M and Beauty where results are more mixed. Context availability shows near-zero correlation with gain but a positive correlation with WinRate, which is consistent with its role as a gating condition: it helps explain why Foursquare and LastFM (both high context availability) benefit even where branching is moderate, rather than predicting the magnitude of gain directly. Popularity concentration shows negative correlations, suggesting that head-heavy exposure alone does not predict routing benefit.
