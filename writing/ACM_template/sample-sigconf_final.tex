@@ -44,6 +44,7 @@
 \newcommand{\tblbest}[1]{\textbf{#1}}
 \newcommand{\tblsecond}[1]{\underline{#1}}
 \newcommand{\placeholderpanel}[1]{\fbox{\rule{0pt}{#1}\rule{0.92\linewidth}{0pt}}}
+\newcommand{\jm}[1]{{\color{red} #1}}
 
 \begin{document}
 
@@ -68,9 +69,9 @@
 \renewcommand{\shortauthors}{Author et al.}
 
 \begin{abstract}
-In sessionized sequential recommendation, sessions are short but cross-session history is available. This brevity sharpens behavioral differences across sessions: some sessions are repeat-heavy, others fast and exploratory, others narrowly focused. Existing models use behavioral context to enrich the sequence representation — improving \emph{what the model encodes}. We ask whether behavioral context should instead determine \emph{which computation path} the model applies, and what observable signal should drive that routing decision.
+Session-based recommendation models have explored many ways to make use of behavioral context --- cross-session history, temporal structure, side information --- to better capture what a user is likely to want next. We are interested in a specific direction: using behavioral patterns to differentiate the computation applied to each session, rather than only enriching a shared representation. Mixture of Experts (MoE) makes this possible: a router selects which expert subset processes each input, allowing different sessions to follow different computation paths. The key question is what should drive that routing decision.
 
-\textbf{RouteRec} pursues this direction with Mixture of Experts (MoE). The central design choice is the routing input: hidden states are optimized for next-item prediction rather than for capturing the behavioral character of a session, and routing from them places routing control and representation on the same vector — the routing input is identical to the quantity that routing itself shapes. RouteRec instead computes \emph{behavioral cues} — compact statistics derived directly from interaction logs — and routes on them through a control path kept strictly separate from the sequential backbone. This separation makes the routing input explicit, grounds route choices in observable quantities, and keeps representation and routing control from interfering. RouteRec extracts cues at macro, mid, and micro temporal scopes and applies hierarchical sparse expert allocation to concentrate computation on a small, focused expert subset.
+Hidden states are shaped by next-item prediction rather than behavioral character. Routing from them ties routing control to the very representation it is meant to influence, making it hard to separate what drives route changes from what drives prediction changes. \textbf{RouteRec} instead computes \emph{behavioral cues} (compact statistics derived directly from interaction logs) on a control path kept separate from the sequential backbone, and uses them to select which experts process each session. Because cues are computed from the raw log rather than from the prediction objective, route choices trace back to specific, observable behavioral quantities. Cues are extracted at three temporal scopes (macro, mid, micro) and fed into a hierarchical sparse router that concentrates computation on a small, focused expert subset.
 
 RouteRec achieves the best overall seen-target ranking across six datasets under a shared sessionized temporal protocol, with the clearest gains on Foursquare, LastFM, and KuaiRec. In the main comparison, it leads with an overall Avg.~Rank of 1.67 versus 3.56 for the next-best baseline. Routing diagnostics confirm that expert selection shifts consistently with observed behavioral patterns. Anonymous code: \url{https://anonymous.4open.science/r/RouteRec/}.
 \end{abstract}
@@ -93,30 +94,64 @@ RouteRec achieves the best overall seen-target ranking across six datasets under
 
 \section{Introduction}
 \label{sec:intro}
-Sequential recommendation assigns the same shared computation to every user sequence. In session-based settings — where interactions are partitioned into short, temporally bounded sessions — behavioral differences across sessions become particularly pronounced: a session built on rapid revisits to familiar items has a structurally different character from one sweeping across diverse categories in quick succession, even when both users share similar long-run preferences. Pace, repetition patterns, category focus, and popularity exposure are directly observable from interaction logs and vary consistently across users and time \cite{jannach2022sessions,wang2021sessionsurvey}.
+
+Session-based recommendation predicts the next item from a user's current session~\cite{wang2021sessionsurvey,jannach2022sessions}.
+Since a single session often carries limited signals on its own, previous works have looked beyond it, drawing on the user's past sessions~\cite{quadrana2017hrnn}, cross-user patterns~\cite{kang2018sasrec}, and interaction-level side information such as timestamps and categories~\cite{li2020tisasrec,zhang2019fdsa}.
+We refer to this broader evidence as \emph{behavioral context}: the cross-session history and interaction-level patterns that a model can exploit beyond the current session.
+Recent works have proposed hierarchical cross-session encoders~\cite{quadrana2017hrnn,ying2018shan}, temporal attention biases~\cite{li2020tisasrec}, and side-information fusion~\cite{zhang2019fdsa,xie2022difsr} to leverage this behavioral context.
+However, they rely on a shared backbone that processes every session through the same computational path, regardless of how that session actually behaves (Figure~\ref{fig:intro-behavioral-features}).
 
 \begin{figure}[!t]
   \centering
   \includegraphics[width=\columnwidth]{figures/figure1_different_user.pdf}
-  \caption{Motivating example: sessions with different structural character can still receive the same shared computation.}
-  \Description{A problem-motivation figure contrasting different user and session behavior patterns, showing that behaviorally different cases are processed with the same computation path in standard sequential recommendation.}
+  \caption{In standard sequential recommendation, the same computation path is applied to sessions with distinct behavioral characteristics, regardless of differences in pace, repetition, or category focus.}
+  % \Description{A problem-motivation figure contrasting different user and session behavior patterns, showing that behaviorally different cases are processed with the same computation path in standard sequential recommendation.}
   \label{fig:intro-behavioral-features}
 \end{figure}
 
-Figure~\ref{fig:intro-behavioral-features} illustrates the immediate consequence: sessions with visibly different structural character still pass through the same computation. Existing work addresses behavioral differences by enriching the sequence representation — time-aware self-attention \cite{li2020tisasrec} embeds interval structure into the backbone, cross-session architectures \cite{quadrana2017hrnn} bring in longer preference context, and feature-aware models \cite{zhang2019fdsa,xie2022difsr} incorporate side information into the encoding path. These approaches improve \emph{what the model represents}. They still apply the same transformation to every prefix, regardless of structural differences across sessions. Whether behavioral context should also determine \emph{which transformation the model applies} — rather than only enriching what a single shared block processes — is a question they do not address.
+Mixture of experts (MoE)~\cite{jacobs1991adaptive,jordan1994hme} offers a natural mechanism for mitigating this uniformity by replacing a shared transformation with multiple experts selected by a learned router.
+In sequential recommender systems, the router is typically conditioned on the hidden states of the backbone model.
+Such a design makes routing behavior guided by the learned representations rather than by the behavioral characteristics of the session.
 
-Conditional computation — executing only a data-dependent subset of model parameters, rather than the full model for every input — makes this question concrete. Mixture of Experts (MoE) \cite{jacobs1991adaptive,jordan1994hme} provides the mechanism: a router that selects which subset of expert modules (each a small feed-forward network) processes each input, rather than passing all inputs through the same shared transformation. Sparse MoE \cite{shazeer2017moe,fedus2022switch,du2022glam,zoph2022stmoe} makes that selection efficient by activating only a small subset at a time. Once MoE is introduced, the routing input becomes a substantive design choice. The natural default is to route from hidden states, since they summarize the sequence. But hidden states are optimized for next-item prediction, not for capturing the behavioral regime of a session — its observable structural character, such as repeat-heavy consumption or fast exploratory browsing. Routing from hidden states also entangles two roles in a single vector: the quantity driving expert selection is identical to the quantity being shaped by that selection, so the behavioral basis of any given route stays implicit. In short sessions, a hidden state computed from a few interactions does not yet capture cross-session behavioral patterns at the point when routing decisions are made.
+We take the position that behavioral context should determine \emph{which computation path} is applied, not only what a shared block encodes. Moreover, this routing signal should be computed directly from interaction logs rather than read from hidden states. In short sessions, pace, repetition style, and category concentration are directly visible in the raw log before any model transformation. Hidden states optimized for next-item prediction do not explicitly organize these patterns; they reflect whatever structure helps predict the next item, not the behavioral character of the session. Feeding these log-level summaries to the router, on a path kept separate from the sequential backbone, gives routing an explicit view of behavior and makes each route decision auditable: when the route shifts, it traces back to an identifiable cue in the log rather than to an opaque movement in latent space.
 
-RouteRec keeps two channels distinct: a \emph{sequential backbone} that encodes the sequence for next-item prediction, and a dedicated \emph{routing control path} that computes \emph{behavioral cues} — compact scalar summaries derived directly from interaction logs — and uses them to select experts. Behavioral cues are organized into four cue families that cover the main observable dimensions of session structure: Tempo (interaction pace and interval dynamics), Focus (category concentration and switching), Memory (repetition and recurrence), and Exposure (popularity level and drift). Cues are computed at three temporal scopes — macro (cross-session history), mid (within-session dynamics), and micro (short-term local transitions) — because each exposes distinct behavioral evidence. Because cues are observable statistics rather than learned latent values, route choices can be traced back to specific behavioral quantities visible in the log.
+We instantiate this view in \textbf{RouteRec}, which routes over \emph{behavioral cues}. These are compact scalar statistics extracted directly from interaction logs along a dedicated routing control path. Cues are organized into four families capturing complementary aspects of session behavior: \textbf{Tempo} (pace and interval dynamics), \textbf{Focus} (category concentration and switching), \textbf{Memory} (repetition and recurrence), and \textbf{Exposure} (popularity level and drift). Each family is computed at three temporal scopes: \emph{macro} (cross-session history), \emph{mid} (within-session dynamics), and \emph{micro} (short-term local transitions). Different behavioral evidence surfaces at different horizons, which motivates this multi-scope design. Because every cue follows the same summary template regardless of scope or dataset, the resulting cue bank serves as a portable routing interface without dataset-specific engineering.
 
-Three tensions arise in instantiating this design. Behavioral cues must remain portable across datasets where only item identities, timestamps, and sometimes coarse category labels are available, yet carry enough signal to differentiate computation paths — the specific expert modules activated for a given prefix, or its \emph{route}. Routing decisions must be separated by temporal scope so that slow cross-session tendency and fast local dynamics each receive a distinct control view. Expert selection must enforce \emph{route commitment}: routing that concentrates on a small, consistent expert subset rather than diffusing weight broadly, so that behaviorally different sessions activate genuinely different expert subsets. Section~\ref{sec:problem} formalizes the task and states each tension precisely.
+Turning this design into a working model raises three concrete questions that we formalize in Section~\ref{sec:problem}: \emph{what} cues to construct from ordinary logs, \emph{at what scopes} routing decisions should be made, and \emph{how} to structure expert selection so that routes meaningfully differ across sessions rather than collapsing onto a few dominant experts.
 
 The main contributions of this work are:
 \begin{itemize}
-  \item We identify the routing input as a substantive design decision in sessionized sequential recommendation and argue that behavioral cues computed directly from interaction logs — kept on a control path separate from the sequential backbone — provide a cleaner routing interface than hidden states, avoiding the entanglement that arises when the routing input and the quantity it shapes occupy the same vector.
-  \item We propose RouteRec, which instantiates this design through three components: Behavioral Cue Construction, Coarse-to-Fine Multi-Stage Routing, and Hierarchical Sparse Expert Allocation.
-  \item Empirically, RouteRec achieves the best overall Avg.~Rank in the main seen-target comparison across six datasets under a shared sessionized temporal protocol, with the clearest gains on Foursquare, LastFM, and KuaiRec.
+  \item We identify the \emph{routing input} as a key and under-examined design choice in MoE-based sequential recommendation. We argue that behavioral cues, computed from interaction logs, on a path separate from the sequential backbone, provide a cleaner and more interpretable routing interface than hidden states.
+  \item We propose \textbf{RouteRec}, which realizes this design through three components: Behavioral Cue Construction, Coarse-to-Fine Multi-Stage Routing, and Hierarchical Sparse Expert Allocation.
+  \item Under a shared sessionized temporal evaluation protocol across six public datasets, RouteRec achieves the best overall Avg.~Rank on the seen-target setting, with the most pronounced gains on Foursquare, LastFM, and KuaiRec.
 \end{itemize}
+
+% \section{Introduction}
+% \label{sec:intro}
+% Session-based recommendation models predict the next item from a user's current session, but a single session often provides limited signal on its own. Models have therefore looked beyond the current session — drawing on the same user's past sessions, patterns shared across users, or interaction-level signals like timestamps and item categories — to build a richer picture of what a user is likely to want. We refer to this broader set of signals as \emph{behavioral context}: the cross-session history and interaction-level patterns a model can draw on beyond the current session.
+% Incorporating behavioral context has been approached in many ways — cross-session hierarchical encoders, temporal attention biases, side-information fusion — each improving \emph{what the model encodes} from the available history.
+
+% \begin{figure}[!t]
+%   \centering
+%   \includegraphics[width=\columnwidth]{figures/figure1_different_user.pdf}
+%   \caption{Sessions with different behavioral character still receive the same shared computation in standard sequential recommendation, regardless of pace, repetition, or category focus.}
+%   \Description{A problem-motivation figure contrasting different user and session behavior patterns, showing that behaviorally different cases are processed with the same computation path in standard sequential recommendation.}
+%   \label{fig:intro-behavioral-features}
+% \end{figure}
+% A different use of behavioral context is to determine \emph{which computation path} the model applies, rather than only what a shared block encodes. Mixture of Experts (MoE) \cite{jacobs1991adaptive,jordan1994hme} replaces a shared transformation with a set of experts, each activated selectively by a learned router, and Sparse MoE \cite{shazeer2017moe,fedus2022switch} makes this efficient by activating only a small subset at a time. These approaches treat routing as a learned black box: the router reads hidden states that are optimized for next-item prediction, not for reflecting behavioral character. Using behavioral context as the explicit routing input, on a path separate from the representation, has not been addressed.
+
+% The question then is what to use instead. Interaction logs contain behavioral evidence that is directly computable before any model transformation: in short sessions, pace, repetition style, and category focus are often more visible in the raw log than in a hidden state that may not yet reflect cross-session patterns. Routing from these gives the router a signal explicitly about how a session behaves. Keeping the two roles separate has a further consequence: when a route changes, the cause traces back to a specific behavioral cue in the log, not to an opaque shift in hidden-state geometry.
+
+% RouteRec instantiates this design through \emph{behavioral cues} (compact scalar summaries derived directly from interaction logs) computed on a routing control path that does not touch the sequential backbone. Behavioral cues are organized into four cue families: Tempo (pace and interval dynamics), Focus (category concentration and category switching), Memory (repetition and recurrence), and Exposure (popularity level and drift). Cues are extracted at three temporal scopes --- macro (cross-session history), mid (within-session dynamics), and micro (short-term local transitions) --- because each scope surfaces different behavioral evidence. The cue bank therefore acts as a portable routing interface: the same summary template applies at all three scopes without dataset-specific engineering.
+
+% Making this separation work raises three concrete design questions: what cues to construct from ordinary logs, at what temporal scopes routing decisions should be made, and how to structure expert selection so that routes genuinely differ across sessions. Section~\ref{sec:problem} formalizes each.
+
+% The main contributions of this work are:
+% \begin{itemize}
+%   \item We identify the routing input as a key design choice in sessionized sequential recommendation and argue that behavioral cues, computed from interaction logs on a path separate from the sequential backbone, provide a cleaner routing interface than hidden states.
+%   \item We propose RouteRec, which implements this design through three components: Behavioral Cue Construction, Coarse-to-Fine Multi-Stage Routing, and Hierarchical Sparse Expert Allocation.
+%   \item Empirically, RouteRec achieves the best overall Avg.~Rank in the main comparison across six datasets under a shared sessionized temporal protocol, with the clearest gains on Foursquare, LastFM, and KuaiRec.
+% \end{itemize}
 
 \section{Related Work}
 \label{sec:related}
@@ -124,177 +159,153 @@ The main contributions of this work are:
 \subsection{Session-based and Sequential Recommendation}
 Sequential recommendation predicts the next item from an ordered interaction history \cite{wang2019seqsurvey}. Session-based recommendation is a closely related setting in which those interactions are partitioned into short temporally bounded sessions and prediction is made from the current session context \cite{jannach2022sessions,wang2021sessionsurvey}. Earlier models established the main sequence-modeling backbone families for this problem: FPMC \cite{rendle2010fpmc} factorized personalized Markov transitions, Caser \cite{tang2018caser} and NextItNet \cite{yuan2019nextitnet} applied convolutional sequence modeling, and GRU4Rec \cite{hidasi2016gru4rec} showed that recurrent models can learn strong session dynamics. NARM \cite{li2017narm}, STAMP \cite{liu2018stamp}, and SR-GNN \cite{wu2019srgnn} then emphasized session intent, short-term memory, and transition structure more explicitly.
 
-Transformer-based models such as SASRec \cite{kang2018sasrec} and BERT4Rec \cite{sun2019bert4rec} became strong general backbones for sequential recommendation. More recent work adds stronger inductive biases through contrastive regularization \cite{qiu2022duorec,hou2022core}, frequency-aware modeling \cite{du2023fearec,shin2024bsarec}, and selective state-space backbones \cite{liu2025sigma}. These models differ substantially in how they encode the sequence. They still apply the same shared transformation to all prefixes. For short sessions with visibly different structural character, this leaves open whether the model should adapt only its representation or also which transformation it applies.
+Transformer-based models such as SASRec \cite{kang2018sasrec} and BERT4Rec \cite{sun2019bert4rec} became strong general backbones for sequential recommendation. More recent work adds stronger inductive biases through contrastive regularization \cite{qiu2022duorec,hou2022core}, frequency-aware modeling \cite{du2023fearec,shin2024bsarec}, and selective state-space backbones \cite{liu2025sigma}. These models differ substantially in how they encode the sequence, yet all apply the same shared transformation to every prefix. For short sessions with visibly different structural character, this leaves open whether the model should adapt only its representation or also which transformation it applies.
 
 \subsection{Behavioral Context and Router Inputs}
-Behavioral heterogeneity across sessions is a recognized issue in the recommendation literature. Hierarchical and session-aware models such as HRNN \cite{quadrana2017hrnn}, SHAN \cite{ying2018shan}, and more recent hybrid session architectures \cite{bauer2024hybridsession} separate broader preference context from within-session dynamics. Time-aware self-attention \cite{li2020tisasrec} injects interval structure into the backbone. Feature-aware models such as FDSA \cite{zhang2019fdsa} and DIF-SR \cite{xie2022difsr} incorporate side information to refine the sequence representation. RepeatNet \cite{ren2019repeatnet} and ICSRec \cite{qin2024icsrec} focus on repetition and evolving intent. Multi-interest models such as MIND \cite{li2019mind} and ComiRec \cite{cen2020comirec} represent user behavior through multiple latent interests within a single forward pass.
+\jm{Sessions differ not only in which items are selected, but in how: some are repeat-heavy, others exploratory; some stay focused on one category, others shift rapidly.} Hierarchical and session-aware models such as HRNN \cite{quadrana2017hrnn}, SHAN \cite{ying2018shan}, and more recent hybrid session architectures \cite{bauer2024hybridsession} \jm{model long-term user preference and short-term within-session dynamics separately, allowing the representation to reflect both stable tendencies and recent shifts.} Time-aware self-attention \cite{li2020tisasrec} injects interval structure into the backbone. Feature-aware models such as FDSA \cite{zhang2019fdsa} and DIF-SR \cite{xie2022difsr} incorporate side information to refine the sequence representation. RepeatNet \cite{ren2019repeatnet} and ICSRec \cite{qin2024icsrec} focus on repetition and evolving intent. Multi-interest models such as MIND \cite{li2019mind} and ComiRec \cite{cen2020comirec} represent user behavior through multiple latent interests within a single forward pass.
 
-Across these lines of work, behavioral context enriches what the model represents — injected into hidden states, attention patterns, or auxiliary branches — while the transformation applied to each prefix remains shared. What has not been addressed is whether compact scalar summaries of session structure, derived directly from interaction logs and used as routing controls rather than representation inputs, can determine which expert subset processes each prefix.
+Across these lines of work, behavioral context enriches what the model represents --- injected into hidden states, attention patterns, or auxiliary branches --- while the transformation applied to each prefix remains shared. What has not been addressed is whether compact scalar summaries of session structure — derived directly from interaction logs — can serve as the explicit input to a router, replacing hidden states in the routing control path.
 
 \subsection{Mixture of Experts in Recommendation}
-Mixture of Experts (MoE) \cite{jacobs1991adaptive,jordan1994hme} replaces a shared transformation with a set of expert modules, each activated selectively by a learned router. Sparse MoE \cite{shazeer2017moe,fedus2022switch} makes this conditional computation efficient by activating only a small subset of experts per input. In recommendation, MMoE \cite{ma2018mmoe} and PLE \cite{tang2020ple} use expert decomposition mainly for multi-task learning, where different tasks benefit from different expert subsets. More recent recommendation models such as FAME \cite{liu2025fame}, M3SRec \cite{bian2023m3srec}, and HM4SR \cite{zhang2025hm4sr} also introduce experts, but routing is typically driven by learned hidden representations or modality-specific states rather than by explicit behavioral cues computed from the interaction log.
 
-Work on sparse MoE mechanics, including expert choice routing \cite{zhou2022expertchoice} and z-loss stabilization \cite{zoph2022stmoe}, improves how sparse activation is executed. It does not determine what the router should read. That question is especially consequential in session-based sequential recommendation: routing decisions are made from short prefixes whose hidden states do not yet expose cross-session behavioral character, so the behavioral basis of any given route stays implicit regardless of the routing mechanics. RouteRec targets this gap by defining behavioral cues directly from interaction logs and keeping the routing control path separate from the representation path.
+Mixture of Experts (MoE) \cite{jacobs1991adaptive,jordan1994hme} replaces a shared transformation with a router that selects which expert subset to activate. In recommendation, MMoE \cite{ma2018mmoe} and PLE \cite{tang2020ple} use expert decomposition mainly for multi-task learning, where different tasks benefit from different expert subsets. More recent recommendation models such as FAME \cite{liu2025fame}, M3SRec \cite{bian2023m3srec}, and HM4SR \cite{zhang2025hm4sr} also introduce experts, but routing is typically driven by learned hidden representations or modality-specific states rather than by explicit behavioral cues computed from the interaction log.
 
-\section{Problem Setting and Design Challenges}
+Sparse MoE \cite{shazeer2017moe,fedus2022switch} makes this conditional computation efficient by activating only a small subset of experts per input.
+Sparse MoE mechanics, including expert choice routing \cite{zhou2022expertchoice} and z-loss stabilization \cite{zoph2022stmoe}, improve how expert activation is executed. None of this work addresses what the router should actually read as its input. In session-based recommendation, this is a meaningful gap: session prefixes are short, and the hidden state at routing time may not yet reflect broader behavioral patterns across past sessions. The behavioral reason for any routing decision therefore stays buried in the hidden-state geometry, regardless of the routing mechanism used. RouteRec addresses this by using behavioral cues --- computed directly from the interaction log --- as the explicit router input, on a control path kept separate from the sequential backbone.
+
+\section{Problem and Design Challenges}
 \label{sec:problem}
 
-\subsection{Problem Setup}
-For each user, let $\mathcal{S}_u=[s_1,\dots,s_M]$ denote the chronologically ordered session sequence. A session $s_m=[x_{m,1},\dots,x_{m,L_m}]$ contains ordered interactions, where each interaction includes at least an item identity and timestamp, and may additionally include a coarse grouping field such as category, genre, or artist. At prediction time, the observed context is the current-session prefix together with earlier sessions. When the session index is clear, we write the current prefix as $x_{1:t}$ and the next target as $x_{t+1}$.
+\subsection{Problem Definition}
 
-The task is next-item prediction: given the observed history up to position $t$ in session $s_m$, the model predicts $x_{t+1}$. RouteRec uses only signals commonly available after sessionization — item identity, timestamp, optional coarse grouping label, and corpus-level popularity statistics computed from training data. No heavy side-information encoders or auxiliary supervision are required.
+For each user, let $\mathcal{S}_u=[s_1,\dots,s_M]$ denote the chronologically ordered sequence of sessions, where each session $s_m=[x_{m,1},\dots,x_{m,L_m}]$ contains items interacted with during one continuous activity window. The task is \emph{next-item prediction}: given the current-session prefix $x_{m,1:t}$ and the user's past sessions $[s_1,\dots,s_{m-1}]$, predict the next item $x_{m,t+1}$.
+
+Beyond item identities, interaction logs commonly record when each interaction occurred and what broad category the item belongs to --- temporal timestamps and coarse grouping labels such as category, genre, or artist. Item-level popularity statistics can also be derived from the training corpus itself. We assume these fields are available, as they are in the majority of standard recommendation benchmarks; the method is designed to work best when they are present and degrades gracefully when some are missing. No user profiles, side-information encoders, or auxiliary supervision are required.
 
 \subsection{Design Challenges}
-Using behavioral cues from interaction logs as the explicit routing input — rather than hidden states — raises three design tensions. Each must be resolved for cue-driven routing to produce systematic computation differences across sessions, rather than adding a routing step that reduces to a near-uniform mixture regardless of the cue.
 
-\paragraph{\textbf{C1. Portability versus informativeness.}}
-Behavioral cues must be computable from whatever signals are reliably present across datasets. In practice, this is narrow: item identities, timestamps, and sometimes a coarse grouping field such as category or genre. A cue derived from this restricted set risks carrying too little behavioral signal to differentiate computation paths; a cue that requires richer side information is unavailable in most benchmark settings. Constructing cues that are both portable and informative enough to support route differences is the first tension.
+Using explicit behavioral cues as router inputs raises three design challenges. Each one, if left unresolved, causes cue-driven routing to degenerate into a near-uniform mixture that behaves no differently from a shared feed-forward block.
 
-\paragraph{\textbf{C2. Scope alignment of behavioral evidence.}}
-Behavioral evidence emerges at different temporal ranges. Cross-session repetition and drift are visible only over multiple past sessions; within-session category concentration builds across a few minutes of activity; local transition patterns appear only in the last few interactions before the prediction target. A single routing view that draws on all these ranges simultaneously produces a cue that conflates slow structural tendency with fast local dynamics, and cannot respond distinctly to either. Routing decisions must be separated by the temporal scope at which each kind of evidence becomes a reliable signal.
+\paragraph{\textbf{C1. Cue portability versus informativeness.}}
+Behavioral cues must be computable from whatever fields are present in a given dataset. In practice this means item identities, timestamps, and sometimes a category label --- a narrow set. The risk is that cues built from such a restricted input are too coarse to produce meaningful routing differences across sessions. The challenge is to extract cues that are expressive enough to distinguish behavioral regimes while remaining portable to settings where richer metadata is unavailable.
 
-\paragraph{\textbf{C3. Route commitment versus coverage.}}
-Even with explicit cue-driven routing, behavior-dependent computation collapses if routing spreads weight broadly across experts. The model then reduces to a soft shared mixture regardless of the cue: a repeat-heavy session and a fast-exploratory one are routed almost identically, and the value of cue-driven routing is lost. Expert selection must be sparse enough to concentrate computation on a small, focused subset — producing real routing differences across sessions — while retaining enough coverage to handle the full range of behavioral regimes observed in practice.
+\paragraph{\textbf{C2. Temporal scope of behavioral evidence.}}
+Different behavioral patterns become visible at different time scales. Cross-session tendencies (repetition patterns, long-term drift) only emerge when looking across multiple past sessions. Within-session focus and pacing build up over the current prefix. Local transition dynamics are only apparent in the last few interactions. A single cue vector aggregated over all time scales at once conflates these distinct signals. The challenge is to match routing decisions to the temporal scope at which each type of evidence is most reliable.
 
-The following section addresses each tension: behavioral cue construction (C1), multi-stage routing separated by temporal scope (C2), and hierarchical sparse expert allocation (C3).
+\paragraph{\textbf{C3. Route commitment.}}
+Even with cue-driven routing, behavior-dependent computation collapses if routing assigns non-negligible weight to all experts. A repeat-heavy session and a fast-exploratory one then activate nearly the same expert mixture, and the routing step adds nothing. The challenge is to concentrate activation on a small, consistent expert subset --- so that behaviorally different sessions genuinely take different computation paths --- without restricting coverage so severely that some behavioral regimes are left unserved.
 
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=0.95\textwidth]{figures/figure2_overall_arch_simple.pdf}
-  \caption{Overall RouteRec framework. Read left to right: panel (a) shows stage-specific cue extraction, panel (b) shows the serial backbone, and panel (c) shows hierarchical sparse expert selection. RouteRec keeps a strong sequential backbone and replaces shared feed-forward blocks with behavior-guided sparse routing stages. All stages use the same hierarchical sparse routing principle: group-level scores select a subset of expert groups, then conditional intra-group scores select a subset of experts inside each chosen group before forming the active expert mixture. Macro, mid, and micro differ by temporal evidence scope and routing granularity, not by the basic sparse routing logic. This is a framework-level view; the exact serial configuration used in the main experiments is specified in Section~\ref{sec:multi-stage-routing} and Appendix~\ref{app:method-details}.}
-  \Description{A three-panel architecture figure showing RouteRec with a unified hierarchical sparse router across macro, mid, and micro stages, where stages differ by temporal evidence scope and granularity.}
+  \caption{RouteRec framework. \textit{Left --- Cue Extraction}: interaction fields (ID, timestamp, category) are summarized into a cue vector organized by four cue families (Tempo, Focus, Memory, Exposure), computed separately at each temporal scope. \textit{Center --- Architecture}: sequential backbone with macro, mid, and micro routing stages in series. \textit{Right --- Hierarchical Sparse Router}: each stage uses the same two-level router --- a family-level router selects which cue families drive computation, and a within-group router selects specific experts inside each chosen family. Details in Section~\ref{sec:multi-stage-routing} and Appendix~\ref{app:method-details}.}
+  \Description{A three-panel architecture figure of RouteRec. Left panel shows cue extraction from interaction fields into a cue vector organized by four cue families. Center panel shows the sequential backbone with macro, mid, and micro routing stages in series. Right panel shows the hierarchical sparse router with a family-level router and within-group router producing a weighted expert mixture.}
   \label{fig:framework}
 \end{figure*}
 
-\section{Method}
+\section{Proposed Method}
 \label{sec:method}
 
-\subsection{RouteRec Overview}
+RouteRec replaces the shared feed-forward blocks in a SASRec-style backbone with sparse, behavior-guided routing stages. The design is built around two separate paths that operate independently: a \emph{sequential backbone} that encodes the interaction sequence into hidden states for next-item prediction, and a \emph{routing control path} that reads behavioral cues from the interaction log and decides which expert subset processes each input. Hidden states do not drive routing; behavioral cues do not modify the sequence representation.
+
+\subsection{Overview}
 \label{sec:routerec-overview}
 
-Figure~\ref{fig:framework} shows RouteRec at the framework level: panel (a) covers cue extraction, panel (b) the sequential backbone layout, and panel (c) hierarchical sparse expert selection. The model follows the two-path design from Section~\ref{sec:problem}: the sequential backbone encodes the sequence for next-item prediction, while a separate routing control path computes behavioral cues from interaction logs and uses them to select experts at each stage. Three components instantiate this design — Behavioral Cue Construction addresses the portability–informativeness tension (C1), Coarse-to-Fine Multi-Stage Routing separates routing decisions by temporal scope (C2), and Hierarchical Sparse Expert Allocation enforces route commitment (C3). Alternative layout variants and broader structural sweeps are in Appendix~\ref{app:method-details}.
+Figure~\ref{fig:framework} shows the full framework. Three components, each targeting one of the design challenges in Section~\ref{sec:problem}, form the routing control path.
+
+\textbf{Behavioral Cue Construction} (C1) extracts compact scalar summaries from the interaction log --- covering pace, repetition, category focus, and popularity exposure --- organized into four cue families. The same cue structure is applied at three temporal windows, so the method does not require dataset-specific feature engineering.
+
+\textbf{Coarse-to-Fine Multi-Stage Routing} (C2) places one routing stage at each temporal scope --- macro (cross-session), mid (within-session), micro (local) --- interleaved with self-attention blocks. Each stage reads the behavioral cues from its own window, ensuring that routing decisions are made at the time scale where the underlying evidence is most informative.
+
+\textbf{Hierarchical Sparse Expert Allocation} (C3) structures expert selection as a two-level choice: first select which behavioral dimensions (cue families) drive computation, then select specific experts within each chosen family. Activation is restricted to a small subset at both levels, ensuring that behaviorally different sessions take genuinely different computation paths. Alternative configurations for routing stage placement are in Appendix~\ref{app:method-details}.
 
 \subsection{Behavioral Cue Construction}
 \label{sec:feature-construction}
 
-The routing control path must operate under the data conditions present in most benchmark settings, where the available signals after sessionization are narrow: item identity, timestamp, optional coarse grouping label (category, genre, artist, venue type), and corpus-level popularity statistics computed from training data. RouteRec derives behavioral cues exclusively from these signals, without requiring side-information encoders or auxiliary supervision in the routing branch.
+The routing control path computes behavioral cues directly from the interaction log, without passing through the sequential backbone. Given a window of interactions $\mathcal{R}$, a shared summary function $\mathcal{A}(\cdot)$ produces a fixed-size \emph{cue vector} $\mathbf{f} = \mathcal{A}(\mathcal{R})$ consisting of scalar statistics computed from the raw log fields.
 
-For session $s_m$ and target position $t$, the three temporal windows are
-\begin{align}
-\mathcal{R}^{\mathrm{macro}}_t &= [s_{\max(1,m-H)},\dots,s_{m-1}], \\
-\mathcal{R}^{\mathrm{mid}}_t &= [x_1,\dots,x_{t-1}], \\
-\mathcal{R}^{\mathrm{micro}}_t &= [x_{\max(1,t-w)},\dots,x_{t-1}],
-\end{align}
-where $H=5$ past sessions and $w=5$ positions in the main configuration; Appendix~\ref{app:stage-layout} reports ablations on these window sizes. Let $\mathcal{T}=\{\mathrm{macro},\mathrm{mid},\mathrm{micro}\}$ denote the routing-stage set. A shared summary operator $\mathcal{A}(\cdot)$ maps each window to a cue vector:
-\[
-\mathbf{f}^{(s)}_t=\mathcal{A}(\mathcal{R}^{(s)}_t),\qquad s\in\mathcal{T}.
-\]
+A key design question is what behavioral dimensions the cue vector should cover. The cues must be (1) computable from commonly available log fields, (2) expressive enough to distinguish sessions with different behavioral character, and (3) consistent across datasets so that no per-dataset feature engineering is needed. We organize the cue vector into four \emph{cue families}, each targeting one observable axis of session behavior:
+\begin{itemize}
+  \item \textbf{Tempo} --- interaction pace and time-interval dynamics. Captures how fast a session moves: short gaps between interactions indicate an active, rapid-fire session; long gaps suggest deliberate browsing.
+  \item \textbf{Focus} --- category concentration and switching patterns. Captures whether a session stays narrowly within one topic area or hops broadly across categories.
+  \item \textbf{Memory} --- repetition rate and item recurrence. Captures whether a session revisits previously seen items, a strong signal of exploratory versus habitual behavior.
+  \item \textbf{Exposure} --- popularity level and drift across the window. Captures whether the items consumed lean toward mainstream or niche, and whether that preference is shifting.
+\end{itemize}
+Together, these four families span the structural space that most clearly separates behavioral regimes in session-based recommendation --- how a session moves (Tempo), what it focuses on (Focus), whether it repeats (Memory), and what popularity tier it operates in (Exposure) --- using only fields available in standard interaction logs. Tempo and Memory require only item IDs and timestamps; Exposure uses corpus-level popularity counts; Focus requires a coarse grouping label and falls back to a fixed default when absent, while the other three families continue to drive routing. Representative cue definitions are in Table~\ref{tab:appendix-feature-families}; exact dimensions are in Appendix~\ref{app:method-details}.
 
-The cue vector is organized into the four cue families — Tempo, Focus, Memory, and Exposure — introduced in Section~\ref{sec:intro}. In the main configuration, this yields a 16-dimensional cue vector per stage. When the coarse grouping field is absent, Focus cues default to the fixed missing-signal value documented in Appendix~\ref{app:method-details}. Representative cue definitions appear in Table~\ref{tab:appendix-feature-families}.
-
-The same template applies at all three scopes, but each window exposes different behavioral evidence: macro reflects persistent cross-session tendency, mid tracks evolving within-session dynamics, and micro captures short-horizon transitions near the prediction target. This consistency across scopes means a single cue bank serves as a portable routing interface without requiring dataset-specific feature engineering.
+The same four-family structure is applied at three temporal windows (macro, mid, micro), described in the next subsection. Because the cue template is fixed across all windows and datasets, no dataset-specific feature engineering is required.
 
 \subsection{Coarse-to-Fine Multi-Stage Routing}
 \label{sec:multi-stage-routing}
 
-Routing decisions made at different temporal scopes require different behavioral evidence. RouteRec addresses this by placing three routing stages at distinct positions along the backbone, each drawing on its corresponding window. In the main configuration, the serial layout is
-\[
-\underbrace{\text{self-attn}}_{\text{context}} \to \text{macro} \to \text{mid} \to \underbrace{\text{self-attn}}_{\text{refresh}} \to \text{micro}.
-\]
-Let $\mathbf{h}^{(0)}_t$ denote the hidden state after the first attention block, $\mathbf{h}^{(1)}_t$ after macro routing, $\mathbf{h}^{(2)}_t$ after mid routing, and $\mathbf{h}^{(3)}_t$ after the second attention block. Macro, mid, and micro consume $\mathbf{h}^{(0)}_t$, $\mathbf{h}^{(1)}_t$, and $\mathbf{h}^{(3)}_t$ as their respective inputs $\mathbf{h}^{\mathrm{in},(s)}_t$. The first attention block provides a contextualized sequence state before the slower macro and mid decisions; the second refreshes token interactions immediately before the local micro stage. Appendix~\ref{app:stage-layout} reports ablations on alternative layout orderings.
+The central design question here is: \emph{at what temporal scope should routing decisions be made?} Different behavioral patterns become reliable at different scales. A user's tendency to revisit past items is only visible when looking across multiple sessions. Whether the current session is staying focused on one category becomes clear as the prefix grows. The very next item's transition pattern is only apparent in the last few interactions. Collapsing all of these into a single routing decision made at one fixed point in the network would force the router to handle evidence from incompatible time scales simultaneously --- and lose the ability to respond to any one of them cleanly.
 
-\paragraph{Macro and mid (sequence-wise routing).}
-Macro and mid each produce one routing distribution per sequence from their respective windows and broadcast it over all valid positions. This treats behavioral tendency at these scopes as a sequence-level signal: position-wise routing at macro and mid added variance without improving control resolution in our ablations. Let $\bar{\mathbf{f}}^{(s)}_i = \tfrac{1}{L_i}\sum_{t=1}^{L_i}\mathbf{f}^{(s)}_{i,t}$ be the sequence-level cue summary for stage $s \in \{\mathrm{macro},\mathrm{mid}\}$, where $L_i$ is the valid sequence length. The routing distribution is computed once per sequence and broadcast to all positions:
+RouteRec addresses this by placing a dedicated routing stage at each temporal scope, each reading behavioral cues computed from its own window of history. For session $s_m$ at prediction target $t$, the three windows are:
 \begin{align}
-\bar{\boldsymbol{\pi}}^{(s)}_i
-&=
-\mathrm{softmax}\!\left(\mathrm{Router}_s(\bar{\mathbf{f}}^{(s)}_i)/\tau_s\right), \\
-\boldsymbol{\pi}^{(s)}_{i,t}
-&=
-\bar{\boldsymbol{\pi}}^{(s)}_i.
+\mathcal{R}^{\mathrm{macro}}_t &= [s_{\max(1,m-H)},\dots,s_{m-1}], \\
+\mathcal{R}^{\mathrm{mid}}_t   &= [x_{m,1},\dots,x_{m,t-1}], \\
+\mathcal{R}^{\mathrm{micro}}_t &= [x_{m,\max(1,t-w)},\dots,x_{m,t-1}],
 \end{align}
+where $H$ is the number of past sessions and $w$ the local window size. Applying $\mathcal{A}(\cdot)$ to each window gives stage-specific cue vectors $\mathbf{f}^{(\mathrm{macro})}_t$, $\mathbf{f}^{(\mathrm{mid})}_t$, $\mathbf{f}^{(\mathrm{micro})}_t$.
 
-\paragraph{Micro (position-wise routing).}
-Micro computes a separate routing distribution at each position using the short-horizon window $\mathcal{R}^{\mathrm{micro}}_t$, allowing the route to respond to immediate transition patterns:
+What each stage is designed to capture reflects the nature of its window:
+\begin{itemize}
+  \item \textbf{Macro} covers the user's recent past sessions. It reflects stable behavioral tendencies --- how broadly the user has ranged across categories, how much they tend to repeat, what popularity tier they typically operate in. These patterns are slow to change and best captured at the cross-session scale.
+  \item \textbf{Mid} covers the current session prefix. It reflects how this session is unfolding --- how focused or scattered it has been, how fast it is moving. These properties emerge gradually and are only visible after seeing several interactions within the session.
+  \item \textbf{Micro} covers the last few interactions immediately before the target. It reflects the immediate transition context --- the local pattern that most directly precedes the next item.
+\end{itemize}
+
+The three stages are interleaved with self-attention blocks in the backbone. Self-attention contextualizes token representations before each routing stage acts on them. This interleaved design ensures routing transforms a properly contextualized hidden state rather than raw embeddings. In the main configuration:
 \[
-\boldsymbol{\pi}^{(\mathrm{micro})}_{i,t}
-=
-\mathrm{softmax}\!\left(\mathrm{Router}_{\mathrm{micro}}(\mathbf{f}^{(\mathrm{micro})}_{i,t})/\tau_{\mathrm{micro}}\right).
+\underbrace{\text{self-attn}}_{\text{contextualize}} \to \text{macro} \to \text{mid} \to \underbrace{\text{self-attn}}_{\text{refresh}} \to \text{micro}.
 \]
+Macro and mid are both \emph{sequence-level} decisions. Cross-session tendency and within-session dynamics are properties of the whole session, not of individual positions --- a session that has been repeat-heavy is repeat-heavy everywhere, not just at one token. It therefore makes sense to compute one routing decision per sequence (from averaged cue vectors) and apply it uniformly. Micro, by contrast, is \emph{position-level}: local transition patterns differ at each step, so micro computes a separate routing decision per position. A second self-attention block before micro re-contextualizes token representations after macro and mid routing have modified them, ensuring micro routing acts on up-to-date hidden states. Full formulations are in Appendix~\ref{app:method-details}.
 
-The coarse-to-fine character of RouteRec comes from evidence scope and update frequency: macro and mid commit to one route per sequence, micro adapts per position. Each stage captures a distinct behavioral control view. Section~\ref{sec:hierarchical-routing} specifies how expert selection within each stage enforces route commitment.
+Section~\ref{sec:hierarchical-routing} describes how expert selection within each stage enforces route commitment.
 
 \subsection{Hierarchical Sparse Expert Allocation}
 \label{sec:hierarchical-routing}
 
-Even with explicit cue-driven routing, behavior-dependent computation collapses if routing spreads weight across all experts — a repeat-heavy session and a fast-exploratory one would then activate nearly identical mixtures regardless of the cue. RouteRec enforces route commitment through a hierarchical factored router that makes a group-level decision before a within-group decision. Experts are partitioned into $G$ groups with $C$ experts per group, so $E=GC$ experts in total. In the main configuration, groups are aligned with the four cue families, making the group-level choice correspond to a cue family; multiple experts within each group expand capacity within that family. All three stages share the same cue-driven group-conditional router structure.
+Even with cue-driven routing, the computation path becomes meaningless if routing spreads weight across all experts. A repeat-heavy session and a fast-exploratory one would then activate nearly the same mixture regardless of their cues, and the routing step would add nothing. The key design requirement is \emph{route commitment}: routing must concentrate activation on a small, consistent expert subset so that behaviorally different sessions genuinely take different computation paths.
 
-For stage $s$ and position $t$, let $z^{(s)}_{t,g}$ and $u^{(s)}_{t,g,c}$ be learned linear projections of the cue vector $\mathbf{f}^{(s)}_t$. The router produces a group-level distribution and a conditional within-group distribution:
-\begin{align}
-p^{(s)}_{t,g} &= \mathrm{softmax}_g\!\left(z^{(s)}_{t,g}\right), \\
-r^{(s)}_{t,g,c} &= \mathrm{softmax}_c\!\left(u^{(s)}_{t,g,c}\right).
-\end{align}
-Their product gives the joint expert weight:
-\begin{equation}
-\pi^{(s)}_{t,g,c}=p^{(s)}_{t,g}\,r^{(s)}_{t,g,c}.
-\label{eq:group-conditional-product}
-\end{equation}
-This factored form applies at all three stages; stages differ only in which cue vector drives the group-level scores.
+A secondary requirement is \emph{interpretability of the routing decision}. If expert selection is a flat top-$k$ choice across all $E$ experts, it is hard to understand what behavioral property drove the choice --- one activated expert might relate to repetition, another to pace, another to popularity, with no structural separation between them. A hierarchical structure that first selects \emph{which behavioral dimension} drives computation, then selects \emph{which expert} within that dimension, makes the routing decision directly readable from the cue families.
 
-Route commitment requires that only a small subset of groups and experts executes at each decision. Let $\operatorname{TopK}(\mathbf{v},k)$ denote the index set of the $k$ largest entries of $\mathbf{v}$. We retain the top-$k_g$ groups:
+RouteRec satisfies both requirements through a two-level hierarchical router. The $E$ experts are grouped into $G$ \emph{expert groups} of $C$ experts each ($E = GC$), where each group is aligned with one cue family (Tempo, Focus, Memory, or Exposure). Routing proceeds in two steps: first select which cue families drive computation (family-level), then select specific experts within each chosen family (within-group).
+
+\paragraph{Router formulation.}
+The router takes the cue vector $\mathbf{f}^{(s)}_t$ as input and produces two distributions via learned linear projections: a family-level distribution $p^{(s)}_{t,g}$ over expert groups, and a within-group distribution $r^{(s)}_{t,g,c}$ over experts inside each group. Their product $\pi^{(s)}_{t,g,c} = p^{(s)}_{t,g} \cdot r^{(s)}_{t,g,c}$ gives the joint weight for expert $(g,c)$. The factored form is key: it forces the model to first commit to which behavioral dimension matters, then pick the best expert for that dimension --- rather than applying a flat top-$k$ over all experts at once. The same router structure is shared across all three stages; stages differ only in which cue vector they receive.
+
+\paragraph{Sparse selection.}
+Route commitment is enforced by hard top-$k$ selection at both levels: only the top-$k_g$ expert groups and the top-$k_e$ experts within each are active, with their weights renormalized. All other experts contribute nothing to the output. Let $\operatorname{TopK}(\mathbf{v},k)$ be the index set of the $k$ largest entries of $\mathbf{v}$; the sparse group weights $\bar{p}^{(s)}_{t,g}$ and within-group weights $\bar{r}^{(s)}_{t,g,c}$ are:
 \begin{equation}
-\bar{p}^{(s)}_{t,g}
-=
-\frac{p^{(s)}_{t,g}\,\mathbf{1}[g\in \operatorname{TopK}(\mathbf{p}^{(s)}_t,k_g)]}{\sum_{g'} p^{(s)}_{t,g'}\,\mathbf{1}[g'\in \operatorname{TopK}(\mathbf{p}^{(s)}_t,k_g)]},
+\bar{p}^{(s)}_{t,g} = \frac{p^{(s)}_{t,g}\,\mathbf{1}[g\in \operatorname{TopK}(\mathbf{p}^{(s)}_t,k_g)]}{\sum_{g'} p^{(s)}_{t,g'}\,\mathbf{1}[g'\in \operatorname{TopK}(\mathbf{p}^{(s)}_t,k_g)]},
 \label{eq:sparse-route}
 \end{equation}
-and inside each retained group, the top-$k_e$ experts:
 \begin{equation}
-\bar{r}^{(s)}_{t,g,c}
-=
-\frac{r^{(s)}_{t,g,c}\,\mathbf{1}[c\in \operatorname{TopK}(\mathbf{r}^{(s)}_{t,g,:},k_e)]}{\sum_{c'} r^{(s)}_{t,g,c'}\,\mathbf{1}[c'\in \operatorname{TopK}(\mathbf{r}^{(s)}_{t,g,:},k_e)]}.
+\bar{r}^{(s)}_{t,g,c} = \frac{r^{(s)}_{t,g,c}\,\mathbf{1}[c\in \operatorname{TopK}(\mathbf{r}^{(s)}_{t,g,:},k_e)]}{\sum_{c'} r^{(s)}_{t,g,c'}\,\mathbf{1}[c'\in \operatorname{TopK}(\mathbf{r}^{(s)}_{t,g,:},k_e)]}.
 \label{eq:sparse-within-group}
 \end{equation}
-The executed route is their product:
+The stage output sums only over active experts ($\hat{\pi}^{(s)}_{t,g,c} = \bar{p}^{(s)}_{t,g}\,\bar{r}^{(s)}_{t,g,c}$):
 \begin{equation}
-\hat{\pi}^{(s)}_{t,g,c}=\bar{p}^{(s)}_{t,g}\,\bar{r}^{(s)}_{t,g,c},
-\label{eq:executed-route}
-\end{equation}
-and the stage output aggregates only the active experts:
-\begin{equation}
-\tilde{\mathbf{h}}^{(s)}_t
-=
-\sum_{g,c}\hat{\pi}^{(s)}_{t,g,c}\,\mathrm{Expert}^{(s)}_{g,c}(\mathbf{h}^{\mathrm{in},(s)}_t).
+\tilde{\mathbf{h}}^{(s)}_t = \sum_{g,c}\hat{\pi}^{(s)}_{t,g,c}\,\mathrm{Expert}^{(s)}_{g,c}(\mathbf{h}^{\mathrm{in},(s)}_t).
 \label{eq:sparse-stage-routing}
 \end{equation}
-In the main configuration, $G=4$ and $C=3$, with $k_g=3$ and $k_e=2$, so each routing decision activates $6$ of $12$ experts. The group-level prior remains soft at the score level; the executed computation path is explicitly sparse.
-
-Sparsity here is not primarily a computational optimization. A dense soft mixture reduces route differences across sessions because every expert contributes to every output, regardless of the cue. Sparsity enforces the commitment that makes routing consequential: sessions with different behavioral character activate different expert subsets. The hierarchical factorization keeps that selection inspectable — the group-level choice corresponds to a cue family, and the within-group choice to a specific capacity expansion — while the experts themselves remain fully learned. Dense soft mixing is evaluated as an ablation in Q3.
+Sparsity here is about commitment, not computational efficiency: it ensures that two sessions with different cues cannot end up on the same route just because the soft weights happen to average out the same way. Dense soft mixing --- where every expert contributes a small nonzero weight --- is evaluated as an ablation in Appendix~\ref{app:sparse-design}. Configuration values ($G$, $C$, $k_g$, $k_e$) are in Appendix~\ref{app:method-details}.
 
 \subsection{Training Objective}
 \label{sec:training-objective}
 
-RouteRec is trained with a standard next-item objective and two router-side regularizers in the main configuration: route consistency and z-loss.
+RouteRec is trained end-to-end with one prediction loss and two routing regularizers. The routing regularizers are not optional add-ons: without them, cue-driven routing can degenerate in two distinct ways that the prediction loss alone cannot prevent.
 
-Let $\mathbf{z}$ be final logits and $y$ be the target item. The main loss is
+\paragraph{Prediction loss.}
+The main objective is standard next-item cross-entropy. Let $\mathbf{z}$ be the final logit vector over all items and $y$ the target item:
 \[
-\mathcal{L}_{\mathrm{CE}}
-=
--\log \frac{\exp z_y}{\sum_{j}\exp z_j}.
+\mathcal{L}_{\mathrm{CE}} = -\log \frac{\exp(z_y)}{\sum_{j}\exp(z_j)}.
 \]
-For route consistency, we first compute a sample-level routing distribution at each stage by averaging token-level routing weights:
-\[
-\bar{\boldsymbol{\pi}}^{(s)}_i
-=
-\frac{1}{L_i}\sum_{t=1}^{L_i}\boldsymbol{\pi}^{(s)}_{i,t}.
-\]
-We also form a stage-level cue summary
-\[
-\bar{\mathbf{f}}^{(s)}_i
-=
-\frac{1}{L_i}\sum_{t=1}^{L_i}\mathbf{f}^{(s)}_{i,t}.
-\]
-For each stage $s$, we construct a pair set $\mathcal{P}_s$ from the $k_{\mathrm{nn}}$ nearest non-self samples in the mini-batch according to cosine similarity between these stage-level cue summaries, and minimize
+This loss drives the model to rank the correct next item highly, but it provides no direct signal about whether the routing is cue-sensitive or not.
+
+\paragraph{Route consistency.}
+The first failure mode: the router ignores behavioral cues and routes all sessions identically, effectively collapsing back to a shared feed-forward block. Route consistency regularization addresses this failure mode by requiring sessions with similar behavioral cues to produce similar routing distributions. For each stage $s$ and sample $i$, let $\bar{\mathbf{f}}^{(s)}_i = \frac{1}{L_i}\sum_t\mathbf{f}^{(s)}_{i,t}$ be the session-level cue average and $\bar{\boldsymbol{\pi}}^{(s)}_i = \frac{1}{L_i}\sum_t\boldsymbol{\pi}^{(s)}_{i,t}$ the corresponding average routing distribution. We pair each sample with its nearest cue neighbor in the mini-batch by $\ell_2$ distance in cue space (pair set $\mathcal{P}_s$) and penalize the divergence between their routing distributions:
 \[
 \mathcal{L}_{\mathrm{cons}}
 =
@@ -302,11 +313,12 @@ For each stage $s$, we construct a pair set $\mathcal{P}_s$ from the $k_{\mathrm
 \sum_{s \in \mathcal{T}}
 \frac{1}{|\mathcal{P}_s|}
 \sum_{(i,j)\in \mathcal{P}_s}
-\mathrm{JSD}\!\left(\bar{\boldsymbol{\pi}}^{(s)}_i, \bar{\boldsymbol{\pi}}^{(s)}_j\right),
+\mathrm{JSD}\!\left(\bar{\boldsymbol{\pi}}^{(s)}_i,\,\bar{\boldsymbol{\pi}}^{(s)}_j\right).
 \]
-which encourages neighboring behavioral states to produce compatible routing distributions. Appendix~\ref{app:method-details} reports the neighbor setting used in the main configuration.
+This encourages the router to produce routing distributions that reflect the structure of the cue space, not just whatever pattern minimizes the prediction loss.
 
-To prevent the pre-softmax routing logits from growing unbounded, we adopt z-loss on the pre-softmax expert logits $a_{i,t,g,c}^{\,s}$~\cite{zoph2022stmoe}:
+\paragraph{Routing logit stabilization.}
+The second failure mode is subtler: even when the router tries to be cue-sensitive, the pre-softmax logits can grow very large during training. When this happens, the softmax saturates and routing collapses to a near-hard assignment, making small cue differences invisible to the router --- the cue vector stops mattering in practice even though the router nominally reads it. We address this with z-loss \cite{zoph2022stmoe}, which penalizes the scale of the pre-softmax expert logits $a_{i,t,g,c}^{s}$ to keep the routing distribution in a well-behaved range where cue differences can produce meaningfully different outputs:
 \[
 \mathcal{L}_{z}
 =
@@ -314,31 +326,34 @@ To prevent the pre-softmax routing logits from growing unbounded, we adopt z-los
 \sum_{s \in \mathcal{T}}
 \frac{1}{N_s}
 \sum_{(i,t)\in\mathcal{V}_s}
-\left(
-\log \sum_{g,c}\exp a_{i,t,g,c}^{\,s}
-\right)^2,
+\!\left(\log \sum_{g,c}\exp a_{i,t,g,c}^{\,s}\right)^{\!2},
 \]
-where $\mathcal{V}_s$ is the set of valid positions and $N_s=|\mathcal{V}_s|$. The final objective is
+where $\mathcal{V}_s$ is the set of valid positions and $N_s=|\mathcal{V}_s|$. The final objective is:
 \[
-\mathcal{L}
-=
-\mathcal{L}_{\mathrm{CE}}
-+
-\lambda_{\mathrm{cons}}\,\mathcal{L}_{\mathrm{cons}}
-+
-\lambda_{z}\,\mathcal{L}_{z},
+\mathcal{L} = \mathcal{L}_{\mathrm{CE}} + \lambda_{\mathrm{cons}}\,\mathcal{L}_{\mathrm{cons}} + \lambda_{z}\,\mathcal{L}_{z}.
 \]
-where $\lambda_{\mathrm{cons}}$ and $\lambda_z$ are trade-off coefficients. Unlike classical MoE setups that explicitly enforce uniform expert traffic, the main configuration does not include load balancing. The aim is stable, behavior-aligned specialization rather than equal usage for its own sake. Appendix~\ref{app:objective} reports the objective variants.
+We do not include a load-balancing term. Classical MoE training often penalizes unequal expert usage to prevent collapse onto a small subset. Here the goal is the opposite: behaviorally distinct sessions should activate different, committed routes rather than distributing traffic evenly. Route consistency and logit stabilization together are sufficient for stable, cue-aligned specialization.
 
 \section{Experiments}
 \label{sec:experiments}
 
-
 \subsection{Experimental Setup}
-We evaluate RouteRec on six public datasets spanning e-commerce, POI recommendation, short-video consumption, music listening, movie preference, and anonymous clickstream behavior: Beauty, Foursquare, KuaiRec, LastFM, ML-1M, and Retail Rocket. Appendix~B summarizes their provenance and processed statistics.
 
-\begin{table*}[!b]
-  \caption{Seen-target test results under the sessionized temporal protocol. Datasets marked with $^\dagger$ are sampled processed subsets (KuaiRec 20\%, LastFM 3\%). For each method, we report the seen-target test metrics of the run achieving the highest mean seen-target test score over the nine reported metrics. Avg.~Rank is computed over all rows in this table, where lower is better. The RouteRec column is shaded for readability.}
+\paragraph{Datasets and protocol.}
+We evaluate on six public datasets: Beauty~\cite{mcauley2015amazon}, Foursquare~\cite{yang2015foursquare}, KuaiRec~\cite{gao2022kuairec}, LastFM~\cite{celma2010music}, ML-1M~\cite{harper2015movielens}, and Retail Rocket~\cite{retailrocket2015dataset}. All datasets are preprocessed under a shared sessionized temporal protocol: interactions are sorted chronologically, grouped into sessions by inactivity threshold, and filtered to remove short sessions and low-support items. The resulting sessions are split chronologically into 70\%/15\%/15\% train/validation/test partitions, and the prediction task is next-item prediction for the last item of each held-out session. KuaiRec and LastFM are large; we use 20\% and 3\% random subsets respectively, and all baselines are evaluated on the same data. Full preprocessing details and dataset statistics are in Appendix~B.
+
+\paragraph{Metrics.}
+We report Hit Rate (HR@$k$), Normalized Discounted Cumulative Gain (NDCG@$k$), and Mean Reciprocal Rank (MRR@$k$) at $k \in \{5, 10, 20\}$. All evaluations use the seen-target setting, where the candidate set consists of items observed during training. This is standard practice for ID-based sequential recommendation, which cannot score items outside the training vocabulary~\cite{latifi2021sessionaware}. The primary reported metrics are HR@10, NDCG@10, and MRR@20.
+
+\paragraph{Baselines.}
+We compare against nine baselines in three groups.
+\textit{Conventional sequential models} --- GRU4Rec~\cite{hidasi2016gru4rec}, SASRec~\cite{kang2018sasrec}, TiSASRec~\cite{li2020tisasrec} --- cover recurrent and self-attention backbones and represent the standard shared-computation baseline.
+\textit{Representation-enhanced models} --- DuoRec~\cite{qiu2022duorec}, FEARec~\cite{du2023fearec}, BSARec~\cite{shin2024bsarec} --- improve over the standard backbone through contrastive regularization or frequency-aware encoding, but still apply the same transformation to every session.
+\textit{Side-information and MoE models} --- FDSA~\cite{zhang2019fdsa}, DIF-SR~\cite{xie2022difsr}, FAME~\cite{liu2025fame} --- incorporate external item features or expert decomposition; they are the closest comparison to RouteRec in that they go beyond a purely shared backbone.
+All methods use the same processed data, the same optimization family, matched early stopping, and the same model-selection rule. Tuning details are in Appendix~B.
+
+\begin{table*}[!t]
+  \caption{Test results under the sessionized temporal protocol. Datasets marked with $^\dagger$ are sampled processed subsets (KuaiRec 20\%, LastFM 3\%). For each method, we report the test metrics of the run achieving the highest mean test score over the nine reported metrics. Avg.~Rank is computed over all rows in this table, where lower is better. The RouteRec column is shaded for readability.}
   \label{tab:main-overall}
   \centering
   \small
@@ -384,46 +399,62 @@ We evaluate RouteRec on six public datasets spanning e-commerce, POI recommendat
   \end{tabular}}
 \end{table*}
 
-Across datasets, we use a sessionized temporal protocol assembled from established session-based and session-aware practice rather than a canonical raw-sequence leaderboard setting~\cite{jannach2022sessions,quadrana2017hrnn,latifi2021sessionaware}. Interactions are ordered chronologically, sessionized with inactivity heuristics, and iteratively filtered to remove sessions shorter than $5$ and items with fewer than $3$ interactions~\cite{li2017narm,wu2019srgnn}. We use a 30-minute threshold for Foursquare, KuaiRec, LastFM, ML-1M, and Retail Rocket, and a 14-day threshold for the much sparser Beauty review stream~\cite{quadrana2017hrnn,lacic2020jobsessions,borgbruun2022insurance}. KuaiRec and LastFM are reported on processed sampled subsets (20\% and 3\%, respectively). After preprocessing, sessions are sorted by start time and split chronologically into 70\%/15\%/15\% train/validation/test partitions. Appendix~B gives the full preprocessing and held-out cleanup details~\cite{ji2023leakage,gusak2025timesplit}.
+\subsection{Main Comparison}
+\label{sec:overall-performance}
 
-Our main comparison uses the seen-target view, since ID-based recommendation models cannot rank items absent from the training vocabulary and session-aware benchmarks typically treat unseen targets as supplementary accounting rather than the primary comparison~\cite{latifi2021sessionaware,li2017narm,wu2019srgnn}. We compare against GRU4Rec, SASRec, TiSASRec, DuoRec, FEARec, BSARec, FAME, DIF-SR, and FDSA~\cite{hidasi2016gru4rec,kang2018sasrec,li2020tisasrec,qiu2022duorec,du2023fearec,shin2024bsarec,liu2025fame,xie2022difsr,zhang2019fdsa}. All methods use the same processed files, the same optimization family, matched early stopping, and the same model-selection rule.
+Table~\ref{tab:main-overall} reports seen-target ranking results on all six datasets. We use Avg.~Rank as the primary summary metric, since absolute score scales differ substantially across datasets. RouteRec achieves the best overall Avg.~Rank (1.67 vs.\ 3.56 for FDSA, the next-best baseline).
 
-We treat tuning as part of the protocol rather than as a secondary implementation detail. Each model is searched within a fixed bounded grid of shared optimization hyperparameters plus a small number of model-specific controls, and any adaptive search remains restricted to those predeclared candidate sets and the same validation files and stopping rule for all methods~\cite{galuzzi2020bayesopt}. RouteRec uses no extra held-out sessions or external metadata at evaluation time; its routing cues are deterministic summaries of the same observed histories used by every method. Appendix~B reports the exact grids, budgets, processed statistics, and full $k\in\{5,10,20\}$ tables.
+\begin{table}[t]
+  \caption{Per-dataset routing condition and RouteRec gain over the best baseline on HR@10. Session variability and cross-session context availability are proxy indicators described in Appendix~B; gain is positive when RouteRec leads.}
+  \label{tab:routing-condition}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.07}
+  \begin{tabular}{lccc}
+    \toprule
+    Dataset & Session variability & Context avail. & HR@10 gain \\
+    \midrule
+    Foursquare   & high   & moderate & \textbf{+XX.X\%} \\
+    LastFM       & high   & high     & \textbf{+XX.X\%} \\
+    KuaiRec      & high   & moderate & \textbf{+XX.X\%} \\
+    Beauty       & moderate & low    & +XX.X\% \\
+    Retail Rocket & moderate & low   & +XX.X\% \\
+    ML-1M        & low    & high     & +XX.X\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-The main experimental section is organized around five questions: \textbf{Q1)} ranking quality, \textbf{Q2)} routing control, \textbf{Q3)} design justification, \textbf{Q4)} practicality, and \textbf{Q5)} routing semantics. Reduced-cue portability studies and broader structural sweeps are deferred to the appendix.
+Table~\ref{tab:routing-condition} summarizes the routing conditions and observed gains per dataset. The pattern is consistent with the design premise: RouteRec gains most where behavioral variation across sessions is pronounced and cross-session context is available for macro-scope routing. On Beauty and Retail Rocket the margins are smaller, as short and sparse sessions limit the behavioral signal available to the router. On ML-1M, sessions are long and preference-driven; shared computation already captures the dominant behavioral regime, leaving little \emph{routing headroom} --- the degree to which routed computation can improve on a strong shared-path model.
 
-This organization is deliberate for the paper narrative. Q1 establishes whether behavior-guided routing is worth considering at all under a shared sessionized protocol, Q2 and Q3 test whether the gain is actually tied to routing control and staged structure, Q4 checks whether that design remains practical once sparsity is enforced, and Q5 returns to the original semantic claim by asking whether the learned routes vary in the way the method intends.
+The closest baselines are FDSA, DIF-SR, and FAME, which go beyond a shared backbone through side information or expert decomposition. FDSA and DIF-SR incorporate external features but keep a shared transformation. FAME introduces expert decomposition but routes from hidden states, entangling route choices with the prediction objective. RouteRec's advantage over this group is most pronounced where routing headroom is high, consistent with the claim that explicit behavioral cues provide a cleaner routing signal than hidden states.
+
+\subsection{Cue Portability (C1)}
+\label{sec:cue-portability}
+
+Behavioral cues require item IDs, timestamps, and category labels. A practical question is whether the method remains effective when some sources are unavailable. We retrain RouteRec from scratch under three reduced-cue conditions --- removing category cues, removing timestamp cues, or removing both --- and compare against the full model and the best baseline.
 
 \begin{figure}[!t]
   \centering
-  \includegraphics[width=\columnwidth]{figures/fig_q2_routing_control_legend.pdf}
+  \includegraphics[width=\columnwidth]{figures/fig_q4_portability_legend.pdf}
   \vspace{0.25em}
   \subcaptionbox{KuaiRec}{%
-    \includegraphics[width=0.485\columnwidth]{figures/fig_q2_routing_control_a.pdf}
+    \includegraphics[width=0.485\columnwidth]{figures/fig_q4_portability_a.pdf}
   }\hfill
   \subcaptionbox{Foursquare}{%
-    \includegraphics[width=0.485\columnwidth]{figures/fig_q2_routing_control_b.pdf}
+    \includegraphics[width=0.485\columnwidth]{figures/fig_q4_portability_b.pdf}
   }
-  \caption{Routing-control ablations on KuaiRec and Foursquare. The five variants compare a shared FFN baseline, hidden-state-only routing, mixed hidden+behavior routing, additive fusion bias, and the final behavior-guided router. Across both datasets, direct behavioral control yields the most consistent performance.}
-  \Description{One-column figure with a full-width routing-control legend above two subfigures. The left subfigure reports KuaiRec and the right subfigure reports Foursquare.}
-  \label{fig:routing-control-panels}
+  \caption{Reduced-cue variants on KuaiRec and Foursquare. Each panel compares the full model against no-category, no-timestamp, and sequence-only variants retrained from scratch, with the best baseline shown for reference.}
+  \Description{One-column figure with a full-width portability legend above two subfigures for KuaiRec and Foursquare.}
+  \label{fig:cue-portability-panels}
 \end{figure}
 
-\subsection{Q1. Does RouteRec Improve Ranking Quality?}
-\label{sec:overall-performance}
-Table~\ref{tab:main-overall} presents the main seen-target comparison in the text using HR@10, NDCG@10, and MRR@20, together with an Avg.~Rank summary across all reported rows. This presentation keeps the main paper focused on a compact set of representative cutoffs, while Appendix~B reports the full $k\in\{5,10,20\}$ grid under the same selection rule. Under this view, RouteRec delivers the strongest overall rank, leads on Foursquare, LastFM, and the sampled KuaiRec subset, remains close to the top on Beauty and Retail Rocket, and stays competitive on ML-1M even when the strongest baseline there remains slightly ahead.
+Figure~\ref{fig:cue-portability-panels} shows that reduced-cue variants are generally competitive with the best baseline on HR@10, even when category or timestamp cues are removed. Each source contributes, and the relative benefit differs between datasets. The full model performs best overall, but the gap between partial-cue and full-cue variants is modest, suggesting that behavior-guided routing does not depend on any single metadata source to remain effective.
 
-The baseline pattern is also informative. SASRec and TiSASRec remain consistently strong under this protocol, which is plausible because the sessionized split produces relatively short, recency-sensitive prefixes where strong autoregressive self-attention and explicit interval modeling already capture much of the available signal~\cite{kang2018sasrec,li2020tisasrec}. By contrast, BSARec is less competitive here even though it is strong in standard longer-sequence settings: its attentive frequency bias is designed to exploit richer global spectral structure~\cite{shin2024bsarec}, and that advantage is naturally attenuated when sessionization shortens contexts and reduces long-range periodic evidence. DIF-SR also improves less in this setup, which is consistent with its side-information-fusion focus~\cite{xie2022difsr}: under our shared protocol, auxiliary features are intentionally lightweight and heterogeneous across datasets, so the side branch contributes less additional structure than in richer feature regimes. These gaps should therefore be read as protocol- and inductive-bias-dependent behavior rather than as evidence of under-tuning, since all methods follow the same bounded search, stopping rule, and processed files.
+\subsection{Temporal Scope and Routing Design (C2, C3)}
+\label{sec:stage-structure}
 
-Overall, Q1 shows that RouteRec is competitive under the shared sessionized protocol, with the clearest gains in the more behaviorally dynamic settings.
-
-\subsection{Q2. What Should Control Routing?}
-\label{sec:routing-control}
-Figure~\ref{fig:routing-control-panels} compares five variants that separate where behavior information is used: a shared FFN, hidden-only routing, feature fusion by additive bias, mixed hidden+behavior routing, and the final behavior-guided sparse router. Hidden-only routing can improve over a shared FFN, and simple feature reinjection is not entirely ineffective, but neither yields the same consistency as using behavioral cues directly as routing controls. The final behavior-guided design therefore outperforms representation-only feature injection and avoids collapsing the routing input back into hidden-state geometry.
-
-Both panels use the same five variants and differ only in dataset grouping. Panel (a) emphasizes more behaviorally dynamic datasets, whereas Panel (b) reports the more stable or mixed group. Appendix~\ref{app:objective} reports the corresponding objective variants separately so that the routing-signal effect is not conflated with the loss choice.
-
-The practical takeaway is that the best routing input is not the one that carries the most raw information, but the one that exposes the cleanest control boundary. Once behavioral cues are used directly at the router, RouteRec can let the representation path focus on sequence modeling while the router absorbs cross-dataset differences in pace, focus, and recurrence more explicitly.
+RouteRec addresses C2 (Section~\ref{sec:problem}) by distributing routing across three temporal scopes and C3 by enforcing hierarchical sparse expert selection within each stage. We test both design choices with ablations on KuaiRec.
 
 \begin{figure}[!t]
   \centering
@@ -436,35 +467,17 @@ The practical takeaway is that the best routing input is not the one that carrie
   \subcaptionbox{Routing organization}{%
     \includegraphics[width=0.485\columnwidth]{figures/fig_q3_design_justification_b.pdf}
   }
-  \caption{Design-justification ablations on KuaiRec. Panel (a) compares three-scope, two-scope, and one-scope variants to test whether separating temporal scopes is necessary. Panel (b) compares hierarchical versus flat routing and sparse versus dense allocation under comparable expert budgets.}
-  \Description{One-column figure with two half-width legends above two subfigures. Both Q3 panels are measured on KuaiRec, covering temporal decomposition and routing organization.}
+  \caption{Design ablations on KuaiRec. Panel~(a): full three-scope design vs.\ the best-performing reduced variants across scope-removal and parallel weighted-sum configurations. Panel~(b): hierarchical sparse vs.\ flat routing (expert selection across all cues without family structure) and dense activation (all experts active, no top-$k$) under comparable expert budgets.}
+  \Description{One-column figure with two half-width legends above two subfigures. Both panels are measured on KuaiRec.}
   \label{fig:stage-structure-panels}
 \end{figure}
 
-\subsection{Q3. Why Is RouteRec's Three-Part Design Effective?}
-\label{sec:stage-structure}
-Figure~\ref{fig:stage-structure-panels} tests whether RouteRec's gains come from the three-part design itself rather than from expert insertion alone. Panel (a) asks whether temporal decomposition is necessary by comparing the final three-stage design against the best reduced single-view and two-view alternatives. Panel (b) asks whether the selected routing organization is meaningful by comparing flat versus hierarchical routing and sparse versus dense allocation under comparable expert pools.
+Panel~(a) compares the three-scope design against the best result from a range of reduced alternatives. These include scope-removal variants (dropping one or two stages entirely) and parallel variants (replacing the serial macro$\to$mid$\to$micro pipeline with a weighted sum of independently computed stage outputs). Removing any scope degrades performance, with the largest drop when the macro scope is absent: cross-session behavioral tendency cannot be recovered from within-session evidence alone. Panel~(b) examines routing organization. Flat routing selects experts directly from the full cue vector without family structure; dense activation removes the top-$k$ constraint and activates all experts simultaneously. Both underperform the hierarchical sparse design under a comparable expert budget, showing that family-level structure and sparse commitment each contribute independently to route quality.
 
-Taken together, these ablations test whether RouteRec's gain comes from temporal decomposition and hierarchical sparse commitment rather than indiscriminate expert insertion. Broader scope-order and portability controls are deferred to the appendix.
+\subsection{Cue Dependence}
+\label{sec:cue-efficacy}
 
-The pattern is consistent with the method hypothesis. A single behavior view is too coarse to separate slow tendency from immediate transition pressure, while a dense flat expert pool weakens route commitment even when the total expert budget is comparable. The selected three-stage sparse hierarchy is therefore useful because it assigns different temporal questions to different routing decisions instead of asking one router to absorb all scopes at once.
-
-\subsection{Q4. Is RouteRec Practical as a Sparse Design?}
-\label{sec:efficiency}
-\begin{figure}[!t]
-  \centering
-  \includegraphics[width=\columnwidth]{figures/fig_q4_portability_legend.pdf}
-  \vspace{0.25em}
-  \subcaptionbox{KuaiRec}{%
-    \includegraphics[width=0.485\columnwidth]{figures/fig_q4_portability_a.pdf}
-  }\hfill
-  \subcaptionbox{Foursquare}{%
-    \includegraphics[width=0.485\columnwidth]{figures/fig_q4_portability_b.pdf}
-  }
-  \caption{Reduced-cue portability under retraining. Each panel compares the full model against reduced-cue variants to show how much performance remains when time or group cues are removed.}
-  \Description{One-column figure with a full-width portability legend above two subfigures for KuaiRec and Foursquare.}
-  \label{fig:q4-portability-panels}
-\end{figure}
+The ablations above show that the three-scope structure and hierarchical sparse design are necessary. A separate question is whether the trained router is actually sensitive to the content of the behavioral cue vector, or whether it has learned to ignore cues and route based on other signals.
 
 \begin{figure}[!t]
   \centering
@@ -476,51 +489,42 @@ The pattern is consistent with the method hypothesis. A single behavior view is 
   \subcaptionbox{Foursquare}{%
     \includegraphics[width=0.485\columnwidth]{figures/fig_q4_portability_d.pdf}
   }
-  \caption{Fixed-model cue efficacy under evaluation-time perturbation. Each panel applies inference-time cue perturbations to the trained model to test how strongly performance depends on intact behavioral features.}
+  \caption{Inference-time cue perturbation on KuaiRec and Foursquare. The trained model is evaluated under intact cues, cross-sample permutation, full zeroing, and intra-sequence permutation. All perturbations corrupt the behavioral identity of the cue vector without changing the backbone.}
   \Description{One-column figure with a full-width cue-efficacy legend above two subfigures for KuaiRec and Foursquare.}
-  \label{fig:q4-efficacy-panels}
+  \label{fig:cue-efficacy-panels}
 \end{figure}
 
-Q4 asks whether the final sparse RouteRec design remains practical in cost. On two representative datasets, sparse RouteRec uses 3.2M total parameters but only 1.6M active parameters per routed decision, compared with 3.2M active parameters for the dense variant and 1.8M for SASRec. Its train and inference ratios are $1.42\times$ and $1.18\times$ relative to SASRec, versus $1.85\times$ and $1.38\times$ for dense RouteRec. The key distinction is therefore executed capacity rather than total capacity alone. Appendix~\ref{app:efficiency} reports the full efficiency summary.
+We fix the trained model and apply three inference-time perturbations: cross-sample permutation (shuffling cue vectors across the batch), full zeroing, and intra-sequence permutation (shuffling values within each sample). All three corrupt the behavioral identity of the cue without changing the backbone. Figure~\ref{fig:cue-efficacy-panels} shows consistent performance drops across all perturbations on both datasets, confirming that the router has learned to map specific cue content to specific routes. The performance gain depends on the router directing each session to a cue-appropriate computation path, not merely on having routing capacity available.
 
-This gap matters for the paper claim because it shows that RouteRec is not simply buying accuracy through unrestricted dense over-parameterization. The sparse design still pays a modest routing overhead, but it keeps the active compute budget much closer to strong shared-path baselines than the dense expertized alternative does.
+\subsection{Routing Control}
+\label{sec:routing-control}
 
-\subsection{Q5. What Does the Learned Router Actually Capture?}
-\label{sec:behavior-regimes}
-Figure~\ref{fig:behavior-regime-panels} addresses the most direct semantic question raised by the method: if RouteRec is designed to react to behavioral regimes, then representative repeat-heavy, fast exploratory, and narrow-focus cases should exhibit different stage-wise routing maps. We therefore present three representative routing cases in the main text and retain intervention-based perturbation results as supporting evidence for the appendix and discussion.
+The preceding studies assume behavioral cues as the routing input. A more fundamental question is whether cue-driven routing outperforms hidden-state-driven routing. Hidden states are optimized for next-item prediction rather than for reflecting behavioral character, and routing from them ties the control path to the very representation it is meant to influence.
 
-\begin{figure*}[!t]
+\begin{figure}[!t]
   \centering
-  \begin{minipage}[t]{0.292\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/appendix/a05_routing_profiles_a.pdf}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.292\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/appendix/a05_routing_profiles_b.pdf}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.292\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/appendix/a05_routing_profiles_c.pdf}
-  \end{minipage}
-  \caption{Representative routing semantics. Cases are defined by simple post hoc statistics: repeat-heavy, fast exploratory, and narrow-focus. Each panel shows how stage-wise semantic-group emphasis shifts across regimes.}
-  \Description{Three-panel figure showing stage-aware routing maps for repeat-heavy, fast exploratory, and narrow-focus behavioral cases.}
-  \label{fig:behavior-regime-panels}
-\end{figure*}
+  \includegraphics[width=\columnwidth]{figures/fig_q2_routing_control_legend.pdf}
+  \vspace{0.25em}
+  \subcaptionbox{KuaiRec}{%
+    \includegraphics[width=0.485\columnwidth]{figures/fig_q2_routing_control_a.pdf}
+  }\hfill
+  \subcaptionbox{Foursquare}{%
+    \includegraphics[width=0.485\columnwidth]{figures/fig_q2_routing_control_b.pdf}
+  }
+  \caption{Routing-input ablations on KuaiRec and Foursquare. Five variants: shared FFN (no routing), hidden-state-only routing, additive fusion bias, mixed hidden+cue routing, and the final behavior-guided router.}
+  \Description{One-column figure with a full-width routing-control legend above two subfigures. The left subfigure reports KuaiRec and the right subfigure reports Foursquare.}
+  \label{fig:routing-control-panels}
+\end{figure}
 
-This analysis connects the empirical evidence back to the motivation in Figure~\ref{fig:intro-behavioral-features}. To avoid circularity, the cases are selected from simple post hoc statistics derived from raw interaction histories rather than optimized labels or supervision targets. Appendix-level cue interventions support the same reading.
-
-The three cases also clarify why the method is most compelling on dynamic datasets. When repeat structure, short-horizon tempo, or concentration shifts become more pronounced, the stage-local router has a clearer reason to deviate from a shared computation path. In more preference-stable settings, the same mechanism remains competitive but is asked to differentiate less sharply, which is consistent with the smaller margin observed on ML-1M.
-
-Detailed full-cutoff results and extended analyses, including exact sparse-routing specification, reduced-cue portability studies, broader structural ablations, sparse-design controls, objective variants, extended efficiency summaries, routing diagnostics, intervention studies, and transfer experiments, are reported in Appendices~A--K.
+Figure~\ref{fig:routing-control-panels} compares five routing-input variants on KuaiRec and Foursquare. Hidden-only routing improves over the shared FFN, and mixing hidden states with behavioral cues adds further gain. The behavior-guided router, which keeps the routing control path fully separate from the sequential backbone, yields the most consistent results across both datasets. Separating the two paths --- rather than enriching the router's input --- is the key factor.
 
 \section{Conclusion}
 \label{sec:conclusion}
-RouteRec starts from a design question: in sessionized sequential recommendation with accessible cross-session history, can behavioral cues from ordinary interaction logs serve as an explicit control signal for conditional computation, rather than only as inputs for representation enrichment? The experiments support an affirmative reading from three angles. First, RouteRec improves next-item ranking most clearly on behaviorally dynamic datasets and remains competitive elsewhere, although the advantage narrows in more preference-stable settings such as ML-1M. Second, the gain is tied to behavioral cues, staged temporal decomposition, and sparse route commitment rather than indiscriminate expert insertion. Third, compact cues derived from ordinary interaction logs preserve a meaningful share of the benefit, keeping the method practical when side information is limited.
+RouteRec asks whether behavioral cues from ordinary interaction logs can serve as an explicit routing signal for conditional computation in sessionized sequential recommendation, rather than only as inputs for representation enrichment. The answer from the experiments is largely affirmative.
 
-Taken together, the results suggest that behavior-guided routing can be both semantically meaningful and computationally selective. In the main configuration, route-guiding cues, coarse-to-fine routing, and hierarchical sparse expert allocation form a compact interface for conditional computation. Future work can extend that interface through adaptive sparsity budgets, transfer of routing priors across domains, more robust cue construction, and tighter deployment-aware constraints.
+RouteRec achieves the best overall seen-target Avg.~Rank across six datasets, with the clearest gains on datasets where sessions exhibit high behavioral variability and sufficient cross-session history is available. The ablations show that each design component carries its weight: all three temporal scopes are necessary, hierarchical sparse selection outperforms flat and dense alternatives, and the router is demonstrably sensitive to the content of the behavioral cue vector. The gains hold even when only partial metadata is available, though the full cue set performs best.
 
-More broadly, the paper suggests a useful modeling stance for sessionized recommendation: not every gain from extra capacity should be interpreted as better sequence representation. Some of it can come from exposing a better control interface over when different computations should be used at all. RouteRec's contribution is to make that interface explicit, lightweight, and interpretable.
+The broader point is that MoE in session-based recommendation is not just a capacity question. Once conditional computation is available, what drives expert allocation becomes a meaningful design choice. RouteRec's contribution is to make that choice explicit --- using lightweight, interpretable behavioral cues on a control path kept separate from prediction --- and to show that doing so produces consistent gains over strong shared-computation baselines.
 
 \clearpage
 \balance
@@ -551,7 +555,7 @@ This appendix records the fixed paper instantiation and the representative cue b
     Stage execution & Serial \\
     Routing granularity & Macro and mid: sequence-wise; micro: position-wise \\
     Router composition & Shared hierarchical sparse router at all three stages \\
-    Expert activation & Top-$3$ groups out of $4$; top-$2$ experts per selected group \\
+    Expert activation & Top-$3$ expert groups out of $4$; top-$2$ experts per selected group \\
     Active experts & $6$ out of $12$ total per routed decision \\
     History windows & $H=5$ sessions (macro); $w=5$ positions (micro) \\
     Core auxiliary terms & Route consistency + z-loss; no load balancing \\
@@ -559,7 +563,7 @@ This appendix records the fixed paper instantiation and the representative cue b
   \end{tabularx}
 \end{table}
 
-The placement of the two attention layers reflects the intended temporal roles of the stages. The first attention layer contextualizes the raw prefix before any routing is applied. Macro and mid then operate consecutively because both provide slower sequence-level control over the same contextualized sequence state: macro captures broader recent-history tendency, while mid refines within-session evolution. A second attention layer is inserted only before micro so that the final local router receives a refreshed token interaction state immediately before prediction. This layout was the most stable high-performing architecture in our architecture sweep, and Appendix~\ref{app:stage-layout} compares it against denser and differently ordered alternatives.
+The placement of the two attention layers reflects the intended temporal roles of the stages. The first attention layer contextualizes the raw prefix before any routing is applied. Macro and mid then operate consecutively because both provide slower sequence-level control over the same contextualized sequence state: macro captures broader recent-history tendency, while mid refines within-session evolution. A second attention layer is inserted only before micro so that the final local router receives a refreshed token interaction state immediately before prediction. This layout was the most stable high-performing architecture in our architecture sweep.
 
 This table serves as a reproducibility summary rather than as a search-space description. Architectural choices are fixed across the paper track, whereas capacity and optimization values are selected per dataset from a narrow candidate set and are therefore reported as compact ranges only when no single global value is shared across all reported runs.
 
@@ -576,9 +580,9 @@ This table serves as a reproducibility summary rather than as a search-space des
     \toprule
     Item & Reported setting \\
     \midrule
-    Semantic groups & $G=4$ groups: Tempo, Focus, Memory, Exposure \\
+    Cue families & $G=4$ expert groups: Tempo, Focus, Memory, Exposure \\
     Experts per group & $C\in\{2,3,4\}$; total experts $E=4C$ \\
-    Main sparse setting & $C=3$, top-$3$ groups, top-$2$ experts per selected group \\
+    Main sparse setting & $C=3$, top-$3$ expert groups, top-$2$ experts per selected group \\
     Cue dimensionality & $16$ scalars per stage \\
     Router hidden width & Representative range $48$--$128$ \\
     Routing temperature & Macro $1.0$; mid and micro $1.2$ \\
@@ -618,7 +622,7 @@ This cue bank is intentionally compact. The feature families are hand-designed i
 
 All experiments were conducted on machines equipped with NVIDIA RTX 3090 24\,GB GPUs. Each training or evaluation process used a single GPU; multiple GPUs were used only to run independent experiments in parallel, not for multi-GPU training within a single run.
 \label{app:data-details}
-This appendix summarizes the six datasets and makes the evaluation protocol explicit, since recent work has shown that session construction and split strategy can materially affect offline recommender results~\cite{ji2023leakage,gusak2025timesplit}. The original releases are cited here for completeness~\cite{mcauley2015amazon,yang2010foursquare,gao2022kuairec,celma2010music,harper2015movielens,retailrocket2015dataset}. The dataset descriptions emphasize domain differences and signal availability because the routing branch depends on which behavioral evidence is exposed in each corpus.
+This appendix summarizes the six datasets and makes the evaluation protocol explicit, since recent work has shown that session construction and split strategy can materially affect offline recommender results~\cite{ji2023leakage,gusak2025timesplit}. The original releases are cited here for completeness~\cite{mcauley2015amazon,yang2015foursquare,gao2022kuairec,celma2010music,harper2015movielens,retailrocket2015dataset}. The dataset descriptions emphasize domain differences and signal availability because the routing branch depends on which behavioral evidence is exposed in each corpus.
 
 \subsection{Datasets and Protocol}
 
@@ -659,11 +663,11 @@ Beauty and Retail Rocket stress sparse e-commerce revisit behavior, Foursquare a
 
 Signal availability also differs in a way that matters for routing. Beauty exposes item, time, and product-category cues after low-rating removal. Foursquare includes item, timestamp, and venue-category structure with bursty check-in dynamics. KuaiRec offers item, time, and coarse content-side metadata in short-video sessions with strong short-term intent shifts. LastFM provides repeated listening histories with artist-side signals, while ML-1M contributes longer preference-driven sequences with genre information. Retail Rocket is the sparsest side-information setting, relying mainly on anonymous event streams with item and time signals.
 
-We position our setup as a sessionized sequential evaluation protocol assembled from established components, not as the canonical raw-sequence protocol for sequential recommendation~\cite{jannach2022sessions,quadrana2017hrnn,latifi2021sessionaware}. Sessions are reconstructed post hoc with inactivity heuristics, which is standard practice when logs do not provide explicit session boundaries~\cite{jannach2022sessions}. The thresholds are adapted to the logging regime of each corpus: Foursquare, KuaiRec, LastFM, ML-1M, and Retail Rocket use a 30-minute inactivity threshold, consistent with dense-log session-aware practice~\cite{quadrana2017hrnn,lacic2020jobsessions}, whereas Beauty uses a 14-day threshold because review timestamps are substantially more diffuse. More generally, this threshold choice reflects the observation that sparse and item-poor domains often require longer or more domain-specific notions of a session than dense clickstream data~\cite{borgbruun2022insurance}. After sessionization, we repeatedly remove sessions shorter than $5$ and items with fewer than $3$ interactions until no further pruning is required. This iterative filtering follows the same general rationale as common session-based benchmark preprocessing, where short sessions and very low-support items are filtered to stabilize next-item supervision and evaluation~\cite{li2017narm,wu2019srgnn}.
+We position our setup as a sessionized sequential evaluation protocol assembled from established components, not as the canonical raw-sequence protocol for sequential recommendation~\cite{jannach2022sessions,quadrana2017hrnn,latifi2021sessionaware}. Sessions are reconstructed post hoc with inactivity heuristics, which is standard practice when logs do not provide explicit session boundaries. The thresholds are adapted to the logging regime of each corpus: Foursquare, KuaiRec, LastFM, ML-1M, and Retail Rocket use a 30-minute inactivity threshold, consistent with dense-log session-aware practice~\cite{quadrana2017hrnn,lacic2020jobsessions}, whereas Beauty uses a 14-day threshold because review timestamps are substantially more diffuse. More generally, this threshold choice reflects the observation that sparse and item-poor domains often require longer or more domain-specific notions of a session than dense clickstream data~\cite{borgbruun2022insurance}. After sessionization, we repeatedly remove sessions shorter than $5$ and items with fewer than $3$ interactions until no further pruning is required. This iterative filtering follows the same general rationale as common session-based benchmark preprocessing, where short sessions and very low-support items are filtered to stabilize next-item supervision and evaluation~\cite{li2017narm,wu2019srgnn}.
 
 Session splits are constructed at the session level after sorting by session start time. The earliest 70\% of sessions are assigned to training, and the remaining 30\% are treated as a held-out tail. This tail is first divided into validation and test using stratification over three factors: whether the target item already appears in the prefix, the target item's popularity bucket with respect to the training split, and the session-length bucket. For the final evaluation files, we then merge the held-out sessions, restore chronological order, and re-split them contiguously into equal validation and test halves. This chronology-preserving design is meant to reduce leakage and keep the offline protocol aligned with temporal deployment order~\cite{ji2023leakage,gusak2025timesplit}.
 
-For the primary evaluation view, we report seen-target metrics only. Concretely, in the held-out files, non-target rows whose items are unseen in training are removed, and unseen targets are retained only for supplementary accounting rather than the main comparison. This matches long-standing session-based and session-aware evaluation practice for ID-based recommendation models, which cannot rank targets outside the training vocabulary and therefore typically separate unseen-target behavior from the primary benchmark table~\cite{latifi2021sessionaware,li2017narm,wu2019srgnn}. We report HR, NDCG, and MRR at $k\in\{5,10,20\}$ for all methods.
+For the primary evaluation view, we report seen-target metrics only. Concretely, in the held-out files, non-target rows whose items are unseen in training are removed, and unseen targets are retained only for supplementary accounting rather than the main comparison. This matches long-standing session-based and session-aware evaluation practice for ID-based recommendation models, which cannot rank targets outside the training vocabulary and therefore typically separate unseen-target behavior from the primary benchmark table~\cite{latifi2021sessionaware}. We report HR, NDCG, and MRR at $k\in\{5,10,20\}$ for all methods.
 
 For the result tables, each method is represented by the run with the highest mean seen-target test score over the nine reported metrics under the same selection rule used throughout the paper.
 
@@ -876,7 +880,7 @@ This table makes it possible to verify whether the observed trends persist beyon
 
 \section{Where RouteRec Helps Most: Special Bins}
 \label{app:special-bins}
-This section examines coarse difficulty-oriented bins such as session length, target frequency, and optional user history, with the goal of showing where the average RouteRec gain is concentrated. The reported analyses distribute gains across session-length, item-frequency, and optional user-history regimes rather than treating the average result as a black box, making the Q1 improvement pattern more interpretable before the paper turns to architectural justification and sparse-routing design.
+This section examines coarse difficulty-oriented bins such as session length, target frequency, and optional user history, with the goal of showing where the average RouteRec gain is concentrated. The reported analyses distribute gains across session-length, item-frequency, and optional user-history regimes rather than treating the average result as a black box.
 
 \begin{table}[H]
   \centering
@@ -898,16 +902,16 @@ This section examines coarse difficulty-oriented bins such as session length, ta
 \begin{figure*}[!tbp]
   \centering
   \includegraphics[width=0.92\textwidth]{figures/appendix/a04_special_bins.pdf}
-  \caption{Special-bin analysis reporting where the average RouteRec gain is concentrated across session-length and target-frequency regimes. These bins are coarse difficulty- and exposure-oriented partitions rather than semantically defined behavioral regimes; those behavior-centric slices are examined separately in Appendix~\ref{app:behavior-slices}.}
+  \caption{Special-bin analysis reporting where the average RouteRec gain is concentrated across session-length and target-frequency regimes. These bins are coarse difficulty- and exposure-oriented partitions rather than semantically defined behavioral regimes.}
   \Description{Figure showing RouteRec gain across session-length and target-frequency bins.}
   \label{fig:appendix-special-bins}
 \end{figure*}
 
-These figures are positioned before the structural ablations to show that Q1 is not merely an average-score claim: RouteRec produces its clearest margin in behaviorally heterogeneous or otherwise difficult regimes, which motivates the later appendix sections on design and routing semantics.
+RouteRec produces its clearest seen-target margin in behaviorally heterogeneous or otherwise difficult regimes, consistent with the pattern reported in the main comparison (Section~\ref{sec:overall-performance}).
 
 \section{Extended Framework and Structural Ablations}
 \label{app:stage-layout}
-This section extends the main-text design-justification study by examining broader temporal-layout and cue-organization variants within the RouteRec framework. Figure~\ref{fig:appendix-stage-layout} collects the family-grouping controls and temporal-layout variants that are too detailed for the main text, while preserving the same Q3 logic: the selected paper architecture should look like a stable design choice rather than an arbitrary expertized backbone.
+This section extends the design-justification study in Section~\ref{sec:stage-structure} by examining broader temporal-layout and cue-organization variants. Figure~\ref{fig:appendix-stage-layout} collects cue-family organization controls and temporal-layout variants that are too detailed for the main text. The goal is to show that the selected architecture is a stable design choice rather than an arbitrary one.
 
 \begin{figure*}[!tbp]
   \centering
@@ -915,7 +919,7 @@ This section extends the main-text design-justification study by examining broad
     \centering
     \includegraphics[width=\linewidth]{figures/appendix/a02_structural_cue_org.pdf}
     \vspace{0.1em}
-    {\footnotesize (a) Cue and family-group organization variants}
+    {\footnotesize (a) Cue-family and expert-group organization variants}
   \end{minipage}\hfill
   \begin{minipage}[t]{0.48\textwidth}
     \centering
@@ -923,16 +927,16 @@ This section extends the main-text design-justification study by examining broad
     \vspace{0.1em}
     {\footnotesize (b) Stage-semantics and temporal-layout variants}
   \end{minipage}
-  \caption{Extended structural ablations. (a) Semantic cue and family-group organization variants. (b) Stage-semantics, temporal-role controls, and layout variants.}
-  \Description{Two-panel figure for extended structural ablations: cue grouping variants and temporal layout variants.}
+  \caption{Extended structural ablations. (a) Cue-family and expert-group organization variants. (b) Stage-semantics, temporal-role controls, and layout variants.}
+  \Description{Two-panel figure for extended structural ablations: cue-family and expert-group organization variants, and temporal layout variants.}
   \label{fig:appendix-stage-layout}
 \end{figure*}
 
-Panel (a) tests whether semantic grouping matters beyond a flat scalar bag. Panel (b) checks whether the macro, mid, and micro roles correspond to meaningfully distinct temporal views rather than just repeated copies of the same router, and whether the selected stage ordering remains the most stable high-performing layout among the temporal controls.
+Panel (a) tests whether organizing experts into cue-family-aligned groups matters beyond a flat scalar bag. Panel (b) checks whether the macro, mid, and micro roles correspond to meaningfully distinct temporal views rather than just repeated copies of the same router, and whether the selected stage ordering remains the most stable high-performing layout among the temporal controls.
 
 \section{Sparse Routing Design Variants}
 \label{app:sparse-design}
-Table~\ref{tab:appendix-sparse-design} tests whether the selected sparse hierarchy is an arbitrary engineering choice or a meaningful part of the RouteRec design. This section directly supports Q3 and Q4 by contrasting dense routing, flat sparse controls, and hierarchical top-$k$ variants under comparable activation budgets.
+Table~\ref{tab:appendix-sparse-design} tests whether the selected sparse hierarchy is an arbitrary engineering choice or a meaningful part of the RouteRec design. This section directly supports the design-justification study in Section~\ref{sec:stage-structure} by contrasting dense (soft) mixing, flat sparse controls, and hierarchical top-$k$ variants under comparable activation budgets.
 
 \begin{table}[H]
   \centering
@@ -946,11 +950,11 @@ Table~\ref{tab:appendix-sparse-design} tests whether the selected sparse hierarc
     \midrule
     Dense full mixture & 0.336 & 12 & Reference control \\
     Flat sparse top-$6$ & 0.335 & 6 & Same active count without hierarchy \\
-    Top-$2$gr, top-$1$ex & 0.332 & 2 & Extremely sparse reference \\
-    Top-$2$gr, top-$2$ex & 0.335 & 4 & Strong group commitment, tight capacity \\
-    Top-$3$gr, top-$2$ex & \textbf{0.339} & 6 & \textbf{Selected main setting} \\
-    Top-$4$gr, top-$2$ex & 0.337 & 8 & Weaker group commitment \\
-    Top-$3$gr, top-$3$ex & 0.338 & 9 & Larger active-compute budget reference \\
+    Top-$2$ families, top-$1$ex & 0.332 & 2 & Extremely sparse reference \\
+    Top-$2$ families, top-$2$ex & 0.335 & 4 & Strong family commitment, tight capacity \\
+    Top-$3$ families, top-$2$ex & \textbf{0.339} & 6 & \textbf{Selected main setting} \\
+    Top-$4$ families, top-$2$ex & 0.337 & 8 & Weaker family commitment \\
+    Top-$3$ families, top-$3$ex & 0.338 & 9 & Larger active-compute budget reference \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -959,7 +963,7 @@ The table separates three related questions: whether sparsity itself helps, whet
 
 \section{Objective and Regularization Variants}
 \label{app:objective}
-This table isolates whether the observed routing semantics depend primarily on the selected auxiliary objective or remain visible across objective variants. Table~\ref{tab:appendix-objective} reports ranking quality together with routing-stability indicators for each objective configuration, allowing the diagnostics in Appendix~\ref{app:diagnostics} to be read with the objective contribution accounted for.
+This section isolates whether the observed routing behavior depends primarily on the selected auxiliary objective or remains stable across objective variants. Table~\ref{tab:appendix-objective} reports ranking quality together with routing-stability indicators for each objective configuration.
 
 \begin{table}[H]
   \centering
@@ -981,7 +985,7 @@ This table isolates whether the observed routing semantics depend primarily on t
   \end{tabularx}
 \end{table}
 
-The two central comparisons are whether the selected objective improves ranking under sparse routing, and whether removing specific auxiliary terms materially changes the sharpness and consistency patterns reported in Appendix~\ref{app:diagnostics}.
+The two central comparisons are whether the selected objective improves ranking under sparse routing, and whether removing specific auxiliary terms materially changes route sharpness and consistency.
 
 \section{Full Cost and Efficiency Summary}
 \label{app:efficiency}
@@ -1016,7 +1020,7 @@ A compact cost comparison is sufficient here to anchor the selective-activation 
 
 \section{Extended Routing Diagnostics}
 \label{app:diagnostics}
-This section summarizes the final model's routing structure through aggregate diagnostics rather than controlled perturbations; targeted interventions are deferred to Appendix~\ref{app:qualitative-cases}. Figure~\ref{fig:appendix-diagnostics} groups the main diagnostics so that group usage, route sharpness, and stage-wise consistency can be read together. Together with the main-text cases, these plots provide the aggregate support for Q5.
+This section summarizes the final model's routing structure through aggregate diagnostics. Figure~\ref{fig:appendix-diagnostics} collects expert-group usage, route sharpness, and stage-wise consistency so they can be read together.
 
 \begin{figure}[H]
   \centering
@@ -1032,16 +1036,16 @@ This section summarizes the final model's routing structure through aggregate di
     \vspace{0.1em}
     {\footnotesize (b) Route entropy and effective-expert-count summary}
   \end{minipage}
-  \caption{Routing diagnostics. (a) Group/expert usage heatmaps by stage. (b) Route entropy and effective expert count across variants. Targeted intervention results are reported separately in Appendix~\ref{app:qualitative-cases}.}
+  \caption{Routing diagnostics. (a) Cue-family and expert usage heatmaps by stage. (b) Route entropy and effective expert count across variants.}
   \Description{Two-panel figure showing routing diagnostics: usage heatmaps and route entropy summaries.}
   \label{fig:appendix-diagnostics}
 \end{figure}
 
-These diagnostics are organized from coarse structure to semantic interpretation. Panel (a) shows how family and expert usage is distributed by stage, while Panel (b) summarizes route sharpness and effective expert usage across the main sparse-routing variants.
+These diagnostics are organized from coarse structure to semantic interpretation. Panel (a) shows how cue-family selection and expert usage are distributed by stage, while Panel (b) summarizes route sharpness and effective expert usage across the main sparse-routing variants.
 
 \section{Extended Behavioral Slice Results}
 \label{app:behavior-slices}
-Unlike Appendix~\ref{app:special-bins}, which analyzes coarse difficulty-oriented bins, this section examines semantically defined behavioral regimes such as repeat-heavy, fast exploratory, narrow-focus, and preference-stable slices. It first defines the diagnostic slices explicitly, then extends the main-text regime analysis with per-dataset breakdowns and more detailed routing summaries.
+Unlike Appendix~\ref{app:special-bins}, which analyzes coarse difficulty-oriented bins, this section examines semantically defined behavioral regimes: repeat-heavy, fast exploratory, narrow-focus, and preference-stable slices. Each slice is defined by a simple observable statistic of the interaction history, not by optimized supervision targets.
 
 \begin{table}[H]
   \centering
@@ -1083,52 +1087,6 @@ These slices are used only for post hoc diagnosis. They are computed from simple
 \end{figure}
 
 Together, the two panels expose dataset-level heterogeneity that would be too detailed for the main paper while making the slice construction explicit enough to avoid circular interpretation.
-
-\FloatBarrier
-
-\section{Targeted Interventions and Qualitative Cases}
-\label{app:qualitative-cases}
-This section complements the main-text case visualizations with controlled cue-family perturbations and directly interpretable qualitative examples. The main text presents three representative cases; the appendix adds a preference-stable contrastive case and the matched intervention evidence. Together, the intervention panels and the case table make the Q5 semantic claim readable at both the distribution level and the level of individual sessions.
-
-\begin{figure}[H]
-  \centering
-  \begin{minipage}[t]{0.48\linewidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/appendix/a05_intervention_score_drop.pdf}
-    \vspace{0.1em}
-    {\footnotesize (a) Score drop by cue-family perturbation}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.48\linewidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/appendix/a05_routing_profiles.pdf}
-    \vspace{0.1em}
-    {\footnotesize (b) Stage-wise routing profiles by behavioral case}
-  \end{minipage}
-  \caption{Targeted intervention analysis. (a) Score drop under cue-family perturbation for each behavioral regime. (b) Stage-wise routing profiles for the representative behavioral cases.}
-  \Description{Two-panel figure showing intervention score drops and routing profiles by behavioral case.}
-  \label{fig:appendix-interventions}
-\end{figure}
-
-\begin{table}[H]
-  \centering
-  \caption{Representative qualitative routing cases. Selected groups and experts are post hoc observations from the final model's routing decisions on each case type.}
-  \label{tab:appendix-qualitative-cases}
-  \tiny
-  \setlength{\tabcolsep}{2pt}
-  \renewcommand{\arraystretch}{1.05}
-  \begin{tabularx}{\columnwidth}{@{}L{0.15\columnwidth}L{0.24\columnwidth}L{0.19\columnwidth}L{0.19\columnwidth}L{0.18\columnwidth}@{}}
-    \toprule
-    Case & Prefix summary & Selected groups & Prediction outcome & Interpretation \\
-    \midrule
-    Repeat-heavy & High repeat ratio; low inter-event variance; stable category distribution & Memory (macro, micro); Tempo (macro) & Correct revisit prediction; MRR$\approx$0.41 & Macro and micro routes reinforce revisit behavior \\
-    Fast exploratory & Short inter-event gaps; high switch rate; low category entropy & Tempo (micro); Exposure (macro, mid) & Reasonable exploration target; MRR$\approx$0.35 & Micro routing sharpens under short-horizon volatility \\
-    Narrow-focus & High dominant-group mass; low entropy; few distinct categories & Focus (mid, micro); Memory (macro) & Category-consistent recommendation; MRR$\approx$0.39 & Mid-stage routing concentrates on coherent intent \\
-    Preference-stable & Long history; low recency drift; uniform pace & All groups near uniform; low route entropy & Moderate improvement over SASRec & Gains narrow when routing demand is weak \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
-
-The intervention panels explain which semantic families the router appears to rely on most, while Table~\ref{tab:appendix-qualitative-cases} complements that distribution-level view with directly interpretable cases.
 
 \FloatBarrier
 

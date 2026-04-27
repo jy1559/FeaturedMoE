@@ -4144,12 +4144,6 @@ def main():
 
     _ensure_feature_load_columns(cfg)
 
-    # Optional epoch / patience overrides
-    if args.tune_epochs is not None:
-        cfg["epochs"] = args.tune_epochs
-    if args.tune_patience is not None:
-        cfg["stopping_step"] = args.tune_patience
-
     # Wandb toggle: CLI flag or config value
     log_wandb = args.log_wandb or cfg.get("log_wandb", False)
     args.wandb_project = cfg.get("wandb_project_hyperopt", "2026_FMoE_hyperopt")
@@ -4189,6 +4183,13 @@ def main():
     if fixed_search:
         for k, v in fixed_search.items():
             _apply_runtime_param(cfg, str(k), copy.deepcopy(v))
+
+    # Keep explicit tuning budget flags above any fixed search/default config values.
+    if args.tune_epochs is not None:
+        cfg["epochs"] = args.tune_epochs
+    if args.tune_patience is not None:
+        cfg["stopping_step"] = args.tune_patience
+
     context_fixed = _extract_context_fixed(cfg)
 
     single_run_mode = False

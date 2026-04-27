@@ -8,10 +8,10 @@ cd /workspace/FeaturedMoE
     --top-k-configs 4 \
     --seeds 1 \
     --gpus "${GPUS:-0,1,2,3,4,5,6,7}" \
-    --max-evals 30 \
+    --max-evals 15 \
     --max-run-hours 3.0 \
     --tune-epochs 100 \
-    --tune-patience 10 \
+    --tune-patience 5 \
     --search-algo tpe \
     --resume-from-logs \
     "$@"
