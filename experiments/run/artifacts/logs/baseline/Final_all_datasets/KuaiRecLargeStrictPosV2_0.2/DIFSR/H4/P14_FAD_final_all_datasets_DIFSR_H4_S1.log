@@ -1,0 +1,108 @@
+[FINAL_ALL_DATASETS_SETTING_HEADER]
+run_phase=P14_FAD_D00_M08_DIFSR_H4_S1 run_id=FAD_KUAIRECLARGESTRICTPOSV2_0_2_DIFSR_H4_S1 phase_id=P14 axis_id=FAD model=DIFSR hparam_id=H4 seed=1
+dataset=KuaiRecLargeStrictPosV2_0.2 gpu=5 order=0
+max_evals=10 tune_epochs=60 tune_patience=8
+seed=120015
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_strict_small --max-evals 10 --tune-epochs 60 --tune-patience 8 --seed 120015 --run-group baseline --run-axis Final_all_datasets --run-phase P14_FAD_D00_M08_DIFSR_H4_S1 model=difsr dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session_fixed feature_mode=full_v3 gpu_id=5 log_wandb=false show_progress=false special_logging=true ++seed=120015 search={learning_rate:[0.0002674940497780589,0.0016049642986683532]} search_space_type_overrides={learning_rate:"loguniform"} ++weight_decay=0.0005 ++search.weight_decay=[0.0005] ++search_space_type_overrides.weight_decay=choice ++search.n_layers=[1] ++search_space_type_overrides.n_layers=choice ++search.num_layers=[1] ++search_space_type_overrides.num_layers=choice ++search.n_heads=[4] ++search_space_type_overrides.n_heads=choice ++search.num_heads=[4] ++search_space_type_overrides.num_heads=choice ++search.dropout_ratio=[0.25] ++search_space_type_overrides.dropout_ratio=choice ++search.dropout_prob=[0.25] ++search_space_type_overrides.dropout_prob=choice ++search.hidden_dropout_prob=[0.25] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.25] ++search_space_type_overrides.attn_dropout_prob=choice ++search.hidden_size=[112] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[112] ++search_space_type_overrides.embedding_size=choice ++search.inner_size=[224] ++search_space_type_overrides.inner_size=choice ++search.time_span=[1024] ++search_space_type_overrides.time_span=choice ++search.num_experts=[2] ++search_space_type_overrides.num_experts=choice ++search.state_size=[8] ++search_space_type_overrides.state_size=choice ++search.conv_kernel=[8] ++search_space_type_overrides.conv_kernel=choice ++search.remaining_ratio=[0.9] ++search_space_type_overrides.remaining_ratio=choice ++dropout_ratio=0.25 ++fusion_type=concat ++use_attribute_predictor=false ++lambda_attr=0.0 ++train_batch_size=2048 ++eval_batch_size=3072 ++hidden_size=112 ++embedding_size=112 ++MAX_ITEM_LIST_LENGTH=50 ++num_layers=1 ++n_layers=1 ++num_heads=4 ++n_heads=4 ++inner_size=224 ++attribute_hidden_size=112
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=315466 ts=2026-03-27T17:58:32
+
+=================================================================
+  Hyperopt TPE  |  DIFSR x KuaiRecLargeStrictPosV2_0.2
+  max_evals=10  epochs=60  patience=8  wandb=off
+  batch_size(train/valid/test)=2048/3072/3072
+  track=baseline  axis=final_all_datasets  phase=P14_FAD_D00_M08_DIFSR_H4_S1
+=================================================================
+Changed knobs: fusion_type, learning_rate
+Tuned params(len>1): 2  (~2 discrete combos)
+Tuned groups: 2
+  [optimization]
+    learning_rate                   [0.0002674940497780589, 0.0016049642986683532]  -> loguniform
+  [other]
+    fusion_type                     ['sum', 'gate']                           -> choice
+Fixed params(singleton/non-list): 17
+Fixed groups: 17
+  [optimization]
+    hidden_dropout_prob             0.25                                    
+    weight_decay                    0.0005                                  
+  [model_core]
+    attn_dropout_prob               0.25                                    
+    dropout_prob                    0.25                                    
+    dropout_ratio                   0.25                                    
+    embedding_size                  112                                     
+    hidden_size                     112                                     
+    inner_size                      224                                     
+    num_heads                       4                                       
+    num_layers                      1                                       
+  [other]
+    conv_kernel                     8                                       
+    n_heads                         4                                       
+    n_layers                        1                                       
+    num_experts                     2                                       
+    remaining_ratio                 0.9                                     
+    state_size                      8                                       
+    time_span                       1024                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] fusion_type=sum, learning_rate=0.0009232
+  -> MRR@20=0.010800  best=0.010800  (early_stop@13, trial=1.2min, avg=1.4min/trial, total=1.4min, ETA=12.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.010800 cur_best_hr10=0.016100 cur_test_mrr20=0.242200 cur_test_hr10=0.255100 run_best_mrr20=0.010800 run_best_hr10=0.016100 run_test_mrr20=0.242200 run_test_hr10=0.255100
+
+[2/10] fusion_type=gate, learning_rate=0.0004718
+  -> MRR@20=0.010800  best=0.010800  (early_stop@23, trial=2.4min, avg=1.9min/trial, total=3.8min, ETA=15.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.010800 cur_best_hr10=0.014700 cur_test_mrr20=0.246500 cur_test_hr10=0.268500 run_best_mrr20=0.010800 run_best_hr10=0.014700 run_test_mrr20=0.246500 run_test_hr10=0.268500
+
+[3/10] fusion_type=gate, learning_rate=0.0006899
+  -> MRR@20=0.011000  best=0.011000  (early_stop@19, trial=2.0min, avg=1.9min/trial, total=5.8min, ETA=13.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.011000 cur_best_hr10=0.014200 cur_test_mrr20=0.248700 cur_test_hr10=0.269600 run_best_mrr20=0.011000 run_best_hr10=0.014200 run_test_mrr20=0.248700 run_test_hr10=0.269600
+
+[4/10] fusion_type=sum, learning_rate=0.000956
+  -> MRR@20=0.010800  best=0.011000  (early_stop@13, trial=1.2min, avg=1.7min/trial, total=6.9min, ETA=10.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.010800 cur_best_hr10=0.016100 cur_test_mrr20=0.243300 cur_test_hr10=0.256200 run_best_mrr20=0.011000 run_best_hr10=0.014200 run_test_mrr20=0.248700 run_test_hr10=0.269600
+
+[5/10] fusion_type=sum, learning_rate=0.000897
+  -> MRR@20=0.010800  best=0.011000  (early_stop@13, trial=1.2min, avg=1.6min/trial, total=8.1min, ETA=8.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.010800 cur_best_hr10=0.016100 cur_test_mrr20=0.240800 cur_test_hr10=0.254800 run_best_mrr20=0.011000 run_best_hr10=0.014200 run_test_mrr20=0.248700 run_test_hr10=0.269600
+
+[6/10] fusion_type=sum, learning_rate=0.001516
+  -> MRR@20=0.010900  best=0.011000  (early_stop@12, trial=1.1min, avg=1.5min/trial, total=9.2min, ETA=6.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.010900 cur_best_hr10=0.015000 cur_test_mrr20=0.245300 cur_test_hr10=0.261900 run_best_mrr20=0.011000 run_best_hr10=0.014200 run_test_mrr20=0.248700 run_test_hr10=0.269600
+
+[7/10] fusion_type=sum, learning_rate=0.0006633
+  -> MRR@20=0.011000  best=0.011000  (early_stop@24, trial=2.2min, avg=1.6min/trial, total=11.3min, ETA=4.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.011000 cur_best_hr10=0.015300 cur_test_mrr20=0.268300 cur_test_hr10=0.295200 run_best_mrr20=0.011000 run_best_hr10=0.015300 run_test_mrr20=0.268300 run_test_hr10=0.295200
+
+[8/10] fusion_type=gate, learning_rate=0.0009407
+  -> MRR@20=0.011000  best=0.011000  (early_stop@17, trial=1.7min, avg=1.6min/trial, total=13.1min, ETA=3.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.011000 cur_best_hr10=0.014700 cur_test_mrr20=0.250200 cur_test_hr10=0.275300 run_best_mrr20=0.011000 run_best_hr10=0.014700 run_test_mrr20=0.250200 run_test_hr10=0.275300
+
+[9/10] fusion_type=gate, learning_rate=0.0007599
+  -> MRR@20=0.010900  best=0.011000  (early_stop@17, trial=1.8min, avg=1.7min/trial, total=14.9min, ETA=1.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.010900 cur_best_hr10=0.014200 cur_test_mrr20=0.240100 cur_test_hr10=0.263800 run_best_mrr20=0.011000 run_best_hr10=0.014200 run_test_mrr20=0.248700 run_test_hr10=0.269600
+
+[10/10] fusion_type=sum, learning_rate=0.001024
+  -> MRR@20=0.010900  best=0.011000  (early_stop@12, trial=1.1min, avg=1.6min/trial, total=16.0min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.010900 cur_best_hr10=0.014700 cur_test_mrr20=0.234000 cur_test_hr10=0.248600 run_best_mrr20=0.011000 run_best_hr10=0.014200 run_test_mrr20=0.248700 run_test_hr10=0.269600
+
+=================================================================
+  DONE  |  DIFSR x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.011000  |  10/10 trials OK
+  Best HR@10  = 0.014200
+  Test MRR@20 = 0.248700  (best-valid checkpoint)
+  Test HR@10  = 0.269600  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.011000 best_valid_hr10=0.014200 test_mrr20=0.248700 test_hr10=0.269600
+  Total time: 16.0 min
+  Best params:
+    fusion_type: gate
+    learning_rate: 0.000689911
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/KuaiRecLargeStrictPosV2_0.2_DIFSR_p14_fad_d00_m08_difsr_h4_s1_20260327_175833_031021_pid315466.json
+  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/normal/final_all_datasets/P14/KuaiRecLargeStrictPosV2_0.2/DIFSR/KuaiRecLargeStrictPosV2_0.2_DIFSR_p14_fad_d00_m08_difsr_h4_s1_20260327_175833_031021_pid315466.json
+  Special result -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/special/final_all_datasets/P14/KuaiRecLargeStrictPosV2_0.2/DIFSR/KuaiRecLargeStrictPosV2_0.2_DIFSR_p14_fad_d00_m08_difsr_h4_s1_20260327_175833_031021_pid315466_special_metrics.json
+  Special log -> /workspace/jy1559/FMoE/experiments/run/artifacts/logs/baseline/special/final_all_datasets/P14/KuaiRecLargeStrictPosV2_0.2/DIFSR/KuaiRecLargeStrictPosV2_0.2_DIFSR_p14_fad_d00_m08_difsr_h4_s1_20260327_175833_031021_pid315466_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=315466 start=2026-03-27T17:58:32 end=2026-03-27T18:14:30

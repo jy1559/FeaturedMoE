@@ -1,0 +1,137 @@
+[STAGEH_TARGETEDRECOVERY_ANCHOR2_CORE5_SETTING_HEADER]
+run_phase=P23_SH_C03_MFEAREC_FAD_H2_R2_STRUCTL_S1 run_id=SH_KUAIRECLARGESTRICTPOSV2_0_2_FEAREC_FAD_H2_R2_STRUCTL_S1 phase_id=P23 axis_id=SH model=FEARec candidate_id=FAD_H2_R2_STRUCTL seed=1
+dataset=KuaiRecLargeStrictPosV2_0.2 gpu=6 order=0 candidate_source=stageh_screen_variant source_stage=Final_all_datasets_variant transfer_from_dataset=
+max_evals=4 tune_epochs=22 tune_patience=3
+seed=230049
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_strict_small --max-evals 4 --tune-epochs 22 --tune-patience 3 --seed 230049 --run-group baseline --run-axis StageH_TargetedRecovery_anchor2_core5 --run-phase P23_SH_C03_MFEAREC_FAD_H2_R2_STRUCTL_S1 model=fearec dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session_fixed feature_mode=full_v3 gpu_id=6 log_wandb=false show_progress=false ++special_logging=true ++seed=230049 ++search={learning_rate:[0.0005361851769479145,0.001586140011640782]} ++search_space_type_overrides={learning_rate:"loguniform"} ++weight_decay=0.00015 ++search.weight_decay=[0.00015] ++search_space_type_overrides.weight_decay=choice ++search.n_layers=[3] ++search_space_type_overrides.n_layers=choice ++search.num_layers=[3] ++search_space_type_overrides.num_layers=choice ++search.n_heads=[3] ++search_space_type_overrides.n_heads=choice ++search.num_heads=[3] ++search_space_type_overrides.num_heads=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.dropout_prob=[0.12] ++search_space_type_overrides.dropout_prob=choice ++search.hidden_dropout_prob=[0.12] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.12] ++search_space_type_overrides.attn_dropout_prob=choice ++search.hidden_size=[152] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[152] ++search_space_type_overrides.embedding_size=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.time_span=[384] ++search_space_type_overrides.time_span=choice ++search.num_experts=[6] ++search_space_type_overrides.num_experts=choice ++search.state_size=[24] ++search_space_type_overrides.state_size=choice ++search.conv_kernel=[6] ++search_space_type_overrides.conv_kernel=choice ++search.remaining_ratio=[0.6] ++search_space_type_overrides.remaining_ratio=choice ++search.MAX_ITEM_LIST_LENGTH=[10] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++dropout_ratio=0.12 ++contrast=un ++tau=0.2 ++lmd=0.04 ++lmd_sem=0.0 ++global_ratio=0.9 ++semantic_sample_max_tries=2 ++train_batch_size=4096 ++eval_batch_size=8192 ++hidden_size=152 ++embedding_size=152 ++MAX_ITEM_LIST_LENGTH=10 ++n_layers=3 ++num_layers=3 ++n_heads=3 ++num_heads=3 ++inner_size=320
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=485335 ts=2026-04-09T07:40:31
+
+=================================================================
+  Hyperopt TPE  |  FEARec x KuaiRecLargeStrictPosV2_0.2
+  max_evals=4  epochs=22  patience=3  wandb=off
+  batch_size(train/valid/test)=4096/8192/8192
+  track=baseline  axis=stageh_targetedrecovery_anchor2_core5  phase=P23_SH_C03_MFEAREC_FAD_H2_R2_STRUCTL_S1
+=================================================================
+Changed knobs: learning_rate
+Tuned params(len>1): 1  (~1 discrete combos)
+Tuned groups: 1
+  [optimization]
+    learning_rate                   [0.0005361851769479145, 0.001586140011640782]  -> loguniform
+Fixed params(singleton/non-list): 18
+Fixed groups: 18
+  [optimization]
+    hidden_dropout_prob             0.12                                    
+    weight_decay                    0.00015                                 
+  [model_core]
+    attn_dropout_prob               0.12                                    
+    dropout_prob                    0.12                                    
+    dropout_ratio                   0.12                                    
+    embedding_size                  152                                     
+    hidden_size                     152                                     
+    inner_size                      320                                     
+    num_heads                       3                                       
+    num_layers                      3                                       
+  [other]
+    MAX_ITEM_LIST_LENGTH            10                                      
+    conv_kernel                     6                                       
+    n_heads                         3                                       
+    n_layers                        3                                       
+    num_experts                     6                                       
+    remaining_ratio                 0.6                                     
+    state_size                      24                                      
+    time_span                       384                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/4] learning_rate=0.00155
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> FAILED: The hidden size (152) is not a multiple of the number of attention heads (3)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2406, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 69, in __init__
+    self.item_encoder = FEAEncoder(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 902, in __init__
+    self.layer_ramp = FEABlock(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 847, in __init__
+    self.hybrid_attention = HybridAttention(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 467, in __init__
+    raise ValueError(
+ValueError: The hidden size (152) is not a multiple of the number of attention heads (3)
+
+[2/4] learning_rate=0.001581
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> FAILED: The hidden size (152) is not a multiple of the number of attention heads (3)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2406, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 69, in __init__
+    self.item_encoder = FEAEncoder(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 902, in __init__
+    self.layer_ramp = FEABlock(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 847, in __init__
+    self.hybrid_attention = HybridAttention(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 467, in __init__
+    raise ValueError(
+ValueError: The hidden size (152) is not a multiple of the number of attention heads (3)
+
+[3/4] learning_rate=0.0006231
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> FAILED: The hidden size (152) is not a multiple of the number of attention heads (3)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2406, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 69, in __init__
+    self.item_encoder = FEAEncoder(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 902, in __init__
+    self.layer_ramp = FEABlock(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 847, in __init__
+    self.hybrid_attention = HybridAttention(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 467, in __init__
+    raise ValueError(
+ValueError: The hidden size (152) is not a multiple of the number of attention heads (3)
+
+[4/4] learning_rate=0.0007216
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> FAILED: The hidden size (152) is not a multiple of the number of attention heads (3)
+Traceback (most recent call last):
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 3773, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/jy1559/FMoE/experiments/hyperopt_tune.py", line 2406, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 69, in __init__
+    self.item_encoder = FEAEncoder(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 902, in __init__
+    self.layer_ramp = FEABlock(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 847, in __init__
+    self.hybrid_attention = HybridAttention(
+  File "/workspace/jy1559/FMoE/experiments/models/fearec.py", line 467, in __init__
+    raise ValueError(
+ValueError: The hidden size (152) is not a multiple of the number of attention heads (3)
+
+[WARN] fmin ended with: 
+
+=================================================================
+  DONE  |  FEARec x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.000000  |  0/4 trials OK
+  Best HR@10  = 0.000000
+  Test MRR@20 = 0.000000  (best-valid checkpoint)
+  Test HR@10  = 0.000000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.000000 best_valid_hr10=0.000000 test_mrr20=0.000000 test_hr10=0.000000
+  Total time: 0.1 min
+  Best params:
+  Results -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/KuaiRecLargeStrictPosV2_0.2_FEARec_p23_sh_c03_mfearec_fad_h2_r2_structl_s1_20260409_074031_376118_pid485335.json
+  Normal mirror -> /workspace/jy1559/FMoE/experiments/run/artifacts/results/baseline/normal/stageh_targetedrecovery_anchor2_core5/P23/KuaiRecLargeStrictPosV2_0.2/FEARec/KuaiRecLargeStrictPosV2_0.2_FEARec_p23_sh_c03_mfearec_fad_h2_r2_structl_s1_20260409_074031_376118_pid485335.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=485335 start=2026-04-09T07:40:31 end=2026-04-09T07:40:38

@@ -1,0 +1,127 @@
+[STAGEI_PROGRESSIVE_RECOVERY_ANCHOR2_CORE5_SETTING_HEADER]
+run_phase=P24_S3_I1S3_D04_MGRU4REC_C17_I1S3_GRU4REC_COMPACT_DROPOUT_CTRL_S1 run_id=I1S3_KUAIRECLARGESTRICTPOSV2_0_2_GRU4REC_I1S3_GRU4REC_COMPACT_DROPOUT_CTRL_S1 phase_id=P24 axis_id=SI step_name=step3 pass_name=pass1 model=GRU4Rec candidate_id=I1S3_GRU4REC_COMPACT_DROPOUT_CTRL seed=1
+dataset=KuaiRecLargeStrictPosV2_0.2 gpu=6 candidate_source=root_cause_hypothesis source_stage=step3_hypothesis_bank anchor_run_id=I1S2_KUAIRECLARGESTRICTPOSV2_0_2_GRU4REC_I1S2_GRU4REC_MID_LR_STABLE_CTRL_S1 hypothesis_family=compact_dropout root_cause_tag=gru_overcapacity_bias batch_profile=step3:pass1:bs8448/11008
+max_evals=10 tune_epochs=100 tune_patience=5
+seed=240088
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_strict_small --max-evals 10 --tune-epochs 100 --tune-patience 5 --seed 240088 --run-group baseline --run-axis StageI_ProgressiveRecovery_anchor2_core5 --run-phase P24_S3_I1S3_D04_MGRU4REC_C17_I1S3_GRU4REC_COMPACT_DROPOUT_CTRL_S1 model=gru4rec dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session_fixed feature_mode=full_v3 gpu_id=6 log_wandb=false show_progress=false ++special_logging=true ++seed=240088 ++search={learning_rate:[0.006160391429348602,0.0082158208],hidden_size:[64,128,192],embedding_size:[64,128,192],num_layers:[1,2,3],n_layers:[1,2,3],MAX_ITEM_LIST_LENGTH:[12,20,32],dropout_prob:[0.2,0.3,0.4],weight_decay:[1e-05,0.0001],n_heads:[4],num_heads:[4],dropout_ratio:[0.3],hidden_dropout_prob:[0.3],attn_dropout_prob:[0.3],inner_size:[448],time_span:[384],num_experts:[6],bsarec_c:[3],fame_moe_last_k_layers:[1],state_size:[24],conv_kernel:[6],remaining_ratio:[0.6]} ++search_space_type_overrides={learning_rate:"loguniform",hidden_size:"choice",embedding_size:"choice",num_layers:"choice",n_layers:"choice",MAX_ITEM_LIST_LENGTH:"choice",dropout_prob:"choice",weight_decay:"choice",n_heads:"choice",num_heads:"choice",dropout_ratio:"choice",hidden_dropout_prob:"choice",attn_dropout_prob:"choice",inner_size:"choice",time_span:"choice",num_experts:"choice",bsarec_c:"choice",fame_moe_last_k_layers:"choice",state_size:"choice",conv_kernel:"choice",remaining_ratio:"choice"} ++weight_decay=0.0001 ++dropout_prob=0.3 ++train_batch_size=8448 ++eval_batch_size=11008
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=548075 ts=2026-04-13T07:26:55
+
+=================================================================
+  Hyperopt TPE  |  GRU4Rec x KuaiRecLargeStrictPosV2_0.2
+  max_evals=10  epochs=100  patience=5  wandb=off
+  batch_size(train/valid/test)=8448/11008/11008
+  track=baseline  axis=stagei_progressiverecovery_anchor2_core5  phase=P24_S3_I1S3_D04_MGRU4REC_C17_I1S3_GRU4REC_COMPACT_DROPOUT_CTRL_S1
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, dropout_prob, embedding_size, hidden_size, learning_rate, n_layers, num_layers, weight_decay
+Tuned params(len>1): 8  (~1458 discrete combos)
+Tuned groups: 8
+  [optimization]
+    learning_rate                   [0.006160391429348602, 0.0082158208]      -> loguniform
+    weight_decay                    [1e-05, 0.0001]                           -> choice
+  [model_core]
+    dropout_prob                    [0.2, 0.3, 0.4]                           -> choice
+    embedding_size                  [64, 128, 192]                            -> choice
+    hidden_size                     [64, 128, 192]                            -> choice
+    num_layers                      [1, 2, 3]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [12, 20, 32]                              -> choice
+    n_layers                        [1, 2, 3]                                 -> choice
+Fixed params(singleton/non-list): 13
+Fixed groups: 13
+  [optimization]
+    hidden_dropout_prob             0.3                                     
+  [model_core]
+    attn_dropout_prob               0.3                                     
+    dropout_ratio                   0.3                                     
+    inner_size                      448                                     
+    num_heads                       4                                       
+  [other]
+    bsarec_c                        3                                       
+    conv_kernel                     6                                       
+    fame_moe_last_k_layers          1                                       
+    n_heads                         4                                       
+    num_experts                     6                                       
+    remaining_ratio                 0.6                                     
+    state_size                      24                                      
+    time_span                       384                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] MAX_ITEM_LIST_LENGTH=12, dropout_prob=0.3, embedding_size=64, hidden_size=64, learning_rate=0.006324, n_layers=2, num_layers=1, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=12 (anchor len=50 only)
+  -> MRR@20=0.031500  best=0.031500  (early_stop@38, trial=29s, avg=36s/trial, total=36s, ETA=5.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.031500 cur_best_hr10=0.041200 cur_test_mrr20=0.029700 cur_test_hr10=0.041200 run_best_mrr20=0.031500 run_best_hr10=0.041200 run_test_mrr20=0.029700 run_test_hr10=0.041200
+
+[2/10] MAX_ITEM_LIST_LENGTH=20, dropout_prob=0.3, embedding_size=64, hidden_size=64, learning_rate=0.007795, n_layers=1, num_layers=3, weight_decay=1e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.015900  best=0.031500  (early_stop@19, trial=16s, avg=29s/trial, total=57s, ETA=3.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.015900 cur_best_hr10=0.026500 cur_test_mrr20=0.015100 cur_test_hr10=0.025400 run_best_mrr20=0.031500 run_best_hr10=0.041200 run_test_mrr20=0.029700 run_test_hr10=0.041200
+
+[3/10] MAX_ITEM_LIST_LENGTH=32, dropout_prob=0.4, embedding_size=64, hidden_size=64, learning_rate=0.007652, n_layers=2, num_layers=1, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=32 (anchor len=50 only)
+  -> MRR@20=0.035500  best=0.035500  (early_stop@52, trial=42s, avg=35s/trial, total=1.7min, ETA=4.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.035500 cur_best_hr10=0.045000 cur_test_mrr20=0.036700 cur_test_hr10=0.050200 run_best_mrr20=0.035500 run_best_hr10=0.045000 run_test_mrr20=0.036700 run_test_hr10=0.050200
+
+[4/10] MAX_ITEM_LIST_LENGTH=20, dropout_prob=0.3, embedding_size=64, hidden_size=64, learning_rate=0.006296, n_layers=3, num_layers=2, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.026400  best=0.035500  (early_stop@42, trial=32s, avg=35s/trial, total=2.4min, ETA=3.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.026400 cur_best_hr10=0.039600 cur_test_mrr20=0.025800 cur_test_hr10=0.039800 run_best_mrr20=0.035500 run_best_hr10=0.045000 run_test_mrr20=0.036700 run_test_hr10=0.050200
+
+[5/10] MAX_ITEM_LIST_LENGTH=20, dropout_prob=0.2, embedding_size=128, hidden_size=192, learning_rate=0.006775, n_layers=3, num_layers=1, weight_decay=1e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.038000  best=0.038000  (early_stop@29, trial=57s, avg=40s/trial, total=3.3min, ETA=3.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.038000 cur_best_hr10=0.048000 cur_test_mrr20=0.036700 cur_test_hr10=0.047200 run_best_mrr20=0.038000 run_best_hr10=0.048000 run_test_mrr20=0.036700 run_test_hr10=0.047200
+
+[6/10] MAX_ITEM_LIST_LENGTH=12, dropout_prob=0.3, embedding_size=192, hidden_size=64, learning_rate=0.006545, n_layers=3, num_layers=3, weight_decay=1e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=12 (anchor len=50 only)
+  -> MRR@20=0.019300  best=0.038000  (early_stop@20, trial=16s, avg=37s/trial, total=3.7min, ETA=2.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.019300 cur_best_hr10=0.030000 cur_test_mrr20=0.017800 cur_test_hr10=0.028100 run_best_mrr20=0.038000 run_best_hr10=0.048000 run_test_mrr20=0.036700 run_test_hr10=0.047200
+
+[7/10] MAX_ITEM_LIST_LENGTH=12, dropout_prob=0.4, embedding_size=64, hidden_size=128, learning_rate=0.007628, n_layers=3, num_layers=2, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=12 (anchor len=50 only)
+  -> MRR@20=0.031100  best=0.038000  (early_stop@48, trial=38s, avg=37s/trial, total=4.3min, ETA=1.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.031100 cur_best_hr10=0.043700 cur_test_mrr20=0.029900 cur_test_hr10=0.043600 run_best_mrr20=0.038000 run_best_hr10=0.048000 run_test_mrr20=0.036700 run_test_hr10=0.047200
+
+[8/10] MAX_ITEM_LIST_LENGTH=20, dropout_prob=0.3, embedding_size=64, hidden_size=128, learning_rate=0.007925, n_layers=2, num_layers=1, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.039000  best=0.039000  (early_stop@57, trial=45s, avg=39s/trial, total=5.1min, ETA=1.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.039000 cur_best_hr10=0.050000 cur_test_mrr20=0.037800 cur_test_hr10=0.046600 run_best_mrr20=0.039000 run_best_hr10=0.050000 run_test_mrr20=0.037800 run_test_hr10=0.046600
+
+[9/10] MAX_ITEM_LIST_LENGTH=20, dropout_prob=0.2, embedding_size=64, hidden_size=192, learning_rate=0.006774, n_layers=3, num_layers=2, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.026900  best=0.039000  (early_stop@31, trial=1.6min, avg=45s/trial, total=6.8min, ETA=45s)
+[TRIAL_METRICS] cur_best_mrr20=0.026900 cur_best_hr10=0.040100 cur_test_mrr20=0.024500 cur_test_hr10=0.037600 run_best_mrr20=0.039000 run_best_hr10=0.050000 run_test_mrr20=0.037800 run_test_hr10=0.046600
+
+[10/10] MAX_ITEM_LIST_LENGTH=12, dropout_prob=0.4, embedding_size=128, hidden_size=128, learning_rate=0.007364, n_layers=1, num_layers=1, weight_decay=1e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=12 (anchor len=50 only)
+  -> MRR@20=0.035500  best=0.039000  (early_stop@23, trial=17s, avg=43s/trial, total=7.1min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.035500 cur_best_hr10=0.045000 cur_test_mrr20=0.036400 cur_test_hr10=0.048600 run_best_mrr20=0.039000 run_best_hr10=0.050000 run_test_mrr20=0.037800 run_test_hr10=0.046600
+
+=================================================================
+  DONE  |  GRU4Rec x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.039000  |  10/10 trials OK
+  Best HR@10  = 0.050000
+  Test MRR@20 = 0.037800  (best-valid checkpoint)
+  Test HR@10  = 0.046600  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.039000 best_valid_hr10=0.050000 test_mrr20=0.037800 test_hr10=0.046600
+  Total time: 7.1 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 20
+    dropout_prob: 0.3
+    embedding_size: 64
+    hidden_size: 128
+    learning_rate: 0.00792488
+    n_layers: 2
+    num_layers: 1
+    weight_decay: 0.0001
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_p24_s3_i1s3_d04_mgru4rec_c17_i1s3_gru4rec_compact_dropout_ctrl_s1_20260413_072655_988965_pid548075.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline/normal/stagei_progressiverecovery_anchor2_core5/P24/KuaiRecLargeStrictPosV2_0.2/GRU4Rec/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_p24_s3_i1s3_d04_mgru4rec_c17_i1s3_gru4rec_compact_dropout_ctrl_s1_20260413_072655_988965_pid548075.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/baseline/special/stagei_progressiverecovery_anchor2_core5/P24/KuaiRecLargeStrictPosV2_0.2/GRU4Rec/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_p24_s3_i1s3_d04_mgru4rec_c17_i1s3_gru4rec_compact_dropout_ctrl_s1_20260413_072655_988965_pid548075_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/baseline/special/stagei_progressiverecovery_anchor2_core5/P24/KuaiRecLargeStrictPosV2_0.2/GRU4Rec/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_p24_s3_i1s3_d04_mgru4rec_c17_i1s3_gru4rec_compact_dropout_ctrl_s1_20260413_072655_988965_pid548075_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=548075 start=2026-04-13T07:26:55 end=2026-04-13T07:34:04
