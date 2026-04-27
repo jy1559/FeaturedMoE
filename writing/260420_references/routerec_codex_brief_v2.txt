@@ -1,0 +1,772 @@
+================================================================================
+  RouteRec 논문 제출 48h: Writing/Analysis 통합 브리프 v2 (for Codex)
+  >> v2 변경점: ML-1M/Beauty 방어를 위한 authoritative citation 추가,
+                Intro citation 보강 후보 추가, prior routing work 추가,
+                refs.bib 엔트리 PART 8 신설
+================================================================================
+
+[배경]
+- 논문: "RouteRec: Behavior-Guided Sparse Routing for Sequential Recommendation"
+  (RecSys '26 submission, 10 pages main + appendices A-K)
+- 현재 상태: Main Table 1 (Q1)은 실제 결과. Q2~Q5 본문 및 Appendix D~K의
+  대부분 수치는 플레이스홀더(샘플값). 제출까지 약 48시간 남음.
+- 저자 의사: 실험은 많이 못 벌림. Writing/배치/caption 위주. 다만 오래 걸리지
+  않는 가벼운 분석/실험은 환영.
+
+[이 파일의 목적]
+- 네 개 모델(Claude, Gemini, GPT, 그리고 또 다른 evaluator)과 동료 피드백,
+  저자 본인의 방어 아이디어, 추가 검색으로 찾은 external reference 후보들을
+  "합의 / 충돌 / 근거 강도"로 정리해 전달한다.
+- Codex가 이 자료를 읽고 (1) 최종 writing 수정안을 스스로 판단, (2) 가벼운
+  추가 분석/실험 중 무엇을 할지 선택, (3) 저자 방어 아이디어의 위험도를
+  스스로 판단, (4) 새 reference를 어디에 어떻게 추가할지 결정하도록 돕는 것.
+- Codex는 이 문서의 제안을 무비판적으로 따르지 말고, 각 항목의 근거/위험을
+  직접 평가한 뒤 작성자(저자)에게 최종 반영 여부를 제안할 것.
+
+================================================================================
+ PART 1. 합의된 진단 (4개 모델 + 동료 피드백 모두 일치)
+================================================================================
+
+[공통 진단 한 줄]
+  "아이디어와 story는 충분히 논문감이다. 그런데 현재 writing이 claim을 스스로
+   약화시키고 있다. 증거보다 ambition이 약간 앞서 있다."
+
+[만장일치 지적 사항]
+ 1. Abstract 마지막 문장이 너무 일반적이고 수치가 없다.
+ 2. Intro 앞부분(L52~150)이 길고 반복적이다. 특히 challenge 3개 → design
+    원칙 3개 → contribution bullet이 같은 말을 다른 추상어로 반복하는 느낌.
+ 3. Intro 안에 "empirical takeaway" 문단이 없어서 독자가 "그래서 결과는?"을
+    contribution bullet까지 가서야 알게 된다.
+ 4. Section 4.1이 한 덩어리. paragraph break 필요.
+ 5. Table 1에 bold/underline이 없어 RouteRec의 "consistency" 인상이 약함.
+ 6. ML-1M 약점이 있는데 본문에서 선제 프레이밍이 늦게 등장.
+ 7. Active parameter 1.6M < SASRec 1.8M 이라는 강력한 수치가 Appendix G에만
+    묻혀 있음. 본문 4.5로 전면 배치해야 함.
+ 8. "Hand-crafted feature engineering 아니냐" 공격에 대한 선제 방어 문장이
+    Section 3.2에 부족.
+ 9. Notation inconsistency: Eq.(1)-(2)는 단일 expert index e, Eq.(6)-(10)은
+    (g,c). 중간에 bridge 문장 필요.
+10. "Portable", "inspectable", "behavior-guided", "control interface" 등
+    추상어가 반복 사용돼 메시지가 분산됨. 각 단어를 한 번만 정확히 정의하고
+    이후에는 반복 삼가야 함.
+
+[거의 만장일치 지적]
+11. Claim 강도가 현재 증거보다 약간 강함. Q2~Q5가 덜 찬 상태에서
+    "demonstrate / establish / show"를 남발하면 리뷰어에게 손해.
+    "suggest, indicate, support, consistent with"로 일부 교체 권장.
+12. Section 4.2에서 BSARec, DIF-SR 약세를 설명하는 톤이 "방어적 해명"으로
+    읽힐 위험. "protocol interpretation" 톤으로 전환 필요.
+13. Figure 5가 cherry-pick처럼 보일 위험. Selection criterion을 본문/caption에
+    더 명시적으로.
+14. Protocol 방어(sessionized vs leave-one-out, sampled subset)가 본문에
+    있긴 하지만 전면에 안 나옴.
+15. Related Work 2.1~2.3 각 subsection 첫 문장이 "기존 연구 설명"에 가깝고,
+    RouteRec과의 대조가 약함.
+
+[v2 추가 지적 - 동료 피드백]
+16. Introduction 전반에 citation이 더 촘촘해야 함. 특히 challenge 뒷받침과
+    L93~94 ("distinct users and sessions can differ in pace, repetition...")
+    부근이 grounded하게 읽히지 않음.
+
+================================================================================
+ PART 2. 저자 본인 방어 아이디어 (Beauty/ML-1M 약세)에 대한 검토 + v2 업그레이드
+================================================================================
+
+[저자 아이디어 원문]
+  "Beauty와 ML-1M은 explicit feedback(리뷰/레이팅) 데이터라서 timestamp가
+   실제 interaction과 다르고, feature도 다르게 들어올 수 있다. 그래서
+   약하다고 말할 수 있지 않을까? 근데 TiSASRec이 Beauty에서 강해서 근거가
+   좀 약함. ML-1M이 preference-stable이라는 것도 아직 근거 없음."
+
+[평가: 방향은 맞지만 원안 그대로 쓰면 위험]
+
+ A. "Timestamp noise" 주장의 치명적 문제
+    - Beauty에서 TiSASRec (time-interval-aware model) 이 HR@10=0.1579로
+      RouteRec(0.1490)보다 강함 (Table 1).
+    - "timestamp가 노이즈여서 RouteRec이 약하다"라고 쓰면 즉시 리뷰어가
+      "그런데 time interval 잘 모델링한 모델이 1등인 건 뭔가?"로 반박함.
+    - 자기 논리 붕괴 위험. 이 주장은 단독으로 쓰면 안 됨.
+
+ B. "ML-1M preference-stable" 주장의 증거 공백
+    - 저자도 인정한 대로 "아직 정리 안됨". 직접 증거 없이 qualitative
+      주장만 하면 리뷰어에게 약해 보임.
+    - 다만 Table 5에 Avg.len = 39.6 (다른 dataset 대비 압도적 1위)이라는
+      간접 근거는 이미 있음. 이걸 써야 함.
+
+[>> v2 강력 추가: authoritative external citation 두 개로 방어력 강화]
+
+ 결정적 발견: MovieLens가 전형적이지 않다는 "공식적" 증거가 이미 학계에
+ 존재한다. 두 논문을 cite하는 것만으로도 ML-1M 약점이 "이 논문의 약점"이
+ 아니라 "MovieLens 자체의 특성"으로 프레임됨.
+
+ [REF-ML-1]  Fan, Ji, Zhang, Sun (2024)
+             "Our Model Achieves Excellent Performance on MovieLens:
+              What Does It Mean?"  ACM TOIS
+             >> MovieLens는 사용자가 플랫폼의 내부 추천 알고리즘에 노출된
+                상태에서 rating을 남기므로 <user-MovieLens> 상호작용이지
+                <user-movie> 상호작용이 아니라고 주장. 순서 섞기 실험에서
+                sequential 모델 성능이 크게 드랍함을 보임.
+             >> RouteRec 방어에 거의 완벽한 근거.
+
+ [REF-ML-2]  Woolridge, Wilner, Glick (2021)
+             "Sequence or Pseudo-Sequence? An Analysis of Sequential
+              Recommendation Datasets"  PERSPECTIVES@RecSys Workshop
+              (CEUR Vol. 2955)
+             >> MovieLens는 pseudo-sequential이라고 직접 주장. 많은 유저가
+                같은 timestamp에 interaction을 남기므로 순서가 실제로
+                unknowable하다고 지적.
+             >> REF-ML-1과 함께 cite하면 쌍으로 강력한 backup.
+
+[권장 방어 전략: 세 단계 조합 (v2 업데이트)]
+
+ (i) TiSASRec과 충돌하지 않도록 주장을 "micro-stage cue"로 한정.
+     → "timestamp가 노이즈" X
+     → "organic browsing 대비 short-horizon transition cue가 덜 뚜렷함" O
+     (TiSASRec은 long-interval까지 잘 모델링하므로 충돌 없음)
+
+ (ii) ML-1M 근거는 Table 5의 Avg.len 39.6을 직접 인용 + REF-ML-1 / REF-ML-2
+     를 cite해서 "이 논문만의 주장이 아니라 학계가 이미 지적한 사실"로 전환.
+
+ (iii) 더 강한 backup을 원하면 아래 "실험 A (Heterogeneity Score)"로 정량
+      증거 보강 (PART 4 참조).
+
+[Section 4.2 Table 1 직후에 넣을 통합 방어 문장 (v2, 외부 citation 포함)]
+
+  "The margin patterns align with dataset characteristics. On behaviorally
+   dynamic corpora — Foursquare, LastFM, and KuaiRec — where session pace,
+   repetition, and focus shift frequently within short windows, RouteRec
+   shows the clearest gains. On ML-1M and Beauty, the margin narrows, for
+   reasons external to our method. ML-1M exhibits the longest average
+   session length (39.6) with dense intra-session interactions concentrated
+   around a stable preference band; it is also known to reflect
+   <user-platform> rather than organic <user-item> sequential behavior
+   [REF-ML-1, REF-ML-2]. Beauty is an explicit-feedback review stream where
+   short-horizon transition cues are less pronounced than in organic
+   browsing. This pattern is consistent with our core hypothesis: behavior-
+   guided routing matters most when behavioral regimes actually shift."
+
+  ※ Codex는 위 문장을 그대로 복붙하지 말고, 전체 Section 4.2 문체와
+     어울리도록 다듬을 것. 특히 [REF-ML-1, REF-ML-2] 부분을 실제
+     citation key로 바꾸고, 문장 길이를 약간 조정해 flow를 맞출 것.
+
+================================================================================
+ PART 3. 최종 Writing 수정 플랜 (Tier별 우선순위)
+================================================================================
+
+--------------------------------------------------------------------------------
+ [TIER 1] 필수 — 반나절 안 (ROI 최상)
+--------------------------------------------------------------------------------
+
+ T1-1. Abstract 마지막 문장 재작성
+       - 현재: "Experiments show that RouteRec improves ranking quality on
+         several datasets while remaining competitive on others..."
+       - 목표 구조: (a) 정량 지표 (best overall Avg.Rank 2.17 등),
+         (b) dynamic vs stable 구분, (c) efficiency 한 조각.
+       - 예시: "Experiments under a shared sessionized protocol show that
+         RouteRec achieves the best overall average rank across six
+         datasets, with the clearest gains on behaviorally dynamic
+         benchmarks, while activating only half of the total expert pool
+         per routing decision."
+       - Codex 판단 포인트: Avg.Rank 수치(2.17)를 abstract에 명시할지,
+         혹은 "best overall"로만 둘지는 문체 톤에 맞춰 결정.
+
+ T1-2. Intro 재구성 (구조 변경)
+       - 현재 흐름: 배경 → 문제 → challenge 3개(각 한 문단) → design → contribution
+       - 수정 흐름: 배경 → 문제 + 핵심 질문 → challenge/design 압축 →
+                   empirical preview 문단(신규) → contribution bullet
+       - 구체 작업:
+         (a) L93~112 challenge 3개를 한 문단 + 짧은 3-point 리스트로 압축.
+             각 challenge당 2~3문장만 유지.
+         (b) L113~150 method overview를 절반으로 축소. "RouteRec addresses
+             these with three design principles" + 1~2문장씩만.
+         (c) Contribution bullet 직전에 "empirical preview" 문단 신규 삽입:
+             "Under a shared sessionized protocol across six datasets,
+              RouteRec achieves the best overall average rank, with the
+              clearest gains on behaviorally dynamic settings (Foursquare,
+              LastFM, KuaiRec) and competitive performance on more
+              preference-stable ones (ML-1M). Controlled ablations
+              attribute these gains to behavior-guided routing, staged
+              temporal decomposition, and sparse hierarchical activation
+              rather than to added capacity alone."
+         (d) Figure 1 설명 뒤 bridge 문장 추가: "Yet existing sequential
+             recommenders expose limited control over how such differences
+             should alter the computation path."
+
+ T1-3. Intro citation 보강 (v2 업데이트)
+       동료 피드백 + 모델1 지적. 다음 위치에 1~2개씩 citation 추가:
+
+       (a) L84~87 "behavior mixes multiple regimes" 근처 (현재 [39,40])
+           → 추가 후보:
+             - [REF-MCPRN] Wang et al. 2019, "Modeling Multi-Purpose
+               Sessions for Next-Item Recommendations via Mixture-Channel
+               Purpose Routing Networks" IJCAI 2019
+               >> 세션이 "multiple purposes"를 가진다는 것을 직접 주장하는
+                  prior work. 우리 motivation과 궤를 같이함.
+             - [REF-MIASREC] Choi et al. 2024, "Multi-intent-aware
+               Session-based Recommendation" SIGIR 2024
+               >> 단일 세션 안에서도 multiple intents가 존재함을 지적.
+
+       (b) L93~112 각 challenge 문장
+           → 추가 후보:
+             - Challenge 1 ("behavioral diversity vs shared computation"):
+               REF-MCPRN 또는 REF-MIASREC, 또는 이미 있는 [39,40]을 여기로도
+             - Challenge 2 ("temporal-scope mismatch"):
+               현재는 기존 multi-interest 논문들[21,23,25,27] 인용되는데,
+               여기 challenge 문단 안에는 명시적으로 없음. 추가 권장.
+
+       (c) L99~103 "feature-aware models... within a shared computation
+           pipeline" 근처
+           → 이미 [1,43,47] 등이 있으니 1-2개만 더 추가:
+             - 이미 bib에 있는 [ying2018shan, ma2019hgn] 중 하나 추가 가능
+
+       (d) Related Work 2.3 (MoE / routing semantics):
+           → REF-MCPRN을 여기에 cite하면 "router-based session modeling은
+              이전에도 있었지만 그들은 representation channel에 routing을
+              섞었고, 우리는 representation과 routing을 분리한다"는 대조를
+              훨씬 선명하게 만들 수 있음. 추천.
+
+ T1-4. Section 4.1 `\paragraph{}` 분리
+       \paragraph{Datasets.}
+       \paragraph{Evaluation Protocol.}
+       \paragraph{Baselines.}
+       \paragraph{Tuning and Selection.}
+       \paragraph{Research Questions.}
+
+ T1-5. Table 1 시각 강화
+       - 각 metric 1등 **bold**, 2등 _underline_
+       - RouteRec column shading 유지 (이미 있음)
+       - Caption 수정: "Bold = best per row, underline = second-best.
+         Avg. Rank summarizes consistency across all reported rows; lower
+         is better."
+
+ T1-6. ML-1M/Beauty 선제 framing (Table 1 직후)
+       - PART 2 끝의 v2 통합 방어 문장 삽입.
+       - Table 1 읽는 순간 리뷰어가 약점으로 느끼기 전에 프레임 도착.
+       - REF-ML-1 (Fan TOIS 2024), REF-ML-2 (Woolridge 2021) 인용.
+
+--------------------------------------------------------------------------------
+ [TIER 2] 강력 추천 — 하루 안
+--------------------------------------------------------------------------------
+
+ T2-1. Section 3.2: Hand-crafted feature 선제 방어
+       첫 문단에 추가:
+         "We emphasize that these cues are not proposed as optimal features
+          for representation; they are compact, domain-agnostic proxies
+          that serve as a routing control interface. Whereas
+          representation-oriented feature engineering aims to encode
+          *what* a user prefers, our cues only need to expose *when*
+          behavioral regime shifts — a substantially weaker requirement.
+          When a dataset lacks a particular field (e.g., category), the
+          router gracefully falls back to remaining cue families
+          (Appendix A)."
+
+ T2-2. Section 4.5 (Q4) 첫 문장으로 active param 수치 전면 배치
+         "Concretely, sparse RouteRec activates only 1.6M parameters per
+          routed decision — below SASRec's 1.8M — while its total pool is
+          3.2M (the same as the dense variant, which activates all 3.2M).
+          This cleanly separates the accuracy gain from routing semantics
+          rather than from unconstrained capacity."
+
+ T2-3. Section 4.1 Evaluation Protocol 방어 강화
+         "We adopt a sessionized temporal protocol rather than raw-sequence
+          leave-one-out for two reasons: (i) global leave-one-out has been
+          shown to induce chronology violations and leakage [10, 15], and
+          (ii) sessionized splits better reflect deployment conditions
+          where next-item prediction occurs within bounded session
+          context. All methods use identical processed files and the
+          same selection rule, so the comparison measures modeling
+          differences under a fixed protocol."
+
+       Sampled subset 한 줄 추가:
+         "KuaiRec (20%) and LastFM (3%) are sampled processed subsets
+          chosen for tractable, controlled comparison under identical
+          preprocessing; all methods see the same processed files."
+
+       >> v2 추가 후보: [REF-REPRO] Ferrari Dacrema et al. 2021,
+          "A Troubling Analysis of Reproducibility and Progress in
+           Recommender Systems Research" ACM TOIS
+          >> 여기 cite하면 "same protocol, same tuning budget은 단지
+             best practice가 아니라 필수적"이라는 주장을 학계 합의에
+             걸 수 있음. 선택적.
+
+ T2-4. Section 4.2: Q1 톤 "방어적 → 해석적" 전환
+       - 현재: "BSARec is less competitive here even though it is strong
+         in standard longer-sequence settings: its attentive frequency
+         bias is designed to exploit richer global spectral structure..."
+       - 수정:
+         "The relative ordering is consistent with the inductive biases
+          highlighted by this protocol: methods that rely on richer
+          long-range spectral structure (BSARec) or heavy
+          side-information fusion (DIF-SR) have less leverage when
+          sessionization shortens context windows and auxiliary features
+          are deliberately kept lightweight across datasets."
+       - 주체 전환: "X가 못했다" → "이 protocol이 어떤 bias를 드러낸다"
+
+ T2-5. Method wording polish
+       (a) Section 3.2 첫 문장에서 "portable"을 한 번만 정확히 정의:
+             "By *portable*, we mean cues computable from ordinary
+              interaction logs without learned side-information encoders
+              or dataset-specific metadata pipelines."
+           이후로 "portable" 반복 삼가. 필요 시 "compact" 또는 "lightweight"
+           로 대체.
+
+       (b) Eq.(2) 직후 notation bridge:
+             "In the final sparse instantiation (Section 3.4), we
+              decompose e = (g, c) into a semantic group g and an
+              intra-group expert c; Eq. (2) remains the stage-level
+              interface under this refinement."
+
+       (c) Section 3.3 serial layout 정당화:
+             "The first attention block provides a contextualized
+              sequence state for slower macro/mid routing decisions,
+              whereas the second refreshes token interactions
+              immediately before the local micro router."
+
+ T2-6. Claim 강도 calibration (전역 검색-치환)
+       - "show" / "demonstrate" / "establish" → 일부를 "suggest" /
+         "indicate" / "support" / "are consistent with"로 교체
+       - 특히 Q5 관련 문장에서
+       - "behavior-consistent routing patterns" → "behavior-aligned
+         routing in diagnostic analyses"
+       - "more behavior-consistent" (Abstract/Conclusion) → "more
+         interpretable"
+
+--------------------------------------------------------------------------------
+ [TIER 3] 시간 남으면
+--------------------------------------------------------------------------------
+
+ T3-1. Figure 2 Reading Guide (caption 맨 앞)
+         "*Read left-to-right:* the left panel extracts stage-specific
+          behavior cues; the center panel shows the sequential backbone
+          with routing stages replacing shared FFNs; the right panel
+          details hierarchical sparse expert selection at each stage."
+
+ T3-2. Figure 5 cherry-pick 의심 차단 (caption 보강)
+         "Cases are defined by **predefined percentile thresholds** on
+          repeat ratio, inter-event tempo, and category concentration
+          (see Appendix I, Table 12), not by post hoc optimization."
+
+ T3-3. Related Work 2.1~2.3 첫 문장 대조형 전환
+       - 2.1: "Prior sequential recommenders improve representation
+         quality, but leave computation allocation largely implicit."
+       - 2.2: "Multi-scope behavior has been modeled extensively, but
+         mostly as a representation signal rather than a routing signal."
+       - 2.3: "MoE introduces conditional computation, yet routing
+         semantics often remain latent in hidden states."
+         >> v2: REF-MCPRN 추가 cite 권장. "Earlier purpose-routing work
+            in session-based recommendation [REF-MCPRN] couples routing
+            logic with hidden representations; RouteRec instead decouples
+            them by driving routing from observable behavioral cues."
+            같은 한 문장이 method novelty를 훨씬 명확히 만듦.
+
+ T3-4. Conclusion 재작성 (마지막 문단)
+         "RouteRec introduces modest routing overhead, but its
+          contribution is not to add expert capacity — it is to expose a
+          behavior-grounded control interface for when different
+          computations should be used at all. The method is most
+          valuable where behavioral heterogeneity is pronounced, and
+          remains a stable, lightweight alternative where preference is
+          more uniform."
+
+ T3-5. Contribution bullet 재작성 (3번째 bullet)
+       - 현재 2번째와 3번째 bullet이 중복 (portable/transferable 반복).
+       - 3번째를 실증 contribution으로 교체:
+         "We provide controlled analyses that separate routing semantics
+          from expert capacity, showing that behavior-grounded routing
+          signals, staged temporal decomposition, and sparse hierarchical
+          activation each contribute independently to the observed
+          gains."
+
+ T3-6. Figure 3, 4 caption 명확화
+       - Figure 3: "Mixed"가 무엇인지 caption 또는 본문에서 정확히 명시.
+       - Figure 4: "comparable expert budget"이 구체적으로 무엇을
+         뜻하는지 caption에 한 줄 추가.
+
+================================================================================
+ PART 4. 가벼운 추가 분석/실험 옵션 (오래 걸리지 않는 것만)
+================================================================================
+
+ [제약 조건]
+ - 새 dataset 추가 금지, 새 baseline 추가 금지
+ - Method 구조 수정 금지
+ - 코드 수정 최소 또는 이미 있는 로그/pipeline 재활용 선호
+
+--------------------------------------------------------------------------------
+ 옵션 A. Dataset Heterogeneity Score  ★★★★★ (무조건 추천)
+--------------------------------------------------------------------------------
+ 목적: 저자 ML-1M/Beauty 방어의 최대 약점("preference-stable 직접 증거
+       없음")을 정량화. 새 모델 훈련 없음.
+       + PART 2의 REF-ML-1, REF-ML-2 external citation과 결합되면 방어력
+         거의 완성.
+ 방법: 각 dataset의 train set에서 3개 지표 계산:
+       - Mean intra-session category entropy  (Focus 이질성)
+       - Mean inter-session repeat rate       (Memory 안정성)
+       - Coefficient of variation of inter-event time  (Tempo 변동성)
+ 산출물: Appendix에 dataset × metric 표 1개 + 본문 1~2문장 추가.
+ 기대 효과:
+  - ML-1M, Beauty가 "low heterogeneity" 쪽에 오고, KuaiRec, Foursquare가
+    "high heterogeneity"에 오면 저자 가설을 정량 뒷받침.
+  - 본문 Q1 섹션 직후에 한 문장으로 링크 가능:
+      "Appendix X reports three dataset-level heterogeneity indicators
+       that rank-correlate with RouteRec's relative gain, supporting
+       the hypothesis that behavior-guided routing provides the largest
+       leverage where behavioral regimes actually differ."
+ 소요 시간: 1~2시간 (데이터 통계만).
+ Codex 판단 포인트: 지표 정의는 cue family(Tempo/Focus/Memory)와
+   구조적으로 일치해야 함. Tempo CoV 대신 inter-event gap std를 쓸지
+   결정은 Codex가 데이터 분포 보고 판단.
+
+--------------------------------------------------------------------------------
+ 옵션 B. Random-Feature Sanity Check  ★★★★
+--------------------------------------------------------------------------------
+ 목적: "behavior cue가 정말 routing을 drive하는가"의 가장 강력한 sanity
+       check. 리뷰어 공격점 차단.
+ 방법: behavior cue를 같은 차원의 random noise로 교체한 variant를 1개
+       dataset(KuaiRec 추천 - RouteRec 가장 강한 곳)에서 학습.
+ 산출물: 표 1개 (RouteRec real / RouteRec random / SASRec) + 본문 Q2
+        한 문장.
+ 기대 효과: random feature가 성능 drop이면 cue의 필요성 직접 입증.
+ 소요 시간: 2~4시간 (1개 모델 추가 학습).
+ Codex 판단 포인트: 만약 random feature variant가 예상만큼 안 떨어지면
+   논문 메시지가 약해지는 역효과. 돌려서 결과 확인 후 넣을지 결정.
+
+--------------------------------------------------------------------------------
+ 옵션 C. Seed Variance (Significance)  ★★★★
+--------------------------------------------------------------------------------
+ 목적: 모델들이 공통 지적한 "seed variance 없음" 방어. ML-1M 같은 좁은
+       margin에서 "noise 아니냐" 공격 차단.
+ 방법: 2개 dataset(1 dynamic + 1 stable, 예: KuaiRec + ML-1M) × RouteRec
+       + strongest baseline 1개 × 3 seeds. Total 12 runs. 병렬로 돌리면
+       overnight 가능.
+ 산출물: Table 1 footnote 또는 Appendix:
+         "On KuaiRec and ML-1M, we additionally ran 3 seeds for RouteRec
+          and the strongest baseline; std < 0.003 across all reported
+          metrics."
+ 소요 시간: overnight 병렬.
+ Codex 판단 포인트: 12 runs가 시간 내 끝나는지 확인. 안 되면 2 seeds로
+   축소.
+
+--------------------------------------------------------------------------------
+ 옵션 D. Routing-Cue Correlation Diagnostic  ★★★
+--------------------------------------------------------------------------------
+ 목적: Q5의 "behavior cue → routing" 주장을 aggregate 지표로 보강.
+       현재 Figure 5 case 3개 외에 거시적 증거 없음.
+ 방법: 이미 학습된 RouteRec 모델 inference log에서:
+       - Stage별로 (behavior cue value, routing probability)의
+         Spearman correlation 계산
+       - Cue family × group의 대각 성분이 off-diagonal보다 높은지 확인
+ 산출물: 4x4 correlation 표 (Appendix H 확장) + 본문 Q5 한 문장.
+ 소요 시간: 1~2시간 (기존 모델 log 재활용).
+ Codex 판단 포인트: 대각 성분이 예상보다 약하면 오히려 증거가 약해질
+   위험. 계산 후 결과 보고 반영 결정.
+
+--------------------------------------------------------------------------------
+ [권장 조합]
+--------------------------------------------------------------------------------
+ 최소:   A 만 (무조건).
+ 표준:   A + C.
+ 도전적: A + C + D (시간 되면 B도).
+
+ ※ Codex는 현재 pipeline 상태와 남은 시간을 직접 평가해 조합 결정할 것.
+
+================================================================================
+ PART 5. 반드시 피해야 할 것
+================================================================================
+
+ X1. Q2~Q5 및 Appendix 플레이스홀더 수치를 그대로 제출본에 남기기.
+     → 리뷰어는 진짜로 읽는다. 가짜 수치 발각 시 치명적.
+     → 대안 A: 실제 결과 난 부분만 남기고 나머지 섹션 축소.
+     → 대안 B: "criteria for success" 방식으로 서술 유지, 수치는 공란/
+               qualitative로. 실제 값 나오면 교체.
+     → 절대 금지: 샘플값 그대로 PDF에 포함.
+
+ X2. 저자 원안의 "Beauty/ML-1M timestamp가 노이즈" 주장 단독 사용.
+     → TiSASRec 강세와 충돌. PART 2 참조해서 "micro-stage cue 한정 +
+        Avg.len 39.6 + REF-ML-1/REF-ML-2 citation"의 조합으로 변환 후 사용.
+
+ X3. 새 dataset, 새 baseline, method 구조 변경.
+     → 제출 48h 내 리스크 너무 큼.
+
+ X4. Claim 과장. "show / demonstrate / establish"를 Q5처럼 근거 약한
+     섹션에서 쓰기.
+
+ X5. Related Work에 기존 연구 "나열"만 하고 대조 없이 두기.
+
+ X6. (v2 추가) 새 citation을 무작정 많이 넣기.
+     → intro citation은 "grounded하게 만들기" 목적. 저질 reference를 채우면
+        오히려 노이즈. 아래 PART 8의 추천 리스트에서 target 위치에 맞는
+        것만 선별 사용.
+
+================================================================================
+ PART 6. 48시간 타임라인 제안
+================================================================================
+
+ [Day 1]
+  오전 (3h): Tier 1 전부 — Abstract, Intro, Section 4.1 paragraph,
+             Table 1 bold/underline, ML-1M framing (REF-ML-1/2 cite)
+  오후 (2h): 옵션 A (Heterogeneity Score) 계산 + Appendix 문단 작성
+  저녁 (2h): Tier 2 T2-1~T2-4 (방어 문장들)
+  오버나이트: 옵션 C (Seed variance) 병렬 실행
+
+ [Day 2]
+  오전 (3h): Tier 2 T2-5, T2-6 (method polish, claim calibration)
+  오후 (2h): Seed variance 결과 반영 + 옵션 D (Routing correlation)
+  저녁 (2h): Tier 3 전부 + full proofread + placeholder 최종 제거
+             + 새로 추가한 citation들 refs.bib에 제대로 들어있는지 체크
+
+ [제출 직전 체크]
+  □ 플레이스홀더 수치 모두 제거 또는 실제 값 교체
+  □ Abstract 마지막 문장 수치 포함
+  □ Intro empirical preview 문단 존재
+  □ Section 4.1 paragraph 분리
+  □ Table 1 bold/underline 적용
+  □ Section 4.2 ML-1M framing 문장 존재 (REF-ML-1/2 cite)
+  □ Section 4.5 active param 수치 전면 배치
+  □ Section 3.2 portable 정의 + hand-crafted 방어 문장
+  □ Eq.(2) 뒤 notation bridge
+  □ 추가된 citation keys가 refs.bib에 모두 존재 & compile 에러 없음
+  □ Anonymous 링크, 저자명, 소속 점검
+
+================================================================================
+ PART 7. Codex에게 부탁하는 것
+================================================================================
+
+ 1. 이 브리프의 모든 항목을 무비판적으로 수용하지 말 것. 특히 예시 문장은
+    영어 문체/논문 톤을 스스로 조정해서 다시 쓸 것.
+
+ 2. 저자 Beauty/ML-1M 방어 아이디어에 대해 PART 2의 위험 분석을 읽고,
+    최종 방어 문장을 Section 4.2 문체와 어울리게 직접 작성할 것.
+    REF-ML-1 (Fan TOIS 2024), REF-ML-2 (Woolridge 2021)는 가능하면 반드시
+    cite — external evidence가 이번 주장의 생명줄.
+
+ 3. 추가 분석 옵션 A~D 중 현재 pipeline/시간 제약에서 가능한 것을
+    직접 판단해 제시할 것. 특히 옵션 A(Heterogeneity Score)는 지표 정의가
+    cue family와 구조적으로 일치해야 하므로 신중히 설계.
+
+ 4. 플레이스홀더 수치 처리는 저자와 확인 후 진행. 실제 결과 미수급 섹션은
+    축소하거나 qualitative하게 유지.
+
+ 5. PART 8의 추가 reference 중 어느 것을 어디에 넣을지 Codex가 판단.
+    전부 넣을 필요 없음. 최소한 REF-ML-1, REF-ML-2는 4.2절에 들어가야 함.
+    나머지는 해당 위치의 claim이 실제로 그 cite를 필요로 하는지 보고 결정.
+
+ 6. Tier 1 → Tier 2 → Tier 3 순서를 지킬 것. Tier 1 전부 끝나기 전에
+    Tier 3로 가지 말 것.
+
+ 7. 최종 제출 전 PART 6의 체크리스트를 모두 통과하는지 확인.
+
+================================================================================
+ PART 8. 추가 Reference 후보 + refs.bib 엔트리 (v2 신설)
+================================================================================
+
+ 아래는 현재 refs.bib 에 없는, 그리고 필요하면 넣을 수 있는 reference
+ 후보들이다. citation key, bibtex entry, 사용 근거를 함께 제시한다.
+ Codex는 어느 것을 실제 넣을지 판단할 것.
+
+--------------------------------------------------------------------------------
+ [REF-ML-1]  ★★★★★ 반드시 추가 권장 — ML-1M 방어의 핵심
+--------------------------------------------------------------------------------
+ citation key: fan2024movielens
+
+ @article{fan2024movielens,
+   author  = {Yu{-}Chen Fan and Yitong Ji and Jie Zhang and Aixin Sun},
+   title   = {Our Model Achieves Excellent Performance on {MovieLens}: What Does It Mean?},
+   journal = {ACM Transactions on Information Systems},
+   year    = {2024},
+   doi     = {10.1145/3675163}
+ }
+
+ 사용 위치:
+   Section 4.2 (Table 1 직후 방어 문장)
+   선택적으로 Section 4.1 Datasets 문단 ML-1M 설명 옆
+
+ 사용 근거:
+   "MovieLens는 <user-platform> 상호작용이지 <user-item> 상호작용이
+    아니다"는 주장을 정면으로 다룬 TOIS 논문.
+   저자 방어 ("ML-1M이 전형적 sequential 데이터가 아니다")를 authoritative
+   하게 backup.
+
+--------------------------------------------------------------------------------
+ [REF-ML-2]  ★★★★★ REF-ML-1과 쌍으로 사용 권장
+--------------------------------------------------------------------------------
+ citation key: woolridge2021pseudoseq
+
+ @inproceedings{woolridge2021pseudoseq,
+   author    = {Daniel Woolridge and Sean Wilner and Madeleine Glick},
+   title     = {Sequence or Pseudo-Sequence? An Analysis of Sequential Recommendation Datasets},
+   booktitle = {Proceedings of the Perspectives on the Evaluation of Recommender Systems Workshop
+                (PERSPECTIVES) co-located with the 15th ACM Conference on Recommender Systems (RecSys)},
+   series    = {CEUR Workshop Proceedings},
+   volume    = {2955},
+   year      = {2021},
+   publisher = {CEUR-WS.org},
+   url       = {https://ceur-ws.org/Vol-2955/}
+ }
+
+ 사용 위치:
+   Section 4.2 방어 문장 (REF-ML-1과 함께)
+   선택적으로 Appendix B evaluation protocol 설명
+
+ 사용 근거:
+   MovieLens 포함 여러 dataset에서 timestamp가 sequential order를
+   nontrivial하게 보장하지 못함을 실증.
+   "MovieLens는 pseudo-sequential"이라는 RouteRec 방어를 학계 문헌으로
+   뒷받침.
+
+--------------------------------------------------------------------------------
+ [REF-MCPRN] ★★★★ 강력 추천 — related work + intro Challenge 1
+--------------------------------------------------------------------------------
+ citation key: wang2019mcprn
+
+ @inproceedings{wang2019mcprn,
+   author    = {Shoujin Wang and Liang Hu and Yan Wang and Quan Z. Sheng and Mehmet A. Orgun and Longbing Cao},
+   title     = {Modeling Multi-Purpose Sessions for Next-Item Recommendations via Mixture-Channel Purpose Routing Networks},
+   booktitle = {Proceedings of the Twenty-Eighth International Joint Conference on Artificial Intelligence (IJCAI)},
+   pages     = {3771--3777},
+   year      = {2019},
+   doi       = {10.24963/ijcai.2019/523}
+ }
+
+ 사용 위치:
+   Intro L84~87 ("behavior mixes multiple regimes" 근처, 추가 cite)
+   Section 2.3 Related Work (prior routing work로 직접 대조)
+   선택적으로 Intro challenge 1
+
+ 사용 근거:
+   세션이 다수의 purpose를 가진다는 motivation과 "purpose routing network"
+   라는 architecture를 제안한 prior work. RouteRec의 직접 비교 대상 중
+   하나로 다뤄야 함. 현재 논문은 이 paper를 언급 안 함 → 의도적 누락으로
+   의심받을 수 있어 반드시 cite.
+   대조 포인트:
+   - MCPRN은 routing을 representation channel 안쪽에 결합
+   - RouteRec은 routing signal과 representation을 명시적으로 분리하고,
+     관찰 가능한 behavior cue로 routing을 구동
+   이 한 줄이 RouteRec의 novelty positioning을 훨씬 선명하게 만듦.
+
+--------------------------------------------------------------------------------
+ [REF-MIASREC]  ★★★ 선택 — Intro citation 보강
+--------------------------------------------------------------------------------
+ citation key: choi2024miasrec
+
+ @inproceedings{choi2024miasrec,
+   author    = {Minjin Choi and Hye-young Kim and Hyunsouk Cho and Jongwuk Lee},
+   title     = {Multi-intent-aware Session-based Recommendation},
+   booktitle = {Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval (SIGIR)},
+   year      = {2024},
+   doi       = {10.1145/3626772.3657928}
+ }
+ (※ 저자 리스트 정확성은 Codex가 다시 확인. 원문 페이지에서 확인할 것.)
+
+ 사용 위치:
+   Intro Challenge 1 근처 또는 L93~94 citation 보강
+
+ 사용 근거:
+   단일 세션 안에서도 multiple user intents가 존재함을 최근 주장.
+   RouteRec의 "behavior heterogeneity는 실재한다" 클레임을 최신 문헌으로
+   보강.
+   >> 선택적: REF-MCPRN이 이미 이 논점을 커버하므로 중복 cite는 피해도 됨.
+
+--------------------------------------------------------------------------------
+ [REF-REPRO]  ★★★ 선택 — Protocol 방어
+--------------------------------------------------------------------------------
+ citation key: ferraridacrema2021repro
+
+ @article{ferraridacrema2021repro,
+   author  = {Maurizio Ferrari Dacrema and Simone Boglio and Paolo Cremonesi and Dietmar Jannach},
+   title   = {A Troubling Analysis of Reproducibility and Progress in Recommender Systems Research},
+   journal = {ACM Transactions on Information Systems},
+   volume  = {39},
+   number  = {2},
+   year    = {2021},
+   doi     = {10.1145/3434185}
+ }
+
+ 사용 위치:
+   Section 4.1 Evaluation Protocol / Tuning 문단
+
+ 사용 근거:
+   "same preprocessing / same tuning budget / same selection rule"이
+   단순 best practice가 아니라 재현성 문제를 피하기 위한 필수 관행임을
+   주장한 TOIS 논문. RouteRec의 protocol 정당화를 "이미 학계가 합의한
+   원칙"으로 framing 가능.
+   >> 선택적. T2-3을 더 단단하게 만들고 싶으면.
+
+--------------------------------------------------------------------------------
+ [REF-FPMC]  ★★ 매우 선택 — 이미 bib에 있음 (rendle2010fpmc), 현재 본문 미사용
+--------------------------------------------------------------------------------
+ citation key: rendle2010fpmc  (이미 refs.bib에 존재)
+
+ 사용 위치:
+   Intro 배경 설명 초반 — 고전 sequential recommendation 계보 설명 시
+
+ 사용 근거:
+   시퀀셜 추천의 고전 baseline. 현재 논문은 이를 인용하지 않는데,
+   intro에서 sequential recommendation 역사를 짧게 언급하면서 citing 하면
+   "우리 저자들이 고전 문헌까지 포괄적으로 알고 있다"는 인상을 줌.
+   >> 매우 선택적. 분량 여유 없으면 skip.
+
+--------------------------------------------------------------------------------
+ [REF-LUDEWIG]  ★★ 매우 선택 — 이미 bib에 있음 (ludewig2021empirical), 현재 본문 미사용
+--------------------------------------------------------------------------------
+ citation key: ludewig2021empirical  (이미 refs.bib에 존재)
+
+ 사용 위치:
+   Section 4.1 Evaluation Protocol 또는 Section 4.2 ("baseline 순위가
+   protocol에 따라 바뀐다"는 주장 뒷받침)
+
+ 사용 근거:
+   session-based recommender의 경험적 분석 논문. 다양한 전처리/평가
+   프로토콜에서 모델 순위가 달라짐을 실증. T2-3, T2-4의 "protocol이 bias를
+   드러낸다" 톤 전환을 학계 empirical evidence로 뒷받침.
+   >> 이미 bib에 있으므로 코스트 0, 활용 권장.
+
+--------------------------------------------------------------------------------
+ [REF-ZHU2020]  ★★ 매우 선택 — Intro 보강용, bib에 없음
+--------------------------------------------------------------------------------
+ citation key: zhu2020hierint
+
+ @inproceedings{zhu2020hierint,
+   author    = {Nengjun Zhu and Jian Cao and Yanchi Liu and Yang Yang and Haochao Ying and Hui Xiong},
+   title     = {Sequential Modeling of Hierarchical User Intention and Preference for Next-item Recommendation},
+   booktitle = {Proceedings of the 13th International Conference on Web Search and Data Mining (WSDM)},
+   pages     = {807--815},
+   year      = {2020},
+   doi       = {10.1145/3336191.3371840}
+ }
+
+ 사용 위치:
+   Section 2.2 Related Work (multi-scope behavioral signals) 혹은
+   Intro challenge 2 근처
+
+ 사용 근거:
+   User intent가 hierarchical하다는 prior work. RouteRec의 macro/mid/micro
+   motivation과 궤를 같이함. Challenge 2 ("temporal-scope mismatch")를
+   기존 문헌에 닻 내려 grounded하게 만듦.
+   >> 매우 선택적. 이미 multi-interest 계열 [21,23,25,27]이 있어 중복 가능.
+
+================================================================================
+ [우선순위 요약 - citation 추가]
+================================================================================
+
+ 반드시:
+   - REF-ML-1 (fan2024movielens)        → Section 4.2 ML-1M 방어
+   - REF-ML-2 (woolridge2021pseudoseq)  → Section 4.2 ML-1M 방어 쌍
+   - REF-MCPRN (wang2019mcprn)          → Related Work 2.3 대조
+                                           + 옵션: Intro Challenge 1
+
+ 권장:
+   - REF-LUDEWIG (ludewig2021empirical, 이미 bib)
+                                        → Section 4.1 protocol 강화
+
+ 선택:
+   - REF-MIASREC (choi2024miasrec)      → Intro Challenge 1 보강
+   - REF-REPRO (ferraridacrema2021repro)→ Section 4.1 protocol 방어
+   - REF-FPMC (rendle2010fpmc, 이미 bib)→ Intro 역사 맥락
+   - REF-ZHU2020 (zhu2020hierint)       → Section 2.2 / Intro Challenge 2
+
+ ※ 주의: Codex는 각 citation이 "실제로 그 위치의 claim을 뒷받침하는가?"를
+   확인하고 넣을 것. reference padding으로 읽히면 오히려 역효과.
+
+================================================================================
+ 끝.
+================================================================================

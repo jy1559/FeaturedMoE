@@ -1,0 +1,74 @@
+# job_id=S2_RETAIL_ROCKET_DIFSR dataset=retail_rocket model=difsr stage=stage2
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --search-algo tpe --max-evals 10 --tune-epochs 60 --tune-patience 6 --seed 710024 --run-group final_experiment --run-axis stage2_focus_search --run-phase S2_RETAIL_ROCKET_DIFSR model=difsr dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=5 log_wandb=false show_progress=false ++seed=710024 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00017873,0.00027972,0.00043779,0.00068518,0.00107236] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-06,0.0001,5e-05,1e-05] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[20,30,50,10] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[96,128,160,192] ++search_space_type_overrides.hidden_size=choice ++search.num_layers=[1,2,3] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[2,1,4] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.1,0.12,0.15,0.05] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.08,0.1,0.15,0.12] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[160,192,128,96] ++search_space_type_overrides.attribute_hidden_size=choice ++search.fusion_type=["gate","concat","sum"] ++search_space_type_overrides.fusion_type=choice ++search.lambda_attr=[0.1,0.12,0.14,0.08] ++search_space_type_overrides.lambda_attr=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.use_attribute_predictor=[true] ++search_space_type_overrides.use_attribute_predictor=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1682369 ts=2026-04-18T10:47:23
+[UniqueChoice] enabled: dedupe/remap duplicates across 2211840 finite combos
+
+=================================================================
+  Hyperopt  |  DIFSR x retail_rocket
+  max_evals=10  epochs=60  patience=6  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/8192/8192
+  track=final_experiment  axis=stage2_focus_search  phase=S2_RETAIL_ROCKET_DIFSR
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, attribute_hidden_size, fusion_type, hidden_dropout_prob, hidden_size, lambda_attr, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 11  (~2211840 discrete combos)
+Tuned groups: 11
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.12, 0.15, 0.05]                   -> choice
+    learning_rate                   [0.00017873, 0.00027972, 0.00043779, 0.00068518, 0.00107236]  -> choice
+    weight_decay                    [1e-06, 0.0001, 5e-05, 1e-05]             -> choice
+  [model_core]
+    attn_dropout_prob               [0.08, 0.1, 0.15, 0.12]                   -> choice
+    hidden_size                     [96, 128, 160, 192]                       -> choice
+    num_heads                       [2, 1, 4]                                 -> choice
+    num_layers                      [1, 2, 3]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [20, 30, 50, 10]                          -> choice
+    attribute_hidden_size           [160, 192, 128, 96]                       -> choice
+    fusion_type                     ['gate', 'concat', 'sum']                 -> choice
+    lambda_attr                     [0.1, 0.12, 0.14, 0.08]                   -> choice
+Fixed params(singleton/non-list): 4
+Fixed groups: 4
+  [model_core]
+    dropout_ratio                   0.12                                    
+    inner_size                      320                                     
+  [other]
+    selected_features               ['category']                            
+    use_attribute_predictor         True                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.08, attribute_hidden_size=192, fusion_type=gate, hidden_dropout_prob=0.12, hidden_size=128, lambda_attr=0.12, learning_rate=0.0001787, num_heads=4, num_layers=2, weight_decay=1e-05
+  -> FAILED: 
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4404, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2903, in train_and_evaluate
+    dataset = create_dataset(config)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 333, in _patched_create_dataset
+    return _original_create_dataset(config)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/data/utils.py", line 61, in create_dataset
+    dataset = pickle.load(f)
+MemoryError
+
+[WARN] fmin ended with: 
+
+=================================================================
+  DONE  |  DIFSR x retail_rocket
+  Best MRR@20 = 0.000000  |  0/10 trials OK
+  Best HR@10  = 0.000000
+  Test MRR@20 = 0.000000  (best-valid checkpoint)
+  Test HR@10  = 0.000000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.000000 best_valid_hr10=0.000000 test_mrr20=0.000000 test_hr10=0.000000 avg_epoch_time_sec=0.0000 test_eval_time_sec=0.0000 test_eval_batches_per_sec=0.0000 test_eval_targets_per_sec=0.0000
+  Total time: 0.0 min
+  Best params:
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/retail_rocket_DIFSR_s2_retail_rocket_difsr_20260418_104726_248388_pid1682369.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage2_focus_search/S2/retail_rocket/DIFSR/retail_rocket_DIFSR_s2_retail_rocket_difsr_20260418_104726_248388_pid1682369.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1682369 start=2026-04-18T10:47:23 end=2026-04-18T10:47:27

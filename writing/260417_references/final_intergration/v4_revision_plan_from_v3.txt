@@ -1,0 +1,267 @@
+v4 기준 수정 방향 정리 (v3의 장점 반영)
+
+전반 판단
+- 기본 베이스는 v4로 가는 것이 맞다.
+- v4의 강점은 문제 제기 -> 설계 축 -> 실험 질문의 연결이 더 자연스럽고, 각 실험이 무엇을 검증하는지 더 잘 드러난다는 점이다.
+- 다만 v3에는 몇 군데 더 직접적이고 방어력이 좋은 문장/설명이 있어서, 그것들을 부분적으로 이식하면 v4가 더 강해진다.
+
+핵심 수정 방향
+1. v4의 큰 흐름은 유지한다.
+2. v3의 장점은 "직접성"과 "프로토콜 설명의 방어력"이다.
+3. 따라서 v4를 다시 v3처럼 바꾸는 것이 아니라,
+   - 본문 흐름은 v4 유지
+   - 핵심 문장 몇 개는 v3처럼 더 직설적으로
+   - evaluation/setup 쪽은 v3처럼 조금 더 명시적으로
+   로 정리하는 것이 가장 좋다.
+
+-----------------------------------
+1. Introduction / positioning
+-----------------------------------
+
+유지할 점 (v4의 강점)
+- v4는 기존 연구를 너무 세게 깎아내리지 않고,
+  "기존도 heterogeneity를 모르는 것은 아니지만 주로 representation 안에서 처리해 왔다"
+  는 식으로 더 공정하게 position을 잡고 있다.
+- 이 뒤에 why routing / where routing should differ / what should drive routing 으로 이어지는 구조가 매우 좋다.
+- 이 흐름은 그대로 유지하는 것이 맞다.
+
+보강할 점 (v3에서 가져올 것)
+- v3의 장점은 representation과 routing의 역할 분리를 훨씬 선명하게 박아준다는 점이다.
+- v4도 같은 내용을 말하고는 있지만, 한 문장으로 딱 꽂히는 선언이 v3 쪽이 더 강하다.
+
+추천 수정
+- Related Work 2.3 마지막 또는 Method 3.1 초반에 아래 톤의 직설 문장을 한 번 더 넣는 것이 좋다.
+
+  예시:
+  "We therefore separate the role of representations and routing. Hidden states remain the content channel transformed by experts, while routing is controlled by portable behavioral cues derived from standard logs."
+
+- 이 문장은 사실상 논문의 철학을 가장 짧고 강하게 요약한다.
+- 리뷰어가 "그래서 너희가 hidden-only MoE와 정확히 무엇이 다른데?"라고 물을 때 가장 빨리 답해주는 문장이다.
+
+추가 추천
+- introduction 마지막 부분에서 three design axes를 소개할 때,
+  단순 나열보다 아래처럼 한 줄씩 역할을 더 분명히 적어주면 좋다.
+  - Portable Behavioral Cues: routing signal의 source
+  - Coarse-to-Fine Multi-Stage Routing: routing should differ where/how across temporal scope
+  - Behavior-Guided Expert Allocation: routing semantics와 expert specialization을 연결하는 mechanism
+
+즉, "무엇을 제안했다"보다 "각 축이 어떤 질문에 답하는가"가 더 드러나게 하면 좋다.
+
+-----------------------------------
+2. Related Work
+-----------------------------------
+
+유지할 점
+- v4의 related work는 prior work를 더 공정하게 읽어주고,
+  RouteRec의 위치를 representation improvement와 routing control의 차이로 잘 잡고 있다.
+
+보강할 점
+- 2.3 마지막 문단은 v3의 직설성을 조금 가져오는 편이 좋다.
+- 현재 v4는 더 부드럽고 무난하지만, 리뷰어 기억에 남는 문장력은 v3가 더 강하다.
+
+추천 수정
+- 2.3 마지막 단락에 아래 메시지를 더 명확히 남긴다.
+  1) RouteRec의 목적은 capacity 추가 자체가 아님
+  2) specialization 기준을 hidden geometry가 아니라 observable behavior에 두려는 것임
+  3) 그래서 later diagnostics/ablations의 의미가 생김
+
+즉, related work 끝에서
+"이 차이는 단순한 implementation 차이가 아니라, 뒤의 분석 질문 자체를 바꾼다"
+는 점을 더 직접적으로 말해주는 것이 좋다.
+
+-----------------------------------
+3. Method
+-----------------------------------
+
+유지할 점
+- v4의 method는 전체적으로 더 정돈되어 있다.
+- 특히 Q3와 연결되는 방식이 좋아서, method의 세 축과 experiment의 세 축이 잘 맞물린다.
+
+보강할 점 1: framework vs paper instantiation 구분을 더 짧고 선명하게
+- v4는 framework와 fixed instantiation을 구분하려는 의도가 좋다.
+- 그런데 리뷰어 입장에서는 가끔 "그래서 이 paper에서 실제로 고정한 건 뭐고, 일반 conceptual framing은 뭐지?"가 살짝 분리되어 읽힐 수 있다.
+
+추천 수정
+- 3.1 끝부분이나 Table 2 언급 직전에 아래 식의 한 문장을 추가
+  - main text = conceptual design axes + selected paper instantiation
+  - appendix = broader variants and engineering detail
+
+지금도 비슷한 말이 있지만, 한 번 더 짧고 명시적으로 정리하면 method 독해가 빨라진다.
+
+보강할 점 2: 3.2의 feature-family 설명을 조금 더 reviewer-friendly하게
+- v4는 semantic family 설명이 괜찮지만, reviewer가 실제로 궁금한 건
+  "이게 feature engineering 과잉이 아닌가?"
+  "dataset-specific hack 아닌가?"
+  이다.
+
+추천 수정
+- 3.2 마지막 문단에 아래 메시지를 더 짧고 단단하게 남긴다.
+  - 목표는 feature를 많이 넣는 것이 아니라 작은 cue bank를 stable routing interface로 쓰는 것
+  - family structure는 semantic prior이지 exhaustive handcrafting이 아님
+  - dataset마다 side branch를 달지 않는다는 점이 portability claim의 핵심
+
+보강할 점 3: 3.3 stage placement justification을 한 문장 더 방어적으로
+- v4의 설명은 좋다.
+- 다만 "왜 macro-mid 사이에는 attention 안 넣었고 micro 전에는 넣었는가"는 꽤 공격받기 쉬운 지점이다.
+
+추천 수정
+- 현재 문장에 더해,
+  "the distinction is not depth for its own sake, but whether an additional update creates a meaningfully different temporal control view"
+  같은 요지의 문장을 한 줄 넣으면 설계 의도가 더 분명해진다.
+
+-----------------------------------
+4. Experimental setup / protocol
+-----------------------------------
+
+여기가 가장 중요하게 보강할 부분이다.
+
+유지할 점 (v4의 강점)
+- v4는 tuning을 experimental protocol의 일부로 둔 점,
+  shared protocol을 강조한 점,
+  그리고 main section을 Q1~Q5로 조직한 점이 좋다.
+- 특히 Q1 앞의 "overall pattern이 후속 design analysis를 할 만큼 충분히 strong한가"라는 framing은 매우 좋다.
+
+보강할 점 (v3에서 꼭 가져와야 할 것)
+- v3는 evaluation protocol을 더 구체적으로 설명한다.
+- 특히 아래 내용은 본문에 일정 수준 남겨두는 편이 좋다.
+  1) session-level temporal split
+  2) held-out tail 처리 방식
+  3) chronology-preserving cleanup rationale
+  4) seen-target main table을 쓰는 이유
+  5) unseen non-target row 정리 원칙
+
+지금 v4는 전체적으로 매끈하지만, 이 부분이 appendix 쪽으로 너무 밀리면
+보수적인 리뷰어가
+"프로토콜 정당성은 어디까지 본문에서 확인 가능한가?"
+를 물을 수 있다.
+
+추천 수정
+- setup 본문에 한 단락 정도만 추가해서 아래를 짧게 명시해두는 것이 좋다.
+
+  권장 포함 요소:
+  - sessions are split chronologically at the session level
+  - training split is fixed first, held-out sessions are then cleaned/reordered without changing the training vocabulary exposure rule
+  - primary comparison reports seen-target metrics because ID-based recommenders cannot rank unseen targets in the main vocabulary-based benchmark
+  - supplementary accounting for unseen-target behavior is deferred to the appendix
+
+즉, 본문에서는 프로토콜의 "원리"를 말하고,
+세부 예외 처리나 표는 appendix로 보내면 된다.
+
+핵심은:
+- 본문에서 너무 길게 설명할 필요는 없지만
+- 리뷰어가 fairness/protocol concern을 제기하기 전에
+  "우리는 그 점을 알고 있고 이렇게 처리했다"는 신호는 줘야 한다.
+
+-----------------------------------
+5. Q1~Q5 organization
+-----------------------------------
+
+유지할 점
+- Q1~Q5 framing은 v4가 더 낫다.
+- 특히 Q3를 "three-part design"으로 잡은 것은 v3보다 좋다.
+- 이건 실제 claim과 더 잘 맞는다.
+
+보강할 점
+- 각 subsection 첫 문장의 역할을 더 통일하면 좋다.
+- 지금도 좋지만, 더 강하게 만들 수 있다.
+
+추천 원칙
+- Q1 = full model is competitive enough to justify design analysis
+- Q2 = routing signal source 검증
+- Q3 = three design axes의 internal coherence 검증
+- Q4 = portability / low-availability setting 검증
+- Q5 = semantic alignment / behavioral regime 대응 검증
+
+즉, 각 Q subsection 첫 문단 첫 1~2문장은
+"이 section이 어떤 claim을 검증하는지"
+를 동일한 톤으로 써주면 전체 실험 파트가 더 응집적으로 보인다.
+
+-----------------------------------
+6. Q3 section
+-----------------------------------
+
+v4가 이미 더 낫지만, 여기서 한 단계 더 좋아질 수 있다.
+
+좋은 점
+- Figure 4가 method의 three design axes를 직접 mirror한다고 적은 점이 좋다.
+- panel (a)(b)(c)의 역할도 v3보다 더 정확히 분리되어 있다.
+
+추가 보강점
+- 마지막 문단에서 "not one isolated trick" 메시지를 더 강하게 밀어도 좋다.
+- 리뷰어는 쉽게 "결국 한 component만 효과 있는 것 아닌가?"를 의심한다.
+
+추천 수정
+- Q3 마지막을 아래 방향으로 정리
+  - RouteRec의 gain은 단일 component 하나가 아니라
+    cue semantics, temporal scope decomposition, router composition의 결합에서 나온다.
+  - 따라서 RouteRec은 generic MoE replacement가 아니라
+    behavior-conditioned computation design으로 읽혀야 한다.
+
+이 메시지를 stronger take-away sentence로 마무리하면 좋다.
+
+-----------------------------------
+7. Q4 / portability claim
+-----------------------------------
+
+유지할 점
+- v4는 Q4를 portability question으로 명확히 정의해서 좋다.
+- "rich metadata가 없어도 되는가"를 잘 분리했다.
+
+보강할 점
+- 이 portability가 무엇을 의미하는지 한 번 더 operational하게 적으면 좋다.
+
+추천 수정
+- Q4 서두 또는 말미에 아래 메시지 추가
+  - portability means not only transfer across datasets, but also usefulness under partial cue availability
+  - the point is not zero-feature robustness, but whether ordinary logs retain enough signal for routing to remain meaningful
+
+이렇게 쓰면 claim이 과장되지 않으면서도 더 정확해진다.
+
+-----------------------------------
+8. Conclusion
+-----------------------------------
+
+추천 수정
+- 결론 첫 문장은 좋은데, 마지막 단락에서는 아래 세 줄이 깔끔하게 남아야 한다.
+  1) RouteRec의 핵심은 feature fusion이 아니라 routing control interface라는 점
+  2) 핵심 기여는 three design axes의 결합이라는 점
+  3) 남는 limitation/future work는 richer experts, broader transfer, stronger sparse routing/system efficiency 등으로 자연스럽게 열어두는 것
+
+즉, 결론은 "성능이 좋았다"보다
+"왜 이 설계가 의미 있는가"를 다시 한 번 닫아주는 방향이 좋다.
+
+-----------------------------------
+최종 우선순위 (진짜로 먼저 고칠 것)
+-----------------------------------
+
+1순위
+- Experimental setup에 v3식 protocol rationale 한 단락 복원
+- seen-target / held-out cleanup / session-level chronology 원칙을 본문에서 짧게 명시
+
+2순위
+- Related Work 2.3 또는 Method 3.1에
+  "We therefore separate the role of representations and routing" 급의 직설 문장 복원
+
+3순위
+- Q1~Q5 첫 문단들의 톤을 더 통일해서
+  "이 실험이 어떤 claim을 검증하는가"를 더 선명하게 맞추기
+
+4순위
+- Q3 마지막 takeaway를 더 강하게
+  "one trick"이 아니라 integrated behavior-conditioned design이라는 메시지로 정리
+
+5순위
+- 3.2, 3.3의 reviewer-facing 방어 문장 조금 보강
+  (feature engineering 과잉 아님 / stage placement가 arbitrary 아님)
+
+-----------------------------------
+한 줄 결론
+-----------------------------------
+
+v4의 구조와 스토리라인은 유지하는 것이 맞다.
+수정 방향은 "v3처럼 다시 쓰기"가 아니라,
+v4의 자연스러운 흐름 위에 v3의 직설성과 protocol 방어력을 얹는 것이라고 보면 된다.
+이렇게 하면 리뷰어 입장에서
+- 읽기 자연스럽고
+- claim-to-experiment 연결이 분명하고
+- fairness/protocol 관련 반론에도 더 잘 버티는 버전이 된다.

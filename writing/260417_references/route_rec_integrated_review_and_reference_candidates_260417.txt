@@ -1,0 +1,485 @@
+RouteRec 논문 통합 리뷰 + methodology/실험 정당화 포인트 + 추가 reference 후보
+작성일: 2026-04-17
+대상 버전: RouteRec__Behavior_Guided_Expert_Routing_for_Sequential_Recommendation (8).pdf
+
+==================================================
+1. 현재 버전 총평
+==================================================
+
+이번 버전은 이전보다 분명히 좋아졌다.
+특히
+- introduction의 3 challenge
+- methodology의 3 design axis
+- appendix의 fixed configuration / reproducibility 표
+가 한 축으로 정렬되기 시작했다.
+
+지금은 적어도 reviewer가
+"이 논문이 뭘 하려는지 모르겠다"
+라고 하기는 어려운 상태다.
+
+핵심 메시지는 비교적 명확하다.
+- behavioral diversity가 있는데 shared computation만 쓰는 게 문제다.
+- 그래서 portable behavioral cue를 만들고,
+- macro / mid / micro의 coarse-to-fine stage로 나누고,
+- hidden-state-only가 아니라 behavior-guided routing으로 expert allocation을 한다.
+
+즉 concept-level story는 이제 잘 보인다.
+
+다만 아직도 reviewer가 꼬치꼬치 보면 걸 수 있는 부분은 남아 있다.
+가장 큰 건 다음 네 가지다.
+
+(1) framework와 paper instantiation의 경계가 아직 완전히 잠기지 않음
+(2) exact selected configuration이 일부 표에서 range/search-space 수준으로 남아 있음
+(3) sampled subset 사용 사실이 main table에서 바로 보이지 않음
+(4) appendix placeholder/빈 subsection이 남아 있어 완성도 인상이 약해질 수 있음
+
+한 줄로 요약하면:
+"개념은 충분히 설득 가능해졌고, 이제는 exact setting / transparency / reproducibility를 더 날카롭게 고쳐야 하는 단계"
+
+
+==================================================
+2. reviewer 타입별로 어떻게 읽힐지
+==================================================
+
+[2-1. 비판적인 reviewer]
+이 reviewer는 다음을 본다.
+- exact final config가 명확한가?
+- subset 사용, sessionization, selection rule이 투명한가?
+- 논문이 framework를 말하는지, selected architecture report를 말하는지 헷갈리지 않는가?
+- dense mixture를 왜 채택했는지 설명이 충분한가?
+- appendix가 진짜 reproducibility 문서 역할을 하는가?
+
+이 reviewer는 concept 자체보다
+정확성 / 투명성 / 방어 가능성
+을 더 따진다.
+
+[2-2. 관련 지식이 적은 reviewer]
+이 reviewer는 다음에서 멈춘다.
+- macro / mid / micro의 차이가 직관적으로 보이는가?
+- group-conditional router가 plain English로 무엇인지 이해되는가?
+- category vs theme proxy가 무엇인지,
+  category가 없는 dataset에서는 어떻게 되는지 이해되는가?
+- dense mixture를 왜 쓰는지 이해되는가?
+
+이 reviewer는 bridge sentence와 concrete example이 중요하다.
+
+[2-3. 지금 버전에 대한 종합 판단]
+- knowledgeable reviewer: 아직 implementation commitment가 약간 흐릿하다고 느낄 수 있음
+- less-expert reviewer: 큰 그림은 이해 가능하지만, 일부 세부 단어/설정(theme proxy, group-family relation, dense mixing rationale)은 조금 더 쉬운 연결 문장이 필요함
+
+
+==================================================
+3. 지금 가장 먼저 고쳐야 할 부분
+==================================================
+
+[우선순위 1] main table에 sampled subset 표시 복원
+- 현재 experimental setup에는 KuaiRec 20%, LastFM 3% subset 사용이 분명히 적혀 있다.
+- 하지만 main result table에서 바로 보이지 않으면 reviewer는 표만 보고 넘어가다가 놓칠 수 있다.
+- dataset 이름에 dagger(†)를 붙이고 caption에서 설명하는 방식이 가장 좋다.
+
+예시:
+KuaiRec†, LastFM†
+† Reported on the processed subset used in our runs (20% for KuaiRec, 3% for LastFM).
+
+[우선순위 2] Appendix A.2 빈 subsection 정리
+- "A.2 Implementation Specification" heading이 있는데 본문이 비어 있으면 완성도가 크게 떨어진다.
+- 방법:
+  1) Table 3를 A.2에 흡수하거나,
+  2) heading을 삭제하거나,
+  3) 최소한 2~3문장으로 역할을 적기.
+
+[우선순위 3] Appendix D의 "Table ??" 제거
+- placeholder는 제출본 신뢰도를 크게 깎는다.
+- 표를 넣지 못하면 subsection 자체를 잠시 내리거나, 최소한 placeholder는 삭제해야 한다.
+
+[우선순위 4] Table 3를 exact selected configuration 중심으로 바꾸기
+현재 Table 3 일부는 search-space/track 정보를 주고 있다.
+예:
+- Experts per group: C ∈ {2,3,4}
+- Router hidden width: representative range 48–128
+
+이건 reproducibility 표처럼 보이는데 exact final value가 아니다.
+최소한 아래는 최종값으로 고정하는 게 좋다.
+- selected C
+- total E
+- selected router hidden width
+- lambda_cons, lambda_z
+- optimizer / learning rate / weight decay / dropout
+- RouteRec best candidate run이 어떤 exact config였는지
+
+[우선순위 5] group-family relation을 한 문장 더 명확히
+지금은 "group structure is organized around the four cue families" 정도인데,
+reader는 이게
+- hard architectural partition인지
+- semantic alignment인지
+헷갈릴 수 있다.
+
+추천 문장:
+"The group structure is semantically aligned with the four cue families, while the selected paper instantiation still applies the router to the stage cue representation as a whole."
+
+[우선순위 6] route consistency의 macro/mid clarification 한 줄 추가
+macro/mid는 sequence-wise route를 broadcast한다고 이미 써놨기 때문에,
+3.5의 averaged routing distribution이 redundant해 보일 수 있다.
+
+추천 문장:
+"For macro and mid, this sample-level average reduces to the broadcast sequence-level route; the averaging notation is kept for a unified treatment across stages."
+
+[우선순위 7] category / theme proxy 설명 한 문장 추가
+3.2와 Table 4는 category와 theme를 같이 쓰는데,
+reader는 category 없는 dataset에서 theme proxy가 뭔지 궁금해할 수 있다.
+
+추천 문장:
+"Categories are used when available; otherwise the focus family falls back to the coarsest available item grouping, and missing sequence fields are zero-filled in the fixed paper instantiation."
+
+
+==================================================
+4. methodology와 appendix를 더 설득력 있게 만드는 방법
+==================================================
+
+[4-1. framework vs instantiation 구분을 더 분명히]
+현재는 3.1에서 한 번 선언했지만, 이후 본문에서 "fixed paper instantiation"이 계속 반복된다.
+이 자체가 틀린 건 아니지만, 너무 자주 나오면 framework paper와 selected config report가 섞여 보인다.
+
+추천 방식:
+- 3.1 끝에서 한 번 강하게 구분
+- main text는 개념과 이유 중심
+- exact values / selected hyperparameters / practical setting은 Appendix A와 Table 2–3로 모으기
+
+즉,
+main text = why / what / design
+appendix = exact selected setting
+
+[4-2. 3.4의 plain-English bridge 강화]
+Equation (6)–(8) 직전 혹은 직후에 아래 요약 문장을 직접 넣으면 좋다.
+
+추천:
+"In plain terms, RouteRec first selects the most relevant behavioral control view, and then allocates capacity within that view."
+
+혹은
+"The router first chooses the family-level control view, then chooses the expert within that view."
+
+이 문장은 non-expert reviewer에게 매우 유용하다.
+
+[4-3. dense mixture 채택 이유를 지금보다 더 적극적으로]
+현재는 dense mixing을 선택했다고 잘 적었지만,
+조금 더 이번 논문의 목적과 연결하면 좋다.
+
+추천 논리:
+- this paper is about behavior-grounded routing semantics and stage comparability,
+- dense soft mixing gives cleaner usage statistics and more stable diagnostics,
+- sparse top-k routing is left as a natural extension but is not necessary for validating the current claim.
+
+즉,
+"못 해서 안 했다"가 아니라
+"이번 논문 목적에 더 적합해서 이렇게 했다"
+로 보이게 해야 한다.
+
+[4-4. Appendix B.1의 dataset characterization를 main text 해석과 직접 연결]
+Appendix B.1은 이미 dataset별 behavioral regime 설명이 괜찮다.
+이걸 4.2 결과 해석과 연결하는 문장만 더 있으면 stronger story가 된다.
+
+예시:
+"This pattern is consistent with the dataset characterization in Appendix B.1: datasets with stronger short-horizon or concentrated behavioral signals provide clearer scope-separated routing cues than more stable preference-driven corpora."
+
+
+==================================================
+5. 정당화 논리: 내 과정과 실험을 어떻게 방어할 것인가
+==================================================
+
+[5-1. 왜 sessionization을 유지하는가]
+이건 이제 바꾸기보다 정당화하는 편이 낫다.
+핵심 논리는 다음이다.
+- RouteRec은 session-aware behavioral scope를 전제로 함
+- macro / mid / micro의 시간 범위 해석은 sessionization 위에서 더 자연스럽다
+- full-history로 되돌리면 오히려 behavior scope 정의가 흐려질 수 있다
+- sessionization은 ad hoc tuning trick이 아니라, behavior scope를 operationalize하는 modeling choice라고 설명하면 된다
+
+[5-2. 왜 feature bank가 hand-designed여도 괜찮은가]
+방어 포인트:
+- 목표는 feature engineering contest가 아니라 routing control interface 설계다
+- cue bank는 compact / portable / semantically legible해야 한다
+- representative family design + appendix examples + ablation으로 정당화한다
+- heavy side-information branch보다 ordinary logs 기반 control signal이 논문 핵심이다
+
+[5-3. 왜 dense mixture를 써도 되나]
+방어 포인트:
+- 현재 논문은 large-scale sparse MoE efficiency paper가 아니라 behavior-grounded conditional computation paper다
+- dense soft mixing은 stage-wise diagnostics와 comparability를 더 안정적으로 준다
+- top-k는 extension으로 남겨도 core claim(behavior cue가 routing semantics를 더 낫게 만든다)을 검증하는 데 필수는 아니다
+
+[5-4. 왜 objective에 load balancing이 없나]
+방어 포인트:
+- 이 논문의 목적은 uniform traffic 자체가 아니라 feature-aligned specialization이다
+- consistency + z-loss는 semantic alignment와 numeric stability를 주고,
+  explicit balancing은 오히려 behavior-grounded specialization을 약화시킬 수도 있다
+- Appendix D에서 optional balance variant를 보이면 rebuttal에 유리하다
+
+
+==================================================
+6. methodology 관련 추가 reference 후보 (라이브 웹 검색 기반)
+==================================================
+
+주의:
+- 아래는 "지금 꼭 다 넣어야 하는 필수"가 아니라, methodology / justification / discussion을 보강할 수 있는 후보들이다.
+- 실제 bib entry는 최종 반영 전에 다시 한 번 서지 형식만 맞추면 된다.
+- 너무 많이 넣기보다, 서술상 정확히 필요한 곳에만 쓰는 게 좋다.
+
+--------------------------------------------------
+6-1. MoE routing / gating / stability 쪽 후보
+--------------------------------------------------
+
+(1) BASE Layers: Simplifying Training of Large, Sparse Models
+- 저자: Mike Lewis, Shruti Bhosale, Tim Dettmers, Naman Goyal, Luke Zettlemoyer
+- venue: ICML 2021 (PMLR 139)
+- 링크: https://proceedings.mlr.press/v139/lewis21a.html
+- 왜 useful한가:
+  - balancing auxiliary loss 없이도 balanced assignment를 논의하는 대표 레퍼런스다.
+  - 네 논문에서 "왜 classical load balancing을 final config에서 빼도 되는가" 또는
+    "routing design에서 balancing pressure는 선택의 문제"라는 discussion에 붙이기 좋다.
+- 논문에 어디 넣으면 좋은가:
+  - related work 2.3 또는 3.5 objective discussion
+  - Appendix D regularization variants discussion
+- 핵심 포인트:
+  - 기존 sparse MoE는 balancing loss/heuristics가 필요할 수 있고,
+    BASE는 assignment 자체로 균형을 맞춘다.
+  - 즉, balancing이 MoE 설계의 핵심 쟁점 중 하나라는 점을 정당화해 준다.
+
+(2) DSelect-k: Differentiable Selection in the Mixture of Experts with Applications to Multi-Task Learning
+- 저자: Hussein Hazimeh et al.
+- venue: NeurIPS 2021
+- 링크: https://proceedings.neurips.cc/paper/2021/hash/f5ac21cd0ef1b88e9848571aeb53551a-Abstract.html
+- 왜 useful한가:
+  - top-k gate의 비연속성과 optimization difficulty를 짚는다.
+  - 네가 dense soft mixing을 채택하고 top-k를 current scope 밖에 둔 이유를 뒷받침할 수 있다.
+- 논문에 어디 넣으면 좋은가:
+  - 3.4 dense soft mixing rationale
+  - future work에서 sparse/top-k extension 언급 시
+- 핵심 포인트:
+  - sparse top-k gate는 smooth하지 않아 convergence/statistical performance issue가 생길 수 있다고 본다.
+
+(3) Mixture-of-Experts with Expert Choice Routing
+- 저자: Yanqi Zhou et al.
+- venue: NeurIPS 2022
+- 링크: https://arxiv.org/abs/2202.09368
+- 왜 useful한가:
+  - routing strategy가 expert under-training / over-specialization과 directly 연결된다는 점을 매우 직접적으로 말한다.
+  - 네 논문에서 routing semantics와 utilization discussion을 붙이기에 좋다.
+- 논문에 어디 넣으면 좋은가:
+  - related work 2.3
+  - 3.4 마지막 diagnostics comparability discussion
+  - Appendix E routing diagnostics interpretation
+- 핵심 포인트:
+  - poor routing strategy는 imbalance와 under-trained experts를 부를 수 있고,
+    routing rule 자체가 quality와 training behavior에 큰 영향을 준다.
+
+(4) ST-MoE: Designing Stable and Transferable Sparse Expert Models
+- 저자: Barret Zoph et al.
+- 링크: https://arxiv.org/abs/2202.08906
+- 왜 useful한가:
+  - training stability와 transfer quality를 전면에 놓고 sparse expert design guide를 제시한다.
+  - 네 objective / z-loss / stability narrative와 궁합이 좋다.
+- 논문에 어디 넣으면 좋은가:
+  - 3.5 z-loss / routing stability motivation
+  - Appendix D objective variants
+  - transfer appendix(G) discussion
+- 핵심 포인트:
+  - sparse expert models는 training instability와 fine-tuning uncertainty가 큰 이슈라는 framing을 제공한다.
+
+(5) From Sparse to Soft Mixtures of Experts
+- 저자: Joan Puigcerver et al.
+- venue: ICLR 2024
+- 링크: https://arxiv.org/abs/2308.00951
+- 왜 useful한가:
+  - soft routing / differentiable routing을 정당화하는 최신 흐름으로 쓸 수 있다.
+  - 다만 비전 논문이므로 직접 related-work 핵심으로 넣기보다는,
+    "dense soft mixing도 MoE design choice로 충분히 의미가 있다"는 보조 citation으로 쓰는 편이 낫다.
+- 논문에 어디 넣으면 좋은가:
+  - 3.4 dense soft mixing rationale
+  - rebuttal 대비용 related work 보강
+- 주의:
+  - domain이 recommendation이 아니므로 너무 전면에 세우진 말고,
+    routing form choice discussion에만 가볍게 붙이는 게 적절하다.
+
+(6) GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding
+- 저자: Dmitry Lepikhin et al.
+- venue: ICLR 2021
+- 링크: https://openreview.net/forum?id=qrwe7XHTmYb
+- 왜 useful한가:
+  - conditional computation이 modern large-scale modeling에서 중요한 paradigm이라는 broad framing용
+- 논문에 어디 넣으면 좋은가:
+  - introduction or related work 2.1에서 conditionally allocating computation is a broad architectural trend 라는 문장 보강
+- 주의:
+  - 직접 recommendation-specific는 아니므로 broad MoE framing용 1회 사용 정도면 충분
+
+(7) GLaM: Efficient Scaling of Language Models with Mixture-of-Experts
+- 저자: Nan Du et al.
+- venue: ICML 2022
+- 링크: https://arxiv.org/abs/2112.06905
+- 왜 useful한가:
+  - sparse expert models가 compute/energy trade-off 측면에서 의미가 있다는 broad support
+- 논문에 어디 넣으면 좋은가:
+  - introduction MoE motivation
+- 주의:
+  - RouteRec의 핵심 주장은 efficiency가 아니라 semantics/behavior-grounding이므로,
+    여기서 너무 오래 이야기할 필요는 없음
+
+--------------------------------------------------
+6-2. sequence/session/feature-aware framing 쪽 후보
+--------------------------------------------------
+
+(8) Sequence-Aware Recommender Systems
+- 저자: Massimo Quadrana, Paolo Cremonesi, Dietmar Jannach
+- 연도: 2018
+- 링크(오픈 접근 메타데이터): https://dblp.org/rec/journals/corr/abs-1802-08452
+- 왜 useful한가:
+  - sequence-aware recommendation의 task framing, benchmarking, methodological challenges를 정리하는 대표 survey
+  - 네 introduction에서 sequence-aware recommendation을 broader dynamic recommendation viewpoint로 놓을 때 좋다.
+- 논문에 어디 넣으면 좋은가:
+  - introduction 초반 sequence-aware framing
+  - sessionization / evaluation rationale discussion
+
+(9) A Survey on Session-Based Recommender Systems
+- 저자: Shoujin Wang et al.
+- venue: ACM Computing Surveys 2021
+- 이미 reference에 있음
+- 왜 유지가 중요한가:
+  - session regime / short-term preference / evaluation tradition을 정당화하는 핵심 survey
+- 코멘트:
+  - 지금도 잘 들어가 있으므로 굳이 바꾸지 않아도 됨
+
+(10) Graph and Sequential Neural Networks in Session-based Recommendation: A Survey
+- 저자: Zihao Li et al.
+- venue: ACM Computing Surveys 2025
+- DOI: 10.1145/3696413
+- 링크(연구기관 오픈 메타데이터): https://researchers.mq.edu.au/en/publications/graph-and-sequential-neural-networks-in-session-based-recommendat/
+- 왜 useful한가:
+  - session-based recommendation에 대한 최신 survey라, reviewer에게 "related work 최신성"을 보여주기 좋다.
+  - 특히 session-based / sequence neural / graph neural 흐름을 recent survey로 보강 가능.
+- 어디 넣으면 좋은가:
+  - related work 2.1 보강
+- 주의:
+  - 너무 survey만 많아 보이지 않게 1문장 정도만 보강하는 게 적당
+
+(11) Personalizing Session-based Recommendations with Hierarchical Recurrent Neural Networks
+- 저자: Massimo Quadrana et al.
+- venue: RecSys 2017
+- DOI: 10.1145/3109859.3109896
+- 링크(메타데이터): https://cir.nii.ac.jp/crid/1360282588959575552
+- 왜 useful한가:
+  - cross-session information과 within-session dynamics를 분리하는 계층적/session-aware 관점의 고전 레퍼런스
+  - macro vs current-session distinction을 설명할 때 잘 맞는다.
+- 어디 넣으면 좋은가:
+  - related work 2.2
+  - introduction에서 long-term vs session-level behavior distinction 보강
+
+(12) Hybrid session-aware recommendation with feature-based models
+- 저자: Josef Bauer, Dietmar Jannach
+- venue: User Modeling and User-Adapted Interaction 2024
+- DOI: 10.1007/s11257-023-09379-6
+- 링크: https://link.springer.com/article/10.1007/s11257-023-09379-6
+- 왜 useful한가:
+  - session-aware setting에서 feature-based signals를 쉽게 추가해 품질을 높일 수 있다는 점을 보여준다.
+  - 네 논문이 "feature를 representation enrichment가 아니라 routing control로 쓴다"는 대비를 만들 때 유용하다.
+- 어디 넣으면 좋은가:
+  - related work 2.2 마지막 단락 보강
+  - discussion에서 ordinary logs / feature availability argument
+
+(13) Empirical analysis of session-based recommendation algorithms
+- 저자: Malte Ludewig, Dietmar Jannach
+- venue: UMUAI 2021
+- DOI: 10.1007/s11257-020-09277-1
+- 링크: https://link.springer.com/article/10.1007/s11257-020-09277-1
+- 왜 useful한가:
+  - identical conditions / evaluation protocol / reproducibility 관점을 강하게 강조하는 empirical paper
+  - 네가 공정 비교, same optimization family, transparent protocol을 주장할 때 citation으로 좋다.
+- 어디 넣으면 좋은가:
+  - experiments setup 맨 뒤
+  - appendix evaluation protocol discussion
+
+--------------------------------------------------
+6-3. 지금 추가해도 괜찮고, 안 넣어도 되는 후보
+--------------------------------------------------
+
+(14) BASE Layers / DSelect-k / Soft MoE 셋 중 일부만 선택
+- 이 셋은 모두 routing design choice를 보강하지만, 다 넣으면 recommendation paper치고 MoE-general citation이 많아 보일 수 있다.
+- 실용적으로는 아래 조합 추천:
+  - DSelect-k: top-k non-smoothness / differentiable gate
+  - Expert Choice Routing: routing strategy와 specialization
+  - ST-MoE: stability / transfer
+
+(15) GShard / GLaM은 broad MoE motivation용으로만 사용
+- 이미 Switch, Shazeer 2017, Zoph 2022가 있으므로 꼭 필수는 아님.
+- 넣더라도 intro / related work 2.1에 1회 정도면 충분.
+
+
+==================================================
+7. 실제로 넣는다면 추천 조합
+==================================================
+
+"많이"보다 "적절히"가 더 낫다.
+실제로 추가 citation을 넣는다면 아래 정도가 가장 균형이 좋다.
+
+[추천 1순위]
+- DSelect-k (NeurIPS 2021)
+- Expert Choice Routing (NeurIPS 2022)
+- ST-MoE (2022)
+- Hybrid session-aware recommendation with feature-based models (2024)
+- Personalizing Session-based Recommendations with HRNN (RecSys 2017)
+- Empirical analysis of session-based recommendation algorithms (UMUAI 2021)
+
+[있으면 좋은 2순위]
+- Graph and Sequential Neural Networks in Session-based Recommendation: A Survey (ACM CSUR 2025)
+- BASE Layers (ICML 2021)
+- Sequence-Aware Recommender Systems (Quadrana et al., 2018) -- 이미 broad framing용으로 좋음
+
+[optional]
+- From Sparse to Soft Mixtures of Experts (ICLR 2024)
+- GShard / GLaM
+
+
+==================================================
+8. 최종 액션 아이템 요약
+==================================================
+
+A. 본문/표/appendix 수정
+1) Table 1에 subset 표시 복원
+2) Appendix A.2 빈 heading 정리
+3) Appendix D의 Table ?? 제거
+4) Table 3을 exact final config 중심으로 수정
+5) 3.4에 group-family relation clarification 1문장 추가
+6) 3.5에 macro/mid averaging clarification 1문장 추가
+7) 3.2에 category/theme proxy fallback 1문장 추가
+8) 4.2와 Appendix B.1 연결 문장 추가
+
+B. 추가 citation 반영
+1) DSelect-k
+2) Expert Choice Routing
+3) ST-MoE
+4) Hybrid session-aware recommendation with feature-based models
+5) HRNN (Quadrana et al. 2017)
+6) Empirical analysis of session-based recommendation algorithms
+
+C. optional citation
+- BASE Layers
+- Graph and Sequential Neural Networks in Session-based Recommendation survey
+- Soft MoE
+- GShard / GLaM
+
+
+==================================================
+9. 간단 결론
+==================================================
+
+이번 버전은 이미 상당히 좋아졌고,
+이제 논문이 약한 부분은 "핵심 아이디어 부족"이 아니라
+"선택한 instantiation과 실험 프로토콜을 얼마나 투명하고 정확하게 박아두느냐" 쪽이다.
+
+즉 다음 단계의 목표는
+- exact setting을 더 명확히 하고
+- appendix 완성도를 끌어올리고
+- 몇 개의 citation으로 methodology/justification를 보강하는 것
+이다.
+
+이 정도만 더 정리하면,
+비판적인 reviewer에게도 "아이디어는 좋은데 아직 미완성"이 아니라
+"설계와 실험을 꽤 신중하게 정리한 paper"로 보일 가능성이 높다.

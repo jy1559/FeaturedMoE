@@ -1,0 +1,50 @@
+# job_id=S1_LASTFM0_03_TISASREC dataset=lastfm0.03 model=tisasrec stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_lfm_small --search-algo tpe --max-evals 24 --tune-epochs 35 --tune-patience 4 --seed 610013 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_LASTFM0_03_TISASREC model=tisasrec dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=1 log_wandb=false show_progress=false ++seed=610013 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.0003509,0.00050234,0.00071914,0.0010295,0.0014738] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[0.0,1e-06,1e-05,5e-05] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[64,96,128,160] ++search_space_type_overrides.hidden_size=choice ++search.n_layers=[1,2,3] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[1,2,4] ++search_space_type_overrides.n_heads=choice ++search.hidden_dropout_prob=[0.05,0.1,0.12,0.15] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.08,0.1,0.12,0.15] ++search_space_type_overrides.attn_dropout_prob=choice ++search.time_span=[256,384,512,1024] ++search_space_type_overrides.time_span=choice ++search.inner_size=[192] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.1] ++search_space_type_overrides.dropout_ratio=choice ++search.train_batch_size=[1024] ++search_space_type_overrides.train_batch_size=choice ++search.eval_batch_size=[2048] ++search_space_type_overrides.eval_batch_size=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1629761 ts=2026-04-18T02:49:23
+[UniqueChoice] enabled: dedupe/remap duplicates across 184320 finite combos
+
+=================================================================
+  Hyperopt  |  TiSASRec x lastfm0.03
+  max_evals=24  epochs=35  patience=4  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=1024/2048/2048
+  track=final_experiment  axis=stage1_broad_search  phase=S1_LASTFM0_03_TISASREC
+  search.train_batch_size=[1024]
+  search.eval_batch_size=[2048]
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, hidden_dropout_prob, hidden_size, learning_rate, n_heads, n_layers, time_span, weight_decay
+Tuned params(len>1): 9  (~184320 discrete combos)
+Tuned groups: 9
+  [optimization]
+    hidden_dropout_prob             [0.05, 0.1, 0.12, 0.15]                   -> choice
+    learning_rate                   [0.0003509, 0.00050234, 0.00071914, 0.0010295, 0.0014738]  -> choice
+    weight_decay                    [0.0, 1e-06, 1e-05, 5e-05]                -> choice
+  [model_core]
+    attn_dropout_prob               [0.08, 0.1, 0.12, 0.15]                   -> choice
+    hidden_size                     [64, 96, 128, 160]                        -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30, 50]                          -> choice
+    n_heads                         [1, 2, 4]                                 -> choice
+    n_layers                        [1, 2, 3]                                 -> choice
+    time_span                       [256, 384, 512, 1024]                     -> choice
+Fixed params(singleton/non-list): 4
+Fixed groups: 4
+  [optimization]
+    eval_batch_size                 2048                                    
+    train_batch_size                1024                                    
+  [model_core]
+    dropout_ratio                   0.1                                     
+    inner_size                      192                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, hidden_dropout_prob=0.05, hidden_size=64, learning_rate=0.0007191, n_heads=1, n_layers=3, time_span=256, weight_decay=1e-05
+  -> MRR@20=0.298800  best=0.298800  (early_stop@19, trial=3.7min, avg=3.9min/trial, total=3.9min, ETA=1.49h)
+[TRIAL_METRICS] cur_best_mrr20=0.298800 cur_best_hr10=0.354900 cur_test_mrr20=0.293500 cur_test_hr10=0.365300 avg_epoch_time_sec=11.5441 test_eval_time_sec=0.0980 test_eval_batches_per_sec=20.3999 test_eval_targets_per_sec=35077.6528 run_best_mrr20=0.298800 run_best_hr10=0.354900 run_test_mrr20=0.293500 run_test_hr10=0.365300
+
+[2/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, hidden_dropout_prob=0.12, hidden_size=160, learning_rate=0.00103, n_heads=2, n_layers=3, time_span=384, weight_decay=1e-05

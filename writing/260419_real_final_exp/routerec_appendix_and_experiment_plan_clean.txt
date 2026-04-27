@@ -1,0 +1,631 @@
+RouteRec appendix/실험 계획 정리본
+====================================
+
+목적
+----
+이 문서는 현재 본문이 어느 정도 정리된 상태에서,
+1. appendix를 어떤 순서와 역할로 구성할지,
+2. 각 appendix 섹션에 figure/table을 어떻게 배치할지,
+3. 추가로 어떤 실험을 넣어야 본문 Q1~Q5를 가장 잘 보강할지,
+4. 실제 실험을 서버 2대(8 GPU + 8 GPU)에서 어떻게 나눠 돌리면 효율적인지,
+5. 논문에 실험 환경을 어떻게 적으면 좋을지
+
+를 한 번에 정리한 문서다.
+
+핵심 원칙은 다음과 같다.
+
+- appendix는 “남는 실험 모음”이 아니라 본문 Q1~Q5를 받치는 증거 패키지여야 한다.
+- 본문과 연결되는 섹션부터 먼저 구현하고, 시간이 남으면 후순위 섹션을 채운다.
+- 각 appendix 섹션은 가능하면 table 1개 + figure 1개(또는 figure 1개만) 수준으로 정리해 과밀도를 피한다.
+- 구조/설계, sparse routing, cost, semantics, qualitative evidence를 분리해서 읽기 쉽게 만든다.
+
+
+0. 본문과 appendix의 연결 구조
+-----------------------------
+
+본문 질문 구조:
+- Q1. RouteRec가 성능이 되는가?
+- Q2. 무엇이 routing을 control해야 하는가?
+- Q3. 왜 최종 RouteRec 설계가 이 구조여야 하는가?
+- Q4. sparse RouteRec는 practical한가?
+- Q5. router는 실제로 무엇을 배우는가?
+
+appendix는 이 질문들을 순서대로 받쳐야 한다.
+
+권장 대응:
+- A: Method exact instantiation
+- B: Datasets / protocol / full results
+- C: special bins (어디서 gain이 나는가)
+- D: framework / structural ablations
+- E: sparse routing / top-k variants
+- F: objective variants
+- G: full cost summary
+- H: final routing diagnostics
+- I: extended behavioral slices
+- J: targeted interventions + qualitative cases
+- K: optional transfer
+
+즉 appendix도 본문 논리와 비슷하게
+설정 -> 결과 확장 -> 구조 정당화 -> sparse design -> cost -> semantics
+순으로 읽히게 만드는 것이 좋다.
+
+
+1. 최종 appendix 목차안
+----------------------
+
+A. Exact RouteRec Instantiation
+B. Dataset, Evaluation, and Full Ranking Results
+C. Where RouteRec Helps Most: Special Bins
+D. Extended Framework and Structural Ablations
+E. Sparse Routing Design Variants
+F. Objective and Regularization Variants
+G. Full Cost and Efficiency Summary
+H. Extended Routing Diagnostics
+I. Extended Behavioral Slice Results
+J. Targeted Interventions and Qualitative Cases
+K. Optional Transfer Results
+
+이 구조의 장점:
+- 본문 Q1~Q5와 거의 바로 대응된다.
+- reviewer가 “이 주장은 appendix 어디서 더 보지?”를 찾기 쉽다.
+- 실험 구현 우선순위도 명확해진다.
+
+
+2. Appendix A: Exact RouteRec Instantiation
+------------------------------------------
+
+역할:
+- 본문 method를 아주 길게 반복하지 않으면서,
+  final selected paper setting이 무엇인지 빠르게 확인하게 해주는 섹션.
+
+중요:
+- A.2를 길게 쓸 필요는 없다.
+- 코드 공개 예정이므로, appendix는 “실행 규칙 최소 설명 + 테이블” 정도면 충분하다.
+
+권장 배치:
+- 짧은 opening paragraph
+- Table A1: Fixed main configuration
+- Table A2: Implementation-level settings
+- Table A3: Representative cue families
+기존 table들 잘 유지하되 layout만 좀 더 개선. 가시성 좋도록
+
+A.2 Minimal Execution Notes에 넣을 것:
+1. macro/mid는 sequence-wise broadcast, micro는 position-wise
+2. top-k mask 후 renormalization
+3. grouping field unavailable 시 focus cue fallback / zero-fill 처리
+
+즉 A는 “코드 없이도 paper setting의 final instantiated shape는 이해되게”만 만들면 충분하다.
+
+
+3. Appendix B: Dataset, Evaluation, and Full Ranking Results
+-----------------------------------------------------------
+
+역할:
+- 본문 4.1 setup과 Table 1을 숫자로 확장해서 받치는 섹션
+
+권장 배치:
+- B.1 Datasets and Protocol
+  - Table B1: processed dataset statistics
+- B.2 Model Selection and Tuning
+  - Table B2: bounded candidate grids
+- B.3 Full Ranking Results
+  - Table B3: all-cutoff seen-target results
+
+주의:
+- threshold sensitivity는 이번 라운드 우선순위에서 제외
+- 본문 setup을 뒤집는 실험보다, 현재 protocol 안에서 결과를 명확히 정리하는 데 집중
+
+
+4. Appendix C: Where RouteRec Helps Most: Special Bins
+-----------------------------------------------------
+
+역할:
+- 본문 평균 성능 뒤에 “어디서 gain이 나는가?”를 보여주는 appendix
+- protocol sensitivity 대신 special bin analysis로 대체
+
+사용 가능한 로그 기반:
+- session length bins
+- target item frequency bins
+- 가능하면 user history / user-session-count bins
+
+권장 subsection:
+- C.1 Bin definitions
+- C.2 Session-length analysis
+- C.3 Item-frequency analysis
+- C.4 Optional user-history analysis
+
+권장 배치:
+- Table C1: bin 정의 + sample count
+- Figure C1: 2-panel
+  - (a) session length bins
+  - (b) item frequency bins
+
+figure 형태:
+- x축: bins
+- y축: MRR@20 또는 NDCG@20
+- 모델 비교: RouteRec / SASRec / strongest baseline
+
+이 섹션이 좋은 이유:
+- Q1의 평균 성능을 더 해석 가능하게 만들어 준다.
+- Q5에서 왜 certain regimes에서 routing이 필요한지를 자연스럽게 뒷받침한다.
+- cold-ish item / short-session / low-history case를 appendix에서 다룰 수 있다.
+
+
+5. Appendix D: Extended Framework and Structural Ablations
+---------------------------------------------------------
+
+역할:
+- 본문 Q3를 받치는 framework-level ablation
+- “왜 final design이 이렇게 생겼는가?”를 보여주는 섹션
+
+D는 두 묶음으로 나누는 것이 좋다.
+
+D.1 Temporal / layout ablations
+-------------------------------
+질문:
+- 왜 single-view가 아니라 multi-stage인가?
+- 왜 selected paper-track layout이 그 구조인가?
+
+variant 예시:
+- single-view
+- best two-view
+- final three-stage
+- extra attention before mid
+- local-first / global-late / duplicated-mid
+- 기타 stage placement / ordering variants
+
+권장 배치:
+- Figure D1: 2-panel
+  - (a) temporal decomposition variants
+  - (b) stage placement / ordering variants
+
+설명 포인트:
+- 3.3에서 말한 “broader RouteRec framework 안에서 empirically selected paper-track layout”을 여기서 받친다.
+- 목적은 “왜 반드시 이 layout이어야 하냐”를 강변하는 것이 아니라,
+  tested variants 중 final selected layout이 가장 stable high-performing choice였음을 보여주는 것이다.
+
+D.2 Cue / group organization ablations
+-------------------------------------
+질문:
+- semantic grouping이 실제로 의미가 있는가?
+- 단순한 unstructured scalar bag보다 왜 family prior가 나은가?
+
+variant 예시:
+- semantic grouped cues
+- shuffled grouping
+- flat bag of scalars
+- random group assignment
+
+권장 배치:
+- Figure D2: compact bar plot
+  - x축: semantic / shuffled / flat / random
+  - y축: avg NDCG@20 또는 MRR@20
+
+설명 포인트:
+- Q2의 “feature를 routing에 쓴다”를 넘어서,
+  Q3에서 “semantic cue organization 자체가 final framework design에 의미가 있다”를 보강해준다.
+
+
+6. Appendix E: Sparse Routing Design Variants
+--------------------------------------------
+
+역할:
+- 본문 Q3(b)와 Q4를 동시에 받침
+- top-k sparse design이 arbitrary choice가 아니라는 걸 보여주는 핵심 appendix
+
+중요:
+- 여기서는 variant 이름을 더 친절하게 써야 한다.
+- 예: “2/2”보다 “Top-2 groups, Top-2 experts per group”처럼 써야 독자가 바로 이해한다.
+
+권장 variant set:
+1. Dense full mixture
+   - group / expert 모두 dense
+2. Flat sparse top-6
+   - hierarchy 없이 전체 expert 중 top-6
+3. Top-4 groups, Top-2 experts per group
+   - total 8 active experts
+   - group commitment 약함, compute budget 큼
+4. Top-2 groups, Top-4 experts per group
+   - group commitment 강하지만 group 안 capacity 큼
+5. Top-3 groups, Top-2 experts per group   ← main setting
+   - total 6 active experts
+6. Top-2 groups, Top-1 expert per group
+   - 매우 sparse, 과도하게 restrictive할 가능성
+7. Optional: Top-3 groups, Top-3 experts per group
+   - higher active compute budget reference
+
+권장 이유:
+- 2/2, 3/2, 4/2, 3/3 같은 표기보다
+  “group selectivity vs intra-group capacity” tradeoff가 더 직관적으로 보인다.
+- 4/2, 2/4, 3/2, 2/1은 의도가 눈에 보인다.
+  - 4/2: group commitment 약화
+  - 2/4: 적은 group + 큰 intra-group capacity
+  - 3/2: balanced main setting
+  - 2/1: 과도하게 sparse
+
+권장 배치:
+- Table E1: sparse routing variant summary
+  - Variant name
+  - Active experts
+  - MRR@20
+  - Infer-time ratio
+  - Observation
+- Figure E1: 2-panel diagnostics across sparse variants
+  - (a) route entropy by stage
+  - (b) effective expert count by stage
+- optional Figure E2:
+  - selected variants(dense / main sparse / very sparse)의 stage-wise usage heatmap
+
+여기서 꼭 넣으라고 할 diag 로그:
+- route entropy
+- effective expert count
+- top-1 expert share / route concentration
+- dead expert count / underused expert count
+- group usage balance
+- stage별 route sharpness
+- infer-time ratio
+
+설명 포인트:
+- 이 섹션은 단순 top-k sweep이 아니라
+  “quality–specialization–efficiency tradeoff”를 보여주는 섹션이다.
+- 본문 Q3에서 hierarchical sparse routing이 중요하다고 말한 걸 더 자세히 수치화하는 역할도 한다.
+- 본문 Q4 cost claim도 이 섹션과 연결된다.
+
+
+7. Appendix F: Objective and Regularization Variants
+---------------------------------------------------
+
+역할:
+- routing semantics가 consistency loss만의 artifact가 아니라는 걸 보여주는 방어 섹션
+
+variant:
+- no auxiliary loss
+- consistency only
+- z-loss only
+- balance only
+- consistency + z-loss
+- full objective
+
+권장 배치:
+- Table F1: objective variants
+
+column 권장:
+- MRR@20
+- Neighbor JSD (or pairwise route consistency)
+- stability metric
+  - 예: route entropy variance / logit scale / unstable-step count
+
+설명 포인트:
+- “semantic routing이 보이는 이유가 그냥 consistency loss 때문이냐?”라는 질문에 답하는 섹션
+- 시간이 빠듯하면 figure 없이 table만으로 충분
+
+
+8. Appendix G: Full Cost and Efficiency Summary
+----------------------------------------------
+
+역할:
+- 본문 Table 2의 full version
+- practicality claim의 full numerical support
+
+권장 배치:
+- Table G1: all-model cost summary
+
+모델:
+- GRU4Rec
+- SASRec
+- TiSASRec
+- DuoRec
+- FEARec
+- BSARec
+- FAME
+- DIF-SR
+- FDSA
+- RouteRec
+
+column 권장:
+- Params
+- Active params
+- Train-time ratio
+- Infer-time ratio
+- optional memory
+
+설명 포인트:
+- 본문 Q4의 compact table은 대표 모델 몇 개만 보여주고,
+  G는 전체 baseline family에 대한 full cost comparison으로 간다.
+- RouteRec와 FAME의 active params 비교도 여기서 자연스럽게 다룰 수 있다.
+
+
+9. Appendix H: Extended Routing Diagnostics
+------------------------------------------
+
+역할:
+- final selected RouteRec에 대한 aggregate diagnostic package
+- top-k variant별 진단은 E에서 다루고, H는 final model 자체 진단용으로 두는 것이 좋다.
+
+권장 배치:
+- Figure H1: 2x2 panel
+  - (a) expert/group usage by stage
+  - (b) entropy and effective expert count
+  - (c) stage-wise route consistency
+  - (d) feature-bucket route patterns
+
+설명 포인트:
+- E는 “top-k를 바꾸면 진단이 어떻게 달라지나”
+- H는 “final model은 실제로 어떤 routing structure를 보이나”
+이렇게 역할 분리
+
+
+10. Appendix I: Extended Behavioral Slice Results
+------------------------------------------------
+
+역할:
+- 본문 Q5의 aggregate support
+- regime별 성능과 routing concentration을 더 자세히 보여주는 섹션
+
+권장 배치:
+- Table I1: slice definitions
+- Figure I1: 2-panel
+  - (a) slice-wise ranking quality
+  - (b) relative gain and routing concentration
+
+slice 예시:
+- repeat-heavy
+- fast exploratory
+- narrow-focus
+- preference-stable
+
+설명 포인트:
+- 본문 Figure 5가 representative case 중심이라면,
+  I는 aggregate하게 “정말 regime별 차이가 있는가?”를 보여주는 곳이다.
+
+
+11. Appendix J: Targeted Interventions and Qualitative Cases
+-----------------------------------------------------------
+
+역할:
+- 본문 Figure 5의 semantic reading을 강하게 뒷받침
+- “case가 예뻐 보이는 것”을 넘어서, perturbation에도 반응함을 보여주는 섹션
+
+J.1 Targeted cue interventions
+------------------------------
+case별 intervention:
+- repeat-heavy case -> Memory cue perturbation
+- fast exploratory case -> Tempo cue perturbation
+- narrow-focus case -> Focus cue perturbation
+
+권장 배치:
+- Figure J1: intervention summary
+  - x축: case 3개
+  - 값:
+    - route shift magnitude
+    - confidence / target-score drop
+  - grouped bar 또는 paired bar
+
+J.2 Qualitative routing cases
+-----------------------------
+권장 배치:
+- Table J1: qualitative cases
+
+column:
+- Case
+- Prefix summary
+- Selected groups / experts
+- Prediction outcome
+- Interpretation
+
+설명 포인트:
+- J는 본문 Figure 5가 “우연히 예쁜 그림”이 아니라는 걸 보여주는 섹션
+- Figure J1은 intervention evidence
+- Table J1은 읽기 쉬운 qualitative explanation
+
+
+12. Appendix K: Optional Transfer Results
+----------------------------------------
+
+역할:
+- 시간이 남으면만
+- 본문 핵심 claim과 직접 연결되지는 않음
+
+권장 배치:
+- Table K1: source-target matrix
+- optional Figure K1: summarized transfer gain
+
+우선순위:
+- 가장 낮음
+- 시간 부족하면 생략 가능
+
+
+13. 실험 구현 우선순위
+---------------------
+
+최우선 (반드시 하는 쪽)
+----------------------
+1. D: framework / structural ablations
+2. E: sparse routing variants + top-k diagnostics
+3. G: full cost summary
+4. J: targeted interventions + qualitative cases
+5. C: special bins
+
+그다음 (있으면 좋음)
+-------------------
+6. H: final routing diagnostics
+7. I: extended slice results
+8. F: objective variants
+
+마지막
+------
+9. K: transfer
+
+이 순서가 좋은 이유:
+- 본문 Q3/Q4/Q5를 직접 받치는 증거부터 먼저 완성된다.
+- reviewer가 가장 많이 물을 질문(설계 정당화, sparse design, cost, semantics)에 바로 대응할 수 있다.
+- special bins도 기존 로그가 있다면 비교적 효율적으로 추가할 수 있다.
+
+
+14. 서버 2대(8 GPU + 8 GPU)로 실험 나누는 권장 방식
+---------------------------------------------------
+
+목표:
+- 서버 2대에서 appendix 실험을 반반 나눠 효율적으로 돌리기
+- 각 process는 GPU 1개만 사용
+- 논문에는 “RTX 3090에서 실험”이라고만 쓰고,
+  여러 GPU는 여러 실험 병렬 실행용이었다고 이해하면 됨
+
+중요:
+- 한 실험 안에서 data parallel / model parallel을 한 것은 아님
+- “x8 GPU 학습”이 아니라,
+  여러 독립 run을 GPU별로 분산 실행한 것 (기존 코드들 보면 이해 가능)
+
+권장 분할 방식:
+----------------
+서버 A (GPU 0-7): 구조/설계/메인 supporting ablations
+- D: framework / structural ablations
+- E: sparse routing variants
+- J 일부: targeted interventions
+- G 일부: RouteRec/FAME/SASRec cost benchmark
+
+서버 B (GPU 0-7): analysis-heavy / supplementary / aggregate supports
+- C: special bins
+- H: routing diagnostics
+- I: extended slice results
+- F: objective variants
+- G full baseline cost benchmark
+- J qualitative export / case extraction
+
+왜 이렇게 나누나:
+- 서버 A는 “추가 train이 필요한 실험” 위주
+- 서버 B는 “기존 checkpoint를 많이 읽고 aggregate/export/benchmark하는 작업” 위주
+
+더 구체적 권장:
+---------------
+1. 구조 sweep / sparse routing variant는 서버 A
+   - train-heavy
+   - run 수가 많고 각 run이 오래 걸림
+
+2. diagnostics / bins / slice / intervention export는 서버 B
+   - 학습보다는 evaluation/export 성격이 강함
+   - checkpoint 재사용이 많음
+
+3. cost benchmark는 혼합 가능
+   - training 필요 없고 checkpoint benchmark라 가볍지만,
+     baseline 수가 많아 모으면 시간 걸릴 수 있으므로 B 쪽이 더 적합
+
+코드 설계 지시:
+--------------
+- appendix 질문별로 launcher를 분리하되,
+  “candidate rows -> manifest -> run_jobs” 형태를 유지
+- 각 launcher는 서버마다 subset만 실행 가능하게 filter 인자 제공
+  - 예: --only-panels D,E,J
+  - 예: --only-variants topk,layout
+  - 예: --datasets Beauty,KuaiRec,...
+- run id / variant label / appendix section tag를 CSV에 같이 저장
+- plotting notebook는 section별 summary CSV를 바로 읽게 구성
+
+예시 분할 태그:
+- section_tag = D_structural
+- section_tag = E_sparse
+- section_tag = F_objective
+- section_tag = C_special_bins
+- section_tag = H_diag
+- section_tag = I_slices
+- section_tag = J_intervention
+- section_tag = G_cost
+
+이렇게 해두면 서버 A/B가 각각 다른 section_tag만 돌리고,
+나중에 notebook가 자동으로 section별 summary를 읽게 만들 수 있다.
+
+실행 운영 팁:
+------------
+- 서버 A:
+  - GPU 0-7에 D/E train job을 분산
+  - 오래 걸리는 run부터 먼저 배치
+- 서버 B:
+  - 남는 GPU에 F objective variants 일부 같이 배치
+  - 나머지는 export/benchmark scripts 병렬 실행
+- 먼저 A에서 main-setting checkpoint를 충분히 확보한 뒤
+  B가 그 checkpoint들로 diagnostics/interventions를 생성하게 하면 병목이 줄어든다.
+
+
+15. 논문에 넣을 실험 환경 문구
+-----------------------------
+
+논문에는 아래 톤으로 적는 것이 적절하다.
+
+권장 의미:
+- Experiments were conducted on machines equipped with NVIDIA RTX 3090 GPUs.
+- Each training or evaluation process used a single GPU.
+- Multiple GPUs were used only to run independent experiments in parallel, not for multi-GPU training within a single run.
+
+즉:
+- “RTX 3090에서 실험했다”
+- “각 run은 single-GPU”
+이 두 줄이면 충분하다.
+
+본문 어디에 넣나:
+- B.2 tuning/evaluation protocol 말미
+- 또는 appendix cost/environment 쪽 짧은 paragraph
+
+
+16. 최종 배치 요약
+-----------------
+
+A
+- Table A1 main config
+- Table A2 implementation settings
+- Table A3 cue families
+
+B
+- Table B1 datasets
+- Table B2 tuning grid
+- Table B3 full results
+
+C
+- Table C1 bin definitions
+- Figure C1 session/item bins
+
+D
+- Figure D1 temporal/layout ablations
+- Figure D2 cue/group organization ablations
+
+E
+- Table E1 sparse routing variants
+- Figure E1 top-k diagnostics
+- optional Figure E2 usage heatmaps
+
+F
+- Table F1 objective variants
+
+G
+- Table G1 full cost summary
+
+H
+- Figure H1 routing diagnostics
+
+I
+- Table I1 slice definitions
+- Figure I1 extended slice analysis
+
+J
+- Figure J1 targeted interventions
+- Table J1 qualitative cases
+
+K
+- optional transfer table/figure
+
+
+17. 최종 한 줄 정리
+-------------------
+
+appendix는 본문 뒤에 달린 보조 자료가 아니라,
+Q1~Q5의 주장에 대해
+- 어디서 이득이 나는지(C),
+- 왜 이 framework인지(D),
+- 왜 이 sparse setting인지(E),
+- cost가 어떤지(G),
+- router가 실제로 무엇을 배우는지(H/I/J)
+를 단계적으로 받쳐주는 구조로 짜는 것이 가장 좋다.
+
+이번 라운드에서는
+D / E / G / J / C를 최우선으로 구현하고,
+그 다음 H / I / F,
+마지막으로 K를 고려하는 순서가 가장 효율적이다.

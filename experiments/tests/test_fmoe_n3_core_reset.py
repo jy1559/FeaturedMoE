@@ -229,6 +229,108 @@ def test_route_consistency_min_sim_filters_low_similarity_pairs():
     assert float(low_loss.item()) == pytest.approx(0.0, abs=1e-8)
 
 
+def test_route_separation_loss_only_penalizes_dissimilar_low_js_pairs():
+    model = FeaturedMoE_N3.__new__(FeaturedMoE_N3)
+    model.route_separation_pairs = 1
+    model.route_separation_max_sim = 0.2
+    model.route_separation_margin = 0.05
+    model.item_embedding = torch.nn.Embedding(8, 4)
+
+    gate = torch.tensor(
+        [
+            [[0.9, 0.1], [0.9, 0.1]],
+            [[0.9, 0.1], [0.9, 0.1]],
+        ],
+        dtype=torch.float32,
+    )
+    item_seq_len = torch.tensor([2, 2], dtype=torch.long)
+
+    feat_far = torch.tensor(
+        [
+            [[1.0, 0.0], [1.0, 0.0]],
+            [[0.0, 1.0], [0.0, 1.0]],
+        ],
+        dtype=torch.float32,
+    )
+    feat_near = torch.tensor(
+        [
+            [[1.0, 0.0], [1.0, 0.0]],
+            [[1.0, 0.001], [1.0, 0.001]],
+        ],
+        dtype=torch.float32,
+    )
+
+    far_loss = model._compute_route_separation_loss({"mid": gate}, item_seq_len, feat_far)
+    near_loss = model._compute_route_separation_loss({"mid": gate}, item_seq_len, feat_near)
+
+    assert float(far_loss.item()) == pytest.approx(0.05, abs=1e-8)
+    assert float(near_loss.item()) == pytest.approx(0.0, abs=1e-8)
+
+
+def test_calculate_loss_adds_route_separation_aux_term():
+    model = FeaturedMoE_N3.__new__(FeaturedMoE_N3)
+    model.ITEM_SEQ = "item_id_list"
+    model.ITEM_SEQ_LEN = "item_length"
+    model.POS_ITEM_ID = "item_id"
+    model.ITEM_ID = "item_id"
+    model.item_embedding = torch.nn.Embedding(4, 2)
+    with torch.no_grad():
+        model.item_embedding.weight.copy_(torch.tensor([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]))
+
+    model.use_aux_loss = False
+    model.balance_loss_lambda = 0.0
+    model.stage_merge_aux_enable = False
+    model.stage_merge_aux_lambda_scale = 1.0
+    model.ffn_moe = False
+    model.n_ffn_experts = 0
+    model.z_loss_lambda = 0.0
+    model.gate_entropy_lambda = 0.0
+    model.gate_entropy_until = 0.0
+    model.rule_agreement_lambda = 0.0
+    model.group_coverage_lambda = 0.0
+    model.group_prior_align_lambda = 0.0
+    model.factored_group_balance_lambda = 0.0
+    model.route_smoothness_lambda = 0.0
+    model.route_consistency_lambda = 0.0
+    model.route_separation_lambda = 2.0
+    model.route_sharpness_lambda = 0.0
+    model.route_monopoly_lambda = 0.0
+    model.route_prior_lambda = 0.0
+    model.fmoe_debug_logging = False
+    model.training = False
+
+    model._resolve_forward_lengths = lambda interaction: (
+        interaction[model.ITEM_SEQ],
+        interaction[model.ITEM_SEQ_LEN],
+        interaction[model.ITEM_SEQ_LEN],
+    )
+    model._gather_features = lambda interaction: interaction["feat"]
+    model._aux_until_active = lambda _: 0.0
+    model._compute_route_separation_loss = lambda gate_weights, item_seq_len, feat: torch.tensor(0.3)
+    model.forward = lambda item_seq, item_seq_len, feat, routing_item_seq_len=None: (
+        torch.tensor([[0.2, 0.8], [0.6, 0.4]], dtype=torch.float32),
+        {
+            "gate_weights": {"mid": torch.ones(2, 2, 2, dtype=torch.float32) / 2.0},
+            "gate_logits": {},
+            "router_aux": {},
+            "ffn_moe_weights": {},
+        },
+    )
+
+    interaction = {
+        model.ITEM_SEQ: torch.tensor([[1, 2], [2, 3]], dtype=torch.long),
+        model.ITEM_SEQ_LEN: torch.tensor([2, 2], dtype=torch.long),
+        model.POS_ITEM_ID: torch.tensor([1, 3], dtype=torch.long),
+        "feat": torch.randn(2, 2, 3),
+    }
+
+    loss_with_aux = model.calculate_loss(interaction)
+    model.route_separation_lambda = 0.0
+    loss_without_aux = model.calculate_loss(interaction)
+
+    assert float(loss_with_aux.item() - loss_without_aux.item()) == pytest.approx(0.6, abs=1e-7)
+
+
 def test_executor_handles_empty_stage_features_after_structural_drop():
     drop_all_keywords = [
         "mac",

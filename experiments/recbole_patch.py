@@ -338,7 +338,7 @@ def _patched_create_dataset(config):
         except Exception:
             cache_file = None
 
-        recoverable = isinstance(exc, (TypeError, EOFError, pickle.UnpicklingError, AttributeError, ValueError))
+        recoverable = isinstance(exc, (MemoryError, TypeError, EOFError, pickle.UnpicklingError, AttributeError, ValueError))
         if not recoverable:
             raise
 

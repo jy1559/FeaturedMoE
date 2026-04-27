@@ -312,6 +312,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
         self.route_consistency_lambda = float(resolver.get("route_consistency_lambda", 0.0))
         self.route_consistency_pairs = max(int(resolver.get("route_consistency_pairs", 4)), 1)
         self.route_consistency_min_sim = float(resolver.get("route_consistency_min_sim", -1.0))
+        self.route_separation_lambda = float(resolver.get("route_separation_lambda", 0.0))
+        self.route_separation_pairs = max(int(resolver.get("route_separation_pairs", 4)), 1)
+        self.route_separation_max_sim = float(resolver.get("route_separation_max_sim", 0.2))
+        self.route_separation_margin = float(resolver.get("route_separation_margin", 0.05))
         self.route_sharpness_lambda = float(resolver.get("route_sharpness_lambda", 0.0))
         self.route_monopoly_lambda = float(resolver.get("route_monopoly_lambda", 0.0))
         self.route_monopoly_tau = float(resolver.get("route_monopoly_tau", 0.0))
@@ -526,6 +530,10 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             "route_consistency_lambda": self.route_consistency_lambda,
             "route_consistency_pairs": self.route_consistency_pairs,
             "route_consistency_min_sim": self.route_consistency_min_sim,
+            "route_separation_lambda": self.route_separation_lambda,
+            "route_separation_pairs": self.route_separation_pairs,
+            "route_separation_max_sim": self.route_separation_max_sim,
+            "route_separation_margin": self.route_separation_margin,
             "route_sharpness_lambda": self.route_sharpness_lambda,
             "route_monopoly_lambda": self.route_monopoly_lambda,
             "route_monopoly_tau": self.route_monopoly_tau,
@@ -1087,6 +1095,52 @@ class FeaturedMoE_N3(FeaturedMoE_N):
                 losses.append(js.mean())
         return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
 
+    def _compute_route_separation_loss(
+        self,
+        gate_weights: Dict[str, torch.Tensor],
+        item_seq_len: torch.Tensor,
+        feat: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        if feat is None or not torch.is_tensor(feat) or feat.ndim != 3:
+            return self.item_embedding.weight.new_tensor(0.0)
+        batch_size = int(feat.size(0))
+        if batch_size <= 1:
+            return self.item_embedding.weight.new_tensor(0.0)
+
+        feat_repr = feat.mean(dim=1)
+        feat_norm = F.normalize(feat_repr, p=2, dim=-1)
+        sim = feat_norm @ feat_norm.transpose(0, 1)
+        sim.fill_diagonal_(1e9)
+        k = min(int(self.route_separation_pairs), batch_size - 1)
+        if k <= 0:
+            return self.item_embedding.weight.new_tensor(0.0)
+
+        far_pack = (-sim).topk(k=k, dim=1)
+        far_idx = far_pack.indices
+        far_sim = sim.gather(1, far_idx)
+        max_sim = float(self.route_separation_max_sim)
+        margin = max(float(self.route_separation_margin), 0.0)
+
+        losses = []
+        for weights in (gate_weights or {}).values():
+            if not torch.is_tensor(weights) or weights.ndim != 3:
+                continue
+            session_prob = self._session_gate_prob(weights, item_seq_len).clamp(min=1e-8)
+            pi = session_prob.unsqueeze(1).expand(-1, k, -1)
+            pj = session_prob.index_select(0, far_idx.reshape(-1)).reshape(batch_size, k, -1).clamp(min=1e-8)
+            m = 0.5 * (pi + pj)
+            js = 0.5 * ((pi * (pi.log() - m.log())).sum(dim=-1) + (pj * (pj.log() - m.log())).sum(dim=-1))
+
+            pair_loss = torch.relu(margin - js)
+            if max_sim < 1.0:
+                pair_mask = far_sim <= max_sim
+                if bool(pair_mask.any()):
+                    losses.append(pair_loss[pair_mask].mean())
+            else:
+                losses.append(pair_loss.mean())
+
+        return torch.stack(losses).mean() if losses else self.item_embedding.weight.new_tensor(0.0)
+
     def _compute_route_sharpness_loss(
         self,
         gate_weights: Dict[str, torch.Tensor],
@@ -1291,6 +1345,12 @@ class FeaturedMoE_N3(FeaturedMoE_N):
             )
         if self.route_consistency_lambda > 0:
             aux_loss = aux_loss + self.route_consistency_lambda * self._compute_route_consistency_loss(
+                aux_data.get("gate_weights", {}),
+                item_seq_len,
+                feat,
+            )
+        if self.route_separation_lambda > 0:
+            aux_loss = aux_loss + self.route_separation_lambda * self._compute_route_separation_loss(
                 aux_data.get("gate_weights", {}),
                 item_seq_len,
                 feat,

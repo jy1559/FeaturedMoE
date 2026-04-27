@@ -1,0 +1,77 @@
+[FMOE_FULL_HISTORY_PORTFOLIO_SETTING_HEADER]
+run_phase=FH1_FH_FOURSQUARE_F05_FH_H11_CTX_LOWLR_S1 exp_brief=A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5 phase_id=FH1 axis_id=FH8 setting_id=F05_fh_h11_ctx_lowlr hparam_id= seed=1
+desc=H11 full-history retune with longer crop and lower lr ceiling
+dataset=foursquare gpu=0 order=21
+max_evals= tune_epochs= tune_patience=
+seed=260520
+
+[COMMAND]
+- /venv/FMoE/bin/python hyperopt_tune.py --config-name config --search-algo tpe --max-evals 5 --tune-epochs 100 --tune-patience 10 --seed 260520 --run-group fmoe_full --run-axis FullHistory_Portfolio8 --run-phase FH1_FH_FOURSQUARE_F05_FH_H11_CTX_LOWLR_S1 model=featured_moe_n3_tune dataset=foursquare eval_mode=session_fixed feature_mode=full_v4 ++history_input_mode=full_history_session_targets ++history_eval_policy=strict_train_prefix ++history_group_field=user_id ++target_group_field=session_id ++load_col.inter=["session_id","item_id","timestamp","user_id"] ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true ++main_eval_target_mode="seen_target" gpu_id=0 log_wandb=false enable_tf32=true fmoe_debug_logging=false fmoe_diag_logging=true fmoe_special_logging=true fmoe_feature_ablation_logging=false fmoe_eval_logging_timing=final_only ++fmoe_logging_output_root="run/artifacts/logging" ++fmoe_logging_layout="axis_dataset_arch_hparam" ++fmoe_architecture_id="A12" ++fmoe_architecture_key="A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5" ++fmoe_hparam_id="H11" ++fmoe_phase="FH1" train_batch_size=1920 eval_batch_size=3072 ++phase_run_type="full_history" ++phase_axis_id="FH8" ++phase_axis_desc="full_history_portfolio8" ++phase_setting_id="F05_fh_h11_ctx_lowlr" ++phase_setting_key="F05_fh_h11_ctx_lowlr" ++phase_hparam_id="H11" ++phase_seed_id=1 ++phase_run_id="FH_FOURSQUARE_F05_FH_H11_CTX_LOWLR_S1" ++layer_layout=["attn","macro_ffn","mid_ffn","attn","micro_ffn"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_source={macro:"both",mid:"both",micro:"both"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++topk_scope_mode="global_flat" ++moe_top_k=0 ++balance_loss_lambda=0.0 ++z_loss_lambda=0.0002 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_consistency_lambda=0.0008 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_monopoly_tau=0.25 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++primitive_balance_lambda=0.0 ++wrapper_group_feature_align_lambda=0.0 ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++stage_router_wrapper={macro:"w5_exd",mid:"w5_exd",micro:"w5_exd"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++macro_history_window=5 ++route_consistency_pairs=1 ++route_consistency_min_sim=0.995 ++bias_mode="none" ++stage_family_dropout_prob={macro:0.03,mid:0.03,micro:0.03} ++stage_feature_dropout_prob={macro:0.0,mid:0.0,micro:0.0} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++embedding_size=224 ++d_ff=448 ++d_expert_hidden=224 ++d_router_hidden=112 ++MAX_ITEM_LIST_LENGTH=30 ++d_feat_emb=16 ++expert_scale=2 ++num_heads=4 ++lr_scheduler_type="warmup_cosine" ++attn_dropout_prob=0.08 ++search.learning_rate=[0.0002,0.0007] ++search_space_type_overrides.learning_rate=loguniform ++search.weight_decay=[3e-07,6e-07,1.2e-06] ++search_space_type_overrides.weight_decay=choice ++search.hidden_dropout_prob=[0.09,0.12,0.15] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.MAX_ITEM_LIST_LENGTH=[25,30,35] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1354511 ts=2026-04-16T12:40:02
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x foursquare
+  max_evals=5  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=1920/3072/3072
+  track=fmoe_full  axis=fullhistory_portfolio8  phase=FH1_FH_FOURSQUARE_F05_FH_H11_CTX_LOWLR_S1
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, hidden_dropout_prob, learning_rate, weight_decay
+Tuned params(len>1): 4  (~27 discrete combos)
+Tuned groups: 4
+  [optimization]
+    hidden_dropout_prob             [0.09, 0.12, 0.15]                        -> choice
+    learning_rate                   [0.0002, 0.0007]                          -> loguniform
+    weight_decay                    [3e-07, 6e-07, 1.2e-06]                   -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [25, 30, 35]                              -> choice
+Fixed params(singleton/non-list): 0
+Fixed groups: 0
+  (none)
+
+[Wandb] disabled for this hyperopt run
+
+[1/5] MAX_ITEM_LIST_LENGTH=30, hidden_dropout_prob=0.12, learning_rate=0.0002643, weight_decay=6e-07
+  -> MRR@20=0.246100  best=0.246100  (early_stop@31, trial=3.6min, avg=3.8min/trial, total=3.8min, ETA=15.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.246100 cur_best_hr10=0.454900 cur_test_mrr20=0.216800 cur_test_hr10=0.408500 avg_epoch_time_sec=6.9832 test_eval_time_sec=0.2316 test_eval_batches_per_sec=8.6371 test_eval_targets_per_sec=15378.4309 run_best_mrr20=0.246100 run_best_hr10=0.454900 run_test_mrr20=0.216800 run_test_hr10=0.408500
+
+[2/5] MAX_ITEM_LIST_LENGTH=30, hidden_dropout_prob=0.15, learning_rate=0.0005468, weight_decay=3e-07
+  -> MRR@20=0.246400  best=0.246400  (early_stop@18, trial=2.1min, avg=2.9min/trial, total=5.9min, ETA=8.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.246400 cur_best_hr10=0.450800 cur_test_mrr20=0.219400 cur_test_hr10=0.408900 avg_epoch_time_sec=6.8135 test_eval_time_sec=0.2318 test_eval_batches_per_sec=8.6277 test_eval_targets_per_sec=15361.6651 run_best_mrr20=0.246400 run_best_hr10=0.450800 run_test_mrr20=0.219400 run_test_hr10=0.408900
+
+[3/5] MAX_ITEM_LIST_LENGTH=25, hidden_dropout_prob=0.12, learning_rate=0.0003451, weight_decay=1.2e-06
+  -> MRR@20=0.243900  best=0.246400  (early_stop@21, trial=2.4min, avg=2.7min/trial, total=8.2min, ETA=5.5min)
+[TRIAL_METRICS] cur_best_mrr20=0.243900 cur_best_hr10=0.439600 cur_test_mrr20=0.215600 cur_test_hr10=0.398500 avg_epoch_time_sec=6.7236 test_eval_time_sec=0.2216 test_eval_batches_per_sec=9.0258 test_eval_targets_per_sec=16070.4242 run_best_mrr20=0.246400 run_best_hr10=0.450800 run_test_mrr20=0.219400 run_test_hr10=0.408900
+
+[4/5] MAX_ITEM_LIST_LENGTH=25, hidden_dropout_prob=0.12, learning_rate=0.0004499, weight_decay=1.2e-06
+  -> MRR@20=0.245000  best=0.246400  (early_stop@18, trial=2.0min, avg=2.6min/trial, total=10.3min, ETA=2.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.245000 cur_best_hr10=0.435800 cur_test_mrr20=0.218300 cur_test_hr10=0.393700 avg_epoch_time_sec=6.6692 test_eval_time_sec=0.2223 test_eval_batches_per_sec=8.9972 test_eval_targets_per_sec=16019.5768 run_best_mrr20=0.246400 run_best_hr10=0.450800 run_test_mrr20=0.219400 run_test_hr10=0.408900
+
+[5/5] MAX_ITEM_LIST_LENGTH=35, hidden_dropout_prob=0.09, learning_rate=0.00025, weight_decay=1.2e-06
+  -> MRR@20=0.245000  best=0.246400  (early_stop@31, trial=3.9min, avg=2.9min/trial, total=14.3min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.245000 cur_best_hr10=0.447800 cur_test_mrr20=0.217600 cur_test_hr10=0.411700 avg_epoch_time_sec=7.4715 test_eval_time_sec=0.2407 test_eval_batches_per_sec=8.3082 test_eval_targets_per_sec=14792.6644 run_best_mrr20=0.246400 run_best_hr10=0.450800 run_test_mrr20=0.219400 run_test_hr10=0.408900
+[1;35mEvaluate   [0m:   0%|                                                            | 0/2 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/2 [00:01<?, ?it/s, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████▌             | 1/2 [00:01<00:01,  1.18s/it, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████▌             | 1/2 [00:01<00:01,  1.18s/it, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 2/2 [00:01<00:00,  1.63it/s, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/2 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/2 [00:01<?, ?it/s, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████▌             | 1/2 [00:01<00:01,  1.16s/it, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████▌             | 1/2 [00:01<00:01,  1.16s/it, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 2/2 [00:01<00:00,  1.70it/s, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m                                                                                                    [1;35mEvaluate   [0m:   0%|                                                            | 0/2 [00:00<?, ?it/s][0m[1;35mEvaluate   [0m:   0%|                                   | 0/2 [00:01<?, ?it/s, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████▌             | 1/2 [00:01<00:01,  1.18s/it, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m:  50%|█████████████▌             | 1/2 [00:01<00:01,  1.18s/it, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m[1;35mEvaluate   [0m: 100%|███████████████████████████| 2/2 [00:01<00:00,  1.63it/s, [1;33mGPU RAM: 9.81 G/23.52 G[0m][0m                                                                                                    
+=================================================================
+  DONE  |  FeaturedMoE_N3 x foursquare
+  Best MRR@20 = 0.246400  |  5/5 trials OK
+  Best HR@10  = 0.450800
+  Test MRR@20 = 0.219400  (best-valid checkpoint)
+  Test HR@10  = 0.408900  (best-valid checkpoint)
+  Avg epoch time = 6.814 sec/epoch
+  Final test eval = 0.232 sec | batches/s=8.628 | targets/s=15361.665
+[RUN_METRICS] best_valid_mrr20=0.246400 best_valid_hr10=0.450800 test_mrr20=0.219400 test_hr10=0.408900 avg_epoch_time_sec=6.8135 test_eval_time_sec=0.2318 test_eval_batches_per_sec=8.6277 test_eval_targets_per_sec=15361.6651
+  Total time: 14.4 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 30
+    hidden_dropout_prob: 0.15
+    learning_rate: 0.000546766
+    weight_decay: 3e-07
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_full/foursquare_FeaturedMoE_N3_fh1_fh_foursquare_f05_fh_h11_ctx_lowlr_s1_20260416_124002_856120_pid1354511.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_full/normal/fullhistory_portfolio8/FH1/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_fh1_fh_foursquare_f05_fh_h11_ctx_lowlr_s1_20260416_124002_856120_pid1354511.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/fmoe_full/special/fullhistory_portfolio8/FH1/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_fh1_fh_foursquare_f05_fh_h11_ctx_lowlr_s1_20260416_124002_856120_pid1354511_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/fmoe_full/special/fullhistory_portfolio8/FH1/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_fh1_fh_foursquare_f05_fh_h11_ctx_lowlr_s1_20260416_124002_856120_pid1354511_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1354511 start=2026-04-16T12:40:02 end=2026-04-16T12:54:25

@@ -28,6 +28,11 @@ from slack_progress import SlackProgressNotifier
 
 _TRIAL_METRIC_KV_PATTERN = re.compile(r"([A-Za-z0-9_@./-]+)=([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?[0-9]+)?)")
 _RUN_METRIC_KV_PATTERN = re.compile(r"([A-Za-z0-9_@./-]+)=([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?[0-9]+)?)")
+_ZERO_OK_TRIALS_PATTERN = re.compile(r"\b0\s*/\s*(\d+)\s+trials\s+OK\b", re.IGNORECASE)
+_LATEST_RESULT_ROW_CACHE: dict[str, Any] = {
+    "stamp": None,
+    "rows": {},
+}
 
 
 def sanitize_token(text: str, *, upper: bool = True) -> str:
@@ -218,6 +223,83 @@ def _scan_log_run_metrics(log_path: Path) -> Optional[Dict[str, float]]:
     return latest
 
 
+def _load_json_payload(path: Path) -> Optional[Dict[str, Any]]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _count_ok_trials(payload: Dict[str, Any]) -> int:
+    count = 0
+    for trial in list(payload.get("trials") or []):
+        if str((trial or {}).get("status", "")).strip().lower() == "ok":
+            count += 1
+    return count
+
+
+def _log_has_terminal_failure(log_path: Path) -> bool:
+    if not log_path.exists():
+        return False
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return False
+    if _ZERO_OK_TRIALS_PATTERN.search(text):
+        return True
+    return False
+
+
+def _results_tree_stamp(results_root: Path) -> tuple[int, int]:
+    if not results_root.exists():
+        return (0, 0)
+    child_mtimes: list[int] = []
+    try:
+        for path in results_root.iterdir():
+            if not path.is_dir():
+                continue
+            try:
+                child_mtimes.append(int(path.stat().st_mtime_ns))
+            except Exception:
+                child_mtimes.append(0)
+    except Exception:
+        return (0, 0)
+    return (len(child_mtimes), max(child_mtimes, default=0))
+
+
+def _build_latest_result_row_cache(results_root: Path) -> Dict[tuple[str, str, str], Dict[str, Any]]:
+    rows: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+    for result_root in sorted(path for path in results_root.iterdir() if path.is_dir()):
+        for path in result_root.glob("*.json"):
+            payload = _load_json_payload(path)
+            if not isinstance(payload, dict):
+                continue
+            axis = str(payload.get("run_axis", ""))
+            dataset = str(payload.get("dataset", ""))
+            run_phase = str(payload.get("run_phase", "")).strip()
+            if not axis or not dataset or not run_phase:
+                continue
+            try:
+                mtime = float(path.stat().st_mtime)
+            except Exception:
+                mtime = 0.0
+            key = (axis, dataset, run_phase)
+            prev = rows.get(key)
+            if isinstance(prev, dict) and float(prev.get("mtime", -1.0)) > mtime:
+                continue
+            rows[key] = {
+                "run_phase": run_phase,
+                "best_mrr": _extract_valid_mrr_from_payload(payload),
+                "test_mrr": _extract_test_mrr_from_payload(payload),
+                "n_completed": int(payload.get("n_completed", 0) or 0),
+                "interrupted": bool(payload.get("interrupted", False)),
+                "ok_trials": _count_ok_trials(payload),
+                "path": str(path),
+                "mtime": mtime,
+            }
+    return rows
+
+
 def _scan_trial_metric_updates(log_path: Path, start_offset: int) -> tuple[int, list[Dict[str, float]]]:
     updates: list[Dict[str, float]] = []
     new_offset = int(start_offset)
@@ -354,39 +436,20 @@ def _extract_test_mrr_from_payload(payload: Dict[str, Any]) -> Optional[float]:
 
 
 def _find_latest_result_row_for_run_phase(dataset: str, axis: str, run_phase: str) -> Optional[Dict[str, Any]]:
-    result_root = ARTIFACT_ROOT / "results" / "fmoe_n3"
-    if not result_root.exists():
+    results_root = ARTIFACT_ROOT / "results"
+    if not results_root.exists():
         return None
-    latest: Optional[Dict[str, Any]] = None
-    latest_mtime = -1.0
-    for path in result_root.glob("*.json"):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if str(payload.get("run_axis", "")) != str(axis):
-            continue
-        if str(payload.get("dataset", "")) != str(dataset):
-            continue
-        if str(payload.get("run_phase", "")).strip() != str(run_phase):
-            continue
-        try:
-            mtime = float(path.stat().st_mtime)
-        except Exception:
-            mtime = 0.0
-        if mtime < latest_mtime:
-            continue
-        latest_mtime = mtime
-        latest = {
-            "run_phase": str(run_phase),
-            "best_mrr": _extract_valid_mrr_from_payload(payload),
-            "test_mrr": _extract_test_mrr_from_payload(payload),
-            "n_completed": int(payload.get("n_completed", 0) or 0),
-            "interrupted": bool(payload.get("interrupted", False)),
-            "path": str(path),
-            "mtime": mtime,
-        }
-    return latest
+    stamp = _results_tree_stamp(results_root)
+    cached_stamp = _LATEST_RESULT_ROW_CACHE.get("stamp")
+    cached_rows = _LATEST_RESULT_ROW_CACHE.get("rows")
+    if stamp != cached_stamp or not isinstance(cached_rows, dict):
+        cached_rows = _build_latest_result_row_cache(results_root)
+        _LATEST_RESULT_ROW_CACHE["stamp"] = stamp
+        _LATEST_RESULT_ROW_CACHE["rows"] = cached_rows
+    row = cached_rows.get((str(axis), str(dataset), str(run_phase)))
+    if not isinstance(row, dict):
+        return None
+    return dict(row)
 
 
 def _get_result_row_for_run_phase(dataset: str, axis: str, run_phase: str, retries: int = 8, sleep_sec: float = 1.0) -> Optional[Dict[str, Any]]:
@@ -395,8 +458,35 @@ def _get_result_row_for_run_phase(dataset: str, axis: str, run_phase: str, retri
         row = index.get(str(run_phase))
         if isinstance(row, dict):
             return row
+        latest = _find_latest_result_row_for_run_phase(dataset, axis, run_phase)
+        if isinstance(latest, dict):
+            return latest
         time.sleep(max(float(sleep_sec), 0.0))
     return None
+
+
+def _is_valid_completed_run(*, row: Dict[str, Any], log_path: Path, axis: str, verify_logging: bool) -> bool:
+    if not _is_completed_log(log_path):
+        return False
+    dataset = str(row.get("dataset", "") or "")
+    run_phase = str(row.get("run_phase", "") or "")
+    if not dataset or not run_phase:
+        return False
+    result_row = _find_latest_result_row_for_run_phase(dataset, axis, run_phase)
+    if not isinstance(result_row, dict):
+        return not _log_has_terminal_failure(log_path)
+    if bool(result_row.get("interrupted", False)):
+        return False
+    if int(result_row.get("ok_trials", 0) or 0) <= 0:
+        return False
+    result_path = Path(str(result_row.get("path", "") or ""))
+    if not result_path.exists():
+        return False
+    if verify_logging:
+        special_ok, diag_ok, _detail = _verify_special_diag_from_result(str(result_path))
+        if not special_ok or not diag_ok:
+            return False
+    return True
 
 
 def _record_trial_new_best_if_any(
@@ -471,6 +561,9 @@ def _record_run_complete_summary(
         n_completed = int(result_row.get("n_completed", 0) or 0)
         interrupted = bool(result_row.get("interrupted", False))
         result_path = str(result_row.get("path", "") or "")
+        ok_trials = int(result_row.get("ok_trials", 0) or 0)
+        if ok_trials <= 0:
+            status = "run_complete_failed"
         if result_path:
             special_ok, diag_ok, detail = _verify_special_diag_from_result(result_path)
             print(f"[wide][logging-check] run={run_phase} {detail} result={result_path}")
@@ -585,16 +678,21 @@ def launch_wide_rows(
         sp = _row_summary_path(row)
         row["summary_path"] = str(sp)
         _get_summary_state_for(sp)
-        if bool(getattr(args, "resume_from_logs", True)) and _is_completed_log(lp):
+        if bool(getattr(args, "resume_from_logs", True)) and _is_valid_completed_run(
+            row=row,
+            log_path=lp,
+            axis=axis,
+            verify_logging=bool(verify_logging),
+        ):
             skipped_rows.append(row)
             continue
         runnable.append(row)
 
     if skipped_rows:
-        print(f"[{phase_id}] resume_from_logs=on: skipped {len(skipped_rows)} completed runs by strict log-end marker.")
+        print(f"[{phase_id}] resume_from_logs=on: skipped {len(skipped_rows)} validated completed runs.")
 
     if not runnable:
-        print(f"[{phase_id}] all runs are already completed by strict log markers.")
+        print(f"[{phase_id}] all runs are already completed by validated log/result checks.")
         return 0
 
     if bool(getattr(args, "dry_run", False)):

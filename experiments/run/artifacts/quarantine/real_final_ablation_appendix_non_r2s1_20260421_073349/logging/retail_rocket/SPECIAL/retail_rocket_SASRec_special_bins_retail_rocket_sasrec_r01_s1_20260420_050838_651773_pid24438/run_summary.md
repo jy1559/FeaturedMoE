@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: SASRec
+- dataset: retail_rocket
+- run_group: real_final_ablation/appendix
+- run_axis: appendix_special_bins
+- run_phase: SPECIAL_BINS_RETAIL_ROCKET_SASREC_R01_S1
+- best_mrr@20: 0.3545
+- test_mrr@20: 0.3506
+- test_hr@10: 0.5476
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation_appendix/retail_rocket/SPECIAL/retail_rocket_SASRec_special_bins_retail_rocket_sasrec_r01_s1_20260420_050838_651773_pid24438/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: 
+- diag_raw_best_valid: 
+- diag_raw_test: 
+- diag_raw_epoch_trace: 
+- feature_ablation: 

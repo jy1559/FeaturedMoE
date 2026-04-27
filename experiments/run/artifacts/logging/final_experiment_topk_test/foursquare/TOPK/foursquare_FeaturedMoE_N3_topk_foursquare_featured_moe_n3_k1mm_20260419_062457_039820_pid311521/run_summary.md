@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: foursquare
+- run_group: final_experiment_topk_test
+- run_axis: topk_test
+- run_phase: TOPK_FOURSQUARE_FEATURED_MOE_N3_K1MM
+- best_mrr@20: 0.2023
+- test_mrr@20: 0.1661
+- test_hr@10: 0.3185
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment_topk_test/foursquare/TOPK/foursquare_FeaturedMoE_N3_topk_foursquare_featured_moe_n3_k1mm_20260419_062457_039820_pid311521/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: 
+- diag_raw_best_valid: 
+- diag_raw_test: 
+- diag_raw_epoch_trace: 
+- feature_ablation: 

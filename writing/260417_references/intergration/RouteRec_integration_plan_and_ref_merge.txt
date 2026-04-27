@@ -1,0 +1,379 @@
+RouteRec integration plan (manuscript + appendix + refs)
+
+0. Quick status
+- The uploaded PDF versions (9) and (10) appear identical in content, so there is no real manuscript conflict to reconcile between those two files.
+- That means integration should be handled as: keep the current manuscript body as the base, then selectively merge in (i) the newer abstract/introduction/method framing from the other agent and (ii) the stronger appendix/method-validation/tuning references.
+- In other words, this is not a “choose one of two drafts” problem. It is a “single-draft refinement + appendix reorganization + reference merge” problem.
+
+1. What the final paper should feel like
+The cleanest final story is still the one discussed in the original meeting:
+
+front-end challenges -> three method design axes -> reviewer-facing experiments -> appendix validation
+
+More concretely:
+- Challenge 1: behavioral diversity vs shared computation
+- Challenge 2: temporal-scope mismatch
+- Challenge 3: opaque hidden-state routing
+
+These should map almost one-to-one to:
+- Portable Behavioral Cues
+- Coarse-to-Fine Multi-Stage Routing
+- Behavior-Guided Expert Allocation
+
+And then the experiments should mirror them:
+- Q1: overall competitiveness
+- Q2: what should control routing?
+- Q3: why is the three-part design meaningful?
+- Q4: are simple / widely available cues enough?
+- Q5: do routing patterns align with behavioral regimes?
+
+This alignment is already mostly present in the current manuscript. The goal of integration is to make that mapping tighter and more explicit, not to introduce another parallel storyline.
+
+2. What to keep from the current manuscript base
+Keep these parts as the main backbone of the paper:
+
+2.1 Abstract / Introduction tone
+The current abstract-introduction package is already in a good place because it:
+- starts from heterogeneous behavioral regimes,
+- raises the routing question directly,
+- states the three principles clearly,
+- and frames RouteRec as a control interface rather than another feature-fusion module.
+
+This is stronger than a generic “MoE improves capacity” story.
+Do not revert to a more implementation-first abstract.
+
+2.2 Three-challenge introduction structure
+The explicit challenge paragraphs are valuable and should stay.
+They do three jobs at once:
+- make the motivation concrete,
+- pre-commit the paper to the three method axes,
+- and pre-wire the reader to expect the corresponding ablations.
+
+This is exactly the structure that helps later experiment subsections feel justified instead of arbitrary.
+
+2.3 Method section macro-organization
+The current 3.x organization is already close to the best final form:
+- 3.1 RouteRec Overview
+- 3.2 Portable Behavioral Cues
+- 3.3 Coarse-to-Fine Multi-Stage Routing
+- 3.4 Behavior-Guided Expert Allocation
+- 3.5 Training Objective
+
+This is better than older variants that mixed framework overview, fixed implementation, and objective too early.
+
+3. What to merge in more aggressively from the “method-focused” revision
+Even though the uploaded PDFs are the same now, the manuscript should still incorporate the stronger method-writing principles that were developed separately.
+
+3.1 Keep the conceptual method in the main text; move fixed implementation to appendix
+Main text should explain:
+- what each design axis is,
+- why it exists,
+- and how it connects to the challenge.
+
+Appendix should explain:
+- exact serial layout,
+- exact stage order,
+- exact H and w values,
+- cue bank size,
+- router hidden width range,
+- temperatures,
+- missing-signal handling,
+- and kNN consistency details.
+
+Rule of thumb:
+- main text = concept + rationale + one representative equation
+- appendix = fixed instantiation + reproducibility details
+
+3.2 Do not let the method become too implementation-heavy in 3.3
+The serial layout
+  self-attention -> macro -> mid -> self-attention -> micro
+is useful and should stay,
+but it should be presented as “selected paper instantiation” rather than the whole conceptual identity of RouteRec.
+
+Recommended phrasing style:
+- first paragraph: explain why stage differences are about temporal evidence and routing granularity;
+- second paragraph: explain the selected serial layout as the fixed instantiation used in the paper;
+- last sentence: point to Appendix C for stronger scope/order controls.
+
+3.3 Make 3.4 feel like the real third axis
+Among the three method parts, 3.4 can still look the most “implementation-ish” if written carelessly.
+It should read as the third conceptual axis, not just as a routing formula dump.
+
+What to emphasize in 3.4:
+- the group-conditional router is the mechanism that turns cue families into expert allocation,
+- it gives a semantic prior over expert organization,
+- it preserves comparability across stages,
+- and it operationalizes the routing/representation decoupling principle.
+
+What to de-emphasize:
+- too much tensor indexing,
+- too much discussion of flattening expert indices,
+- too much low-level detail that belongs in Appendix A.
+
+4. How to connect Method and Experiments more tightly
+This is the most important integration step.
+The paper becomes much stronger if every major experiment subsection is visibly “answering” a method subsection.
+
+Recommended crosswalk:
+
+Method 3.2 Portable Behavioral Cues
+-> Experiment Q4 lightweight/simple cues
+-> Experiment Q3(a) semantic cue design variants
+-> Appendix A/Table of representative cue families
+
+Method 3.3 Coarse-to-Fine Multi-Stage Routing
+-> Experiment Q3(b) stage semantics variants
+-> Appendix C stage removal / identical-scope / scope swap / layout variants
+-> Behavior-slice analysis where gains concentrate in dynamic regimes
+
+Method 3.4 Behavior-Guided Expert Allocation
+-> Experiment Q2 routing-control comparison
+-> Experiment Q3(c) router-composition variants
+-> Appendix D objective variants and Appendix E diagnostics
+
+Method 3.5 Training Objective
+-> Appendix D objective + regularization variants
+-> Appendix E route consistency / entropy / effective-expert-count diagnostics
+
+This crosswalk should be reflected explicitly in prose.
+Example:
+- at the end of 3.2: “Q4 and the cue-design ablations later test whether these portable summaries are sufficient and whether their semantic organization matters.”
+- at the end of 3.3: “Q3 later evaluates whether the macro/mid/micro decomposition captures meaningful scope separation rather than merely adding more MoE blocks.”
+- at the end of 3.4: “Q2 and the router-composition ablations later test whether behavior-guided allocation is stronger and more inspectable than hidden-state-driven alternatives.”
+
+5. Best final organization for the experiment section
+The current Q-structured experiment section is a good base. I would keep the Q form.
+But the internal logic should be sharpened slightly.
+
+5.1 Q1 should stay narrow
+Purpose:
+- establish that the full model is competitive enough to justify deeper analysis.
+
+Do not overload Q1 with too much explanation.
+It only needs:
+- main table,
+- short domain-level interpretation,
+- and one paragraph explaining that the later subsections are about why the model behaves this way.
+
+5.2 Q2 should be the “decoupling” experiment
+Q2 should clearly answer one question only:
+- if routing exists, what should drive it?
+
+This is where hidden-only vs mixed vs behavior-guided belongs.
+This is the cleanest empirical test of the paper’s core philosophical claim.
+
+5.3 Q3 should be the central structural justification figure
+Q3 is the most important non-main-table subsection.
+It should explicitly map to the three method axes.
+
+Recommended panel interpretation:
+- Q3(a): semantic cue design / family organization matters
+- Q3(b): stage semantics / temporal-scope decomposition matters
+- Q3(c): group-conditional behavior-guided allocation matters
+
+If there is only one figure that a reviewer remembers after Table 1, it should be this one.
+
+5.4 Q4 should stay portability-oriented, not “another ablation bucket”
+Q4 should not compete with Q3.
+It should answer a deployment/practicality question:
+- do we need rich metadata, or do ordinary logs already suffice?
+
+That means Q4 should focus on:
+- remove category cues,
+- remove time cues,
+- sequence-only or minimal-cue variant,
+- retention of full-model gain.
+
+Avoid mixing semantic-shuffle / flat-group / scope-swap controls into Q4. Those belong to Q3 or the appendix.
+
+5.5 Q5 should be the semantic closure of the paper
+Q5 should connect back to Figure 1 and the introduction.
+It should not just be “more diagnostics”.
+Its role is:
+- show where gains appear,
+- show where routing becomes sharper,
+- show that these two co-occur under externally defined behavior slices.
+
+That is the experimental closure of the paper’s story.
+
+6. Best final appendix structure (to avoid overlap)
+Right now the main risk is appendix duplication: protocol, method details, structural ablations, diagnostics, and behavior-slice interpretations can easily overlap.
+The cleanest appendix structure is:
+
+Appendix A. Method Details and Design Rationale
+- fixed paper configuration
+- implementation specification
+- representative cue family table
+- exact stage order / temperatures / missing-field handling
+- this appendix supports reproducibility and protects the main text from detail overload
+
+Appendix B. Dataset, Evaluation, Tuning, and Full Results
+- processed dataset statistics
+- full protocol description
+- seen/unseen handling
+- sessionization details
+- full k in {5,10,20} tables
+- tuning/search-space paragraph and possibly compact search-space table
+
+Appendix C. Method-Validation Ablations
+- extended cue-structure variants
+- stage removal / identical-scope / scope swap
+- layout and order controls
+- router composition variants
+
+This appendix should answer: “is the chosen architecture really the right one?”
+
+Appendix D. Objective and Regularization Variants
+- CE only / CE+cons / CE+z / CE+cons+z / optional balance
+- ranking + route consistency + stability indicators
+- this avoids confusing routing semantics with auxiliary-loss effects
+
+Appendix E. Diagnostics and Efficiency
+- expert-usage heatmaps
+- entropy / effective expert count
+- route consistency by stage
+- feature-bucket route patterns
+- if available: compact parameter/runtime cost table
+
+If cost results are weak or noisy, keep only a tiny parameter/runtime anchor and do not overemphasize it.
+
+Appendix F. Behavior-Slice Definitions and Extended Analysis
+- explicit slice definitions
+- per-dataset slice breakdowns
+- gain + concentration plots
+- optional qualitative routing cases can live here at the end
+
+Appendix G. Transfer Results (optional)
+- keep only if the results are stable and not too distracting
+- if transfer is still exploratory or fragile, this appendix can be dropped for the submission version
+
+7. Which appendix sections should be merged or removed
+7.1 Fold protocol sensitivity into Appendix B unless it becomes a real table
+If “protocol sensitivity” remains conceptual or only lightly populated, do not keep it as a standalone appendix.
+Instead:
+- add one compact table under Appendix B,
+- or one short subsection “Supplementary evaluation views”.
+
+Standalone appendix sections are worth it only when they contain real evidence, not placeholders or promises.
+
+7.2 Fold qualitative routing cases into Appendix F unless they become strong
+If the qualitative cases are still lightweight or partially templated, place them at the end of behavior-slice analysis rather than as an independent appendix.
+
+The cleanest interpretation is:
+- aggregate slices first,
+- then a few concrete cases.
+
+That makes the qualitative examples feel like illustrations of established patterns rather than isolated anecdotes.
+
+7.3 Keep transfer only if it does not weaken focus
+Transfer is interesting, but it is not central to the main RouteRec claim.
+If space/time/results are uncertain, it should be the first appendix to cut or compress.
+The main paper is fundamentally about method validity, not transfer.
+
+8. How to handle the references integration
+8.1 Practical conclusion
+Use refs_40 as the base.
+Then add from refs_30 only the entries that are still useful and not already present.
+The most important addition from refs_30 is:
+- ludewig2021empirical
+
+Do not keep both bauer2023hybridsession and bauer2024hybridsession as separate duplicates for the same paper. Keep one consistent entry only.
+
+8.2 Most useful “newer experimental-justification” references to retain in the merged bib
+These are especially useful for the current paper version:
+
+For dataset / sessionization / evaluation protocol:
+- jannach2022sessions
+- latifi2021sessionaware
+- ji2023leakage
+- gusak2025timesplit
+- lacic2020jobsessions
+- borgbruun2022insurance
+- quadrana2017hrnn (already present via personalizing session-based recommendations)
+
+For fairness / baselines / protocol sensitivity:
+- ludewig2021empirical
+- latifi2022seqstudy
+
+For tuning / search protocol justification:
+- galuzzi2020bayesopt
+
+8.3 Suggested section-by-section citation usage
+Introduction / Related Work
+- keep the broad seqrec/session survey refs
+- keep MoE/classical routing refs
+- keep feature-aware / multi-interest / heterogeneity refs
+
+Experiment setup / protocol
+- jannach2022sessions
+- latifi2021sessionaware
+- ji2023leakage
+- gusak2025timesplit
+- lacic2020jobsessions
+- borgbruun2022insurance
+
+Main table fairness / tuning paragraph
+- ludewig2021empirical
+- latifi2022seqstudy
+- galuzzi2020bayesopt
+
+9. The tuning paragraph that should be integrated into the paper
+This is the most important missing experimental-defense piece.
+The current manuscript says “matched early stopping” and “comparable capacity ranges,” but the reader still cannot see how hard each model was tuned.
+
+Recommended solution:
+- main text: short but explicit tuning-policy paragraph
+- appendix: exact search-space table and selected-config table
+
+Recommended main-text paragraph content:
+- each baseline and RouteRec was tuned within a model-specific but comparable discrete search space;
+- search spaces were defined around standard backbone-sensitive hyperparameters (embedding/hidden size, dropout, learning rate, weight decay, number of blocks, and model-specific knobs);
+- for RouteRec, routing-specific knobs were added on top of the same backbone-scale controls;
+- all candidates were selected only by mean validation score over the nine reported metrics;
+- the table reports test metrics of the validation-selected run;
+- optimization used the same trial budget family and early-stopping rule across models.
+
+Important style point:
+Do not claim “fully exhaustive grid search” if the actual execution is Hyperopt/TPE over a discrete set.
+Call it:
+- “discrete model-specific search space with Bayesian search”
+or
+- “grid-style discrete candidate space explored with Hyperopt/TPE”.
+
+That wording is honest and strong enough.
+
+10. Best final integration order for editing
+If you edit the manuscript again, I recommend this order:
+
+Step 1. Freeze the main-story structure
+- keep the current challenge-led intro
+- keep the current 3.1–3.5 method structure
+- keep the Q1–Q5 experiment structure
+
+Step 2. Cleanly separate concept vs implementation
+- strip any low-level fixed values from the main method unless needed for comprehension
+- move them to Appendix A
+
+Step 3. Merge tuning/fairness into experiment setup + Appendix B
+- this is currently the highest-value addition for reviewer defense
+
+Step 4. Reorganize appendix by function
+- A reproducibility/specification
+- B data/eval/tuning/full results
+- C method validation
+- D objective variants
+- E diagnostics/cost
+- F slices/cases
+- G transfer (optional)
+
+Step 5. Merge refs and remove duplicated / stale entries
+- use refs_40 as base
+- add ludewig2021empirical from refs_30
+- keep only one Bauer hybrid-session entry
+
+11. Final one-sentence recommendation
+The final integrated paper should read as:
+
+“RouteRec addresses three concrete front-end challenges with three matched design axes, proves those axes through mirrored reviewer-facing experiments, and moves implementation-heavy specification/tuning evidence into a disciplined appendix.”
+
+If the manuscript preserves that shape, the method and experiment sections will feel much more tightly coupled, and the appendix will support the argument instead of repeating it.

@@ -1,0 +1,62 @@
+[Context & Mission]
+당신은 추천 시스템(RecSys) 학회 제출을 48시간 앞둔 'RouteRec' 논문의 최종 교정자이자 공동 연구자입니다. 
+현재 논문(RouteRec: Behavior-Guided Sparse Routing for Sequential Recommendation)은 아이디어와 문제 정의가 훌륭하지만, 글의 "야심찬 주장(Ambition)"에 비해 이를 뒷받침하는 "실증적 증거(Empirical evidence)"가 아직 부족하게 읽히는 문제가 있습니다. 
+
+당신의 목표는 (1) 글의 서사(Framing)를 방어적으로 재구성하여 리뷰어의 공격을 사전에 차단하고, (2) Introduction을 강화할 핵심 논문들을 적재적소에 인용(Citation)하며, (3) 시간 소모가 적은 핵심 분석 1~2개를 제안/반영하여 논문의 신뢰도를 극대화하는 것입니다. 
+아래의 지침을 읽고, 논문의 해당 섹션들을 어떻게 재작성(Rewrite)할지 구체적인 텍스트로 제시해 주세요.
+
+=========================================================
+[Part 1: 핵심 방어 논리 (본문에 반드시 반영할 것)]
+
+1. 'Explicit Feedback' 데이터셋(ML-1M, Beauty)에서의 성능 저하 방어 (★가장 중요)
+- 현상: RouteRec은 ML-1M과 Beauty에서 상대적으로 마진이 적거나 타 모델에 밀림.
+- 방어 논리: 이 두 데이터셋은 명시적 피드백(평점/리뷰) 데이터로, 사용자가 아이템을 소비한 시점과 실제 로그에 남는 Timestamp가 다를 확률이 높은 'Batch Reviewing(몰아서 별점 주기)' 현상이 잦음. 
+- 프레이밍 전환: 이는 RouteRec의 약점이 아니라, "시간적 텐션(Tempo, Micro-transition) 큐가 정확해야 라우팅이 효과적이다"라는 우리의 핵심 가설을 역으로 증명하는 현상임. Section 4.2 (Q1 결과 분석)에 이 논리를 해석적(Interpretative)으로 강력하게 서술할 것.
+
+2. 'Capacity(파라미터 수)' vs 'Routing Semantics' 분리
+- 리뷰어 공격 예상: "결국 MoE 파라미터 왕창 늘려서 성능 오른 거 아니냐?"
+- 방어 액션: Appendix에 있는 Efficiency 숫자(Table 11)를 본문 4.5절(Q4) 맨 앞으로 끌고 올 것. "SASRec이 의사결정당 1.8M개를 쓸 때, RouteRec은 총량은 3.2M이지만 희소성 덕분에 매 결정마다 1.6M개만 활성화한다." 즉, 단순 용량 증가가 아닌 '선택적 활성화' 덕분임을 명시할 것.
+
+3. Sessionized Protocol 사용의 정당화
+- 방어 액션: Section 4.1 Evaluation Protocol 부분에 미래 데이터 누수(Data leakage) 문제 [10, 15]를 피하고, 실제 배포 환경과 가장 유사한 Sessionized temporal split을 의도적으로 채택했음을 명시.
+
+4. 수작업 피처(Hand-crafted feature) 비판 방어
+- 방어 액션: Section 3.2에 4가지 행동 큐는 "최소한의 관찰 가능한 라우팅 프록시(inspectable starting point)"임을 명시.
+
+=========================================================
+[Part 2: Introduction Citation 보강 및 문맥 연결 (신규 추가)]
+동료 피드백("Intro에 전반적으로 citation이 더 많았으면 좋겠어요")을 반영하여 아래 3개의 핵심 논문을 Intro의 Challenge 1~3 부분에 자연스럽게 녹여낼 것.
+
+[추가 논문 1] Mixture-of-Depths (MoD) 논문 (Raposo et al., 2024)
+- 인용 위치: Intro 도입부 & Challenge 1 (Shared computation의 한계 지적 부분)
+- 반영 논리: "최근 언어 모델 연구[Raposo et al., 2024]에서 증명되었듯, 모든 입력 토큰이 동일한 연산 경로(Shared computation path)를 거칠 필요는 없다. 추천 시스템에서도 안정적 선호도와 즉각적 탐색은 서로 다른 연산량을 요구하지만, 기존 모델들은 이를 강제하고 있다." (MoD의 Adaptive Computation 개념을 RecSys의 라우팅 당위성으로 연결)
+
+[추가 논문 2] STAMP (Liu et al., 2018)
+- 인용 위치: Challenge 2 (다양한 시간적 스코프의 충돌 부분)
+- 반영 논리: "사용자의 행동은 장기적인 메모리(Macro)와 세션 내의 즉각적인 관심사 전환(Micro)이 혼재되어 있다[Liu et al., 2018]. 그러나 기존의 특징 융합 방식은 이를 하나의 Representation으로 뭉뚱그려 라우팅 제어력을 상실한다."
+
+[추가 논문 3] PLE (Tang et al., 2020)
+- 인용 위치: Challenge 3 (기존 MoE의 Opaque Routing 한계 지적 부분)
+- 반영 논리: "MoE 구조가 추천 모델에 도입되었으나, 은닉 상태(Hidden state)에 의존하는 Gating 네트워크는 종종 의미적으로 불투명(Semantically opaque)하며 전문가들 간의 얽힘(Entanglement)을 유발한다[Tang et al., 2020]. 우리는 관찰 가능한 행동 큐를 통해 이 블랙박스 라우팅을 해소하고자 한다."
+
+=========================================================
+[Part 3: 구조 및 가독성 개선 (Writing Polish)]
+1. Abstract 마지막 문장: 구체적 수치 투입 ("최고 평균 순위 Avg. Rank 2.17 달성, 활성 전문가 50% 절감").
+2. Intro 압축 & Empirical Preview 추가: Challenge 1~3 설명을 압축하고, Contribution 직전에 "그래서 결과적으로 무엇을 얻었는가?"를 요약하는 문단 추가.
+3. Section 4.1 쪼개기: \paragraph{Datasets}, \paragraph{Evaluation Protocol}, \paragraph{Baselines & Tuning} 으로 단락 분리.
+4. Table 1: 각 지표별 1위는 Bold, 2위는 Underline 처리.
+5. Figure 2 캡션: "Reading Guide (Left to Right...)" 추가.
+
+=========================================================
+[Part 4: 48시간 내 가능한 '가성비' 추가 분석]
+1. 라우팅 확률과 행동 큐의 상관관계 (Correlation Analysis)
+- Test set 로그를 바탕으로 실제 Cue 값(예: Tempo)과 해당 의미를 가진 전문가 그룹의 Routing Probability 간의 Pearson 상관계수를 확인하여 "블랙박스가 아니라 진짜 의도대로 작동함"을 서술 (Q5 또는 부록에 추가).
+
+2. Random Feature Sanity Check
+- 라우터 입력 자리에 Random Gaussian Noise를 넣었을 때 성능이 하락함을 보여주어, "파라미터 증가가 아닌 '행동 큐'가 성능 향상의 원인임"을 증명.
+
+=========================================================
+[Part 5: Placeholder 금지]
+Q2~Q5에 임의로 채워넣은 샘플 수치는 절대 진짜처럼 서술해서는 안 됨. "단일 스테이지가 3-stage와 유사한 성능을 냈다면 시간적 분해의 의미가 없었을 것이다. 그러나 실제 데이터 트렌드는..."처럼 '성공의 기준'을 서술하는 방식으로 방어막을 칠 것.
+
+위 지침들을 바탕으로 Section 단위 재작성 초안(Draft)을 작성하시오.

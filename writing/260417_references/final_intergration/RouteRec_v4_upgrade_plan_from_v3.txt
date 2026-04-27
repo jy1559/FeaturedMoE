@@ -1,0 +1,244 @@
+RouteRec v4 최종 수정 메모 (v3 장점 반영용)
+
+결론
+- 최종 베이스는 v4로 가는 것이 맞다.
+- 이유는 meeting_summary의 핵심 요구가 “3개의 challenge -> 3개의 method axis -> 그 축을 직접 검증하는 experiment”였고,
+  v4가 이 정렬을 본문에서 가장 직접적으로 보여주기 때문이다.
+- 특히 v4의 Q3 / Figure 4는 semantic cue design / stage semantics / router composition의 3축을 본문에서 바로 받기 때문에,
+  reviewer가 “이 논문이 무엇을 증명하려는지”를 더 빨리 이해할 수 있다.
+- 다만 v3의 장점(더 자연스러운 method framing, 더 정확한 feature wording, 더 방어적인 setup 설명)은 분명히 있으므로,
+  v4를 유지하되 v3의 좋은 문장과 설명 방식을 선택적으로 흡수하는 것이 가장 좋다.
+
+==================================================
+1. v4에서 반드시 유지할 것
+==================================================
+
+1) introduction의 challenge-first framing
+- v4는 introduction에서 challenge 1/2/3를 세우고, 각 challenge에 대해 “왜 routing이 필요한가 / 어디서 달라져야 하는가 / 무엇이 routing을 drive해야 하는가”를 직접 묻는다.
+- 이 방식은 meeting에서 말한 “problem / challenge를 먼저 깔고 method가 대응하게 하라”는 방향과 잘 맞는다.
+- 따라서 challenge structure와 three design axes 소개 방식은 유지하는 것이 좋다.
+
+2) experiment의 Q1~Q5 흐름
+- v4는 실험이 “무엇을 보여주기 위한 것인가”가 잘 보인다.
+- 특히 Q3를 “three-part design”으로 두고 Figure 4도 semantic cue design / stage semantics / router composition의 3분할로 둔 점이 중요하다.
+- 이건 method 3축과 experiment를 바로 연결해 주는 가장 강한 장치이므로 절대 stage/layout 중심 표현으로 되돌리지 않는 것이 좋다.
+
+3) Q3의 본문 framing
+- “one isolated trick이 아니라, cue semantics / temporal scope decomposition / behavior-guided allocation의 interaction을 검증한다”는 식의 framing은 살린다.
+- reviewer가 보기에도 “이 모델이 feature 하나 잘 넣은 것인지, stage만 많이 넣은 것인지, router trick인지”를 한 번에 의식하게 해 준다.
+
+==================================================
+2. v3에서 꼭 가져와야 할 장점
+==================================================
+
+1) framework vs. fixed paper instantiation 구분
+- v3의 3.1은 RouteRec을 먼저 design framework로 설명하고, concrete implementation choice는 fixed paper instantiation으로 제한해서 말한다.
+- 이 태도는 method가 “한 번의 구현 요약”이 아니라 “일반 설계 틀 + 이 논문에서 채택한 instantiation”으로 읽히게 만든다.
+- v4도 같은 뜻은 있지만, 표현이 덜 분명하다.
+- 따라서 v3식 문장을 가져와서 3.1 초반에 더 분명하게 못 박는 것이 좋다.
+
+권장 방향:
+- “We first describe RouteRec as a design framework and refer to the fixed paper instantiation only when concrete implementation choices matter.”
+- 그리고 Appendix A를 “specification details for the selected paper track”로 연결.
+
+2) 3.2의 coarsest item-group proxy wording
+- v3는 focus family를 “the coarsest item-group proxy available in the dataset, such as product category, venue category, artist grouping, or genre”로 풀어 준다.
+- 이 표현이 더 정확하고 reviewer 질문을 잘 막는다.
+- v4에서 그냥 category/theme 정도로 둔 표현보다 훨씬 낫다.
+- 따라서 이 wording은 거의 그대로 가져오는 편이 좋다.
+
+3) setup에서 held-out cleanup과 session-as-unit justification
+- v3는 왜 session이 evaluation unit인지, 왜 unseen non-target row를 지우는지, unseen target은 왜 supplementary인지 더 직접적으로 설명한다.
+- meeting에서도 session split과 evaluation setting은 “공정하게, 납득 가능하게, 방어 가능하게” 쓰는 게 중요하다고 했으므로, 이 부분은 v3를 적극 반영하는 것이 좋다.
+
+4) appendix의 더 분리된 구조
+- v3는 appendix를 B/C/D/E/F/G/H/I로 역할별로 더 명확히 나눈다.
+- reviewer는 appendix에서 필요한 것을 빨리 찾을 수 있어야 하므로, 이 분리감은 유지할 가치가 있다.
+
+==================================================
+3. section별 구체 수정 지시
+==================================================
+
+[Introduction]
+- v4의 challenge-first 구조는 유지.
+- 다만 challenge 3개 뒤에 v3처럼 한 문장으로 정리:
+  “Taken together, these challenges raise three concrete design questions: why routing should exist at all, where it should differ across temporal evidence, and what should drive it in an interpretable way.”
+- 이 문장은 introduction의 리듬을 정리해 주고, challenge 나열이 단순 bullet처럼 보이지 않게 해 준다.
+
+[Related Work]
+- v4/v3 큰 차이는 아님.
+- 다만 2.3 마지막 문단은 “prior expert models mainly specialize through latent/task/facet-level signals, whereas RouteRec specializes through observable cues tied to temporal behavioral regimes” 식으로 v3의 더 직접적인 대비를 쓰는 편이 좋다.
+- 이 문장은 later experiments와의 연결이 좋다.
+
+[Method 3.1]
+- v4를 유지하되, 첫 단락에 v3의 framework vs instantiation 구분 문장 삽입.
+- 현재 v4는 “selected paper instantiation”을 너무 빨리 전면에 내세우는 느낌이 있어서, 일반 설계로서의 인상을 조금 약하게 만든다.
+- 해당 문장 추가만으로 많이 개선된다.
+
+[Method 3.2]
+- focus family 설명은 v3 wording 채택:
+  “the coarsest item-group proxy available in the dataset, such as product category, venue category, artist grouping, or genre.”
+- missing-signal handling은 문장을 더 일관되게 정리할 것.
+  추천:
+  “When such grouping fields are unavailable, the corresponding focus cues are handled by the fixed missing-signal rule documented in Appendix A.”
+- 여기서는 v3처럼 너무 omission만 강조하지 말고, appendix에서 정확한 rule을 명시한다고 처리하는 정도가 좋다.
+- 즉 본문은 정확성 유지, appendix가 구현 rule을 닫는 방식.
+
+[Method 3.3]
+- v4 내용 유지.
+- “why no extra attention before mid” 설명은 지금처럼 남겨도 좋다.
+- 다만 한 문장 정도로 “this is a selected architectural choice later stress-tested in Appendix C” 느낌을 더 주면 hand-tuned impression을 줄일 수 있다.
+
+[Method 3.4]
+- v4 유지.
+- “semantic prior rather than hard hand assignment” 문장은 그대로 살린다.
+- 이 부분은 reviewer가 “이거 hand-crafted expert binding 아니냐”를 물을 때 매우 중요하다.
+
+[Method 3.5]
+- z-loss 표기는 v3 쪽이 더 명확하므로 v3 notation 사용.
+- 즉 “pre-softmax expert logits a_{s,i,t,e}”로 명시하는 방식이 더 좋다.
+- objective variants는 Appendix E로 연결하는 v3/v4 공통 톤 유지.
+
+==================================================
+4. experiment section에서 v4를 더 좋게 만드는 방법
+==================================================
+
+[4.1 Setup]
+- 여기는 v3 요소를 가장 많이 가져와야 한다.
+- 특히 아래 네 가지를 더 직접적으로 써야 한다.
+
+1) 왜 session이 evaluation unit인가
+- “this protocol is a deliberate methodological choice: sessions are the unit of evaluation because the paper studies session-aware behavioral routing...”
+- 이 논리를 살릴 것.
+
+2) held-out cleanup이 정확히 무엇인가
+- unseen non-target row 제거
+- unseen target retained for supplementary accounting
+- 이 두 줄은 reviewer가 바로 물을 부분이다.
+
+3) same processed files / no extra metadata / same observed histories
+- RouteRec이 다른 정보 접근권을 갖는 게 아니라는 점을 더 직접적으로 적는다.
+
+4) tuning protocol의 공정성
+- predefined discrete candidate set
+- same validation files
+- same early-stopping rule
+- same selection criterion
+- adaptive search is only an efficient implementation over fixed candidate sets
+- 이 문장은 지금도 있으나, v3처럼 “transparent and controlled comparison” 쪽 톤을 조금 더 넣는 것이 좋다.
+
+[Q1]
+- v4 유지.
+- “subsequent design-oriented analyses”로 넘어가는 framing은 좋다.
+
+[Q2]
+- v4 유지.
+- 마지막 문장에서 Challenge 3와 behavior-guided expert allocation axis를 직접 받는 현재 방식 유지.
+
+[Q3]
+- 제목, figure title, 3-panel organization 모두 v4 유지.
+- 단 첫 문장을 조금 더 정밀하게:
+  “Figure 4 tests whether RouteRec’s gains arise from the integrated three-part design itself—semantic cue organization, staged temporal allocation, and the final router composition—rather than from indiscriminate expert insertion.”
+- 현재도 비슷하지만, 이 문장을 Q3 opening sentence로 강하게 두면 좋다.
+- 여기서 stage removal / dense replacement / router-composition-order variants는 그대로 유지.
+- 핵심은 “Q3가 staged structure만 보는 실험처럼 보이지 않게 하는 것”이다.
+
+[Q4]
+- portability question framing 유지.
+- v4의 “availability-oriented reductions” 표현이 좋다.
+- 다만 한 문장 정도로 “This is the main test of the claim that ordinary logs already expose enough routing evidence”를 넣어도 괜찮다.
+
+[Q5]
+- v4의 circularity 방어가 더 좋으므로 유지.
+- “simple externally computed statistics”와 “not optimized labels or supervision targets”를 본문에 남긴다.
+
+==================================================
+5. appendix에서 바꿀 것
+==================================================
+
+기본 원칙:
+- appendix의 분할 구조는 v3식이 더 좋다.
+- 본문은 v4, appendix architecture는 v3에 가깝게 정리.
+
+추천 구조:
+A. Method Details and Design Rationale
+B. Dataset, Evaluation, and Full Results
+C. Extended Structural Ablations
+D. Protocol Sensitivity and Supplementary Views
+E. Objective and Regularization Variants
+F. Efficiency and Model Cost
+G. Extended Diagnostics
+H. Behavior-Slice Analysis
+I. Extended Transfer Results
+
+구체 수정:
+
+[A]
+- Table 3 제목/설명은 “implementation-level search controls used in the selected paper track”처럼 v4_final의 정리된 표현을 쓰는 편이 낫다.
+- “reproducibility summary rather than search-space description” 같은 문장은 길게 반복하지 말고 한 번만 정리.
+
+[B]
+- v3의 더 상세한 held-out cleanup 설명을 유지.
+- dataset protocol은 지금 둘 다 괜찮지만, v3처럼 sequence unit / tail / stratification / re-merge / contiguous re-split을 차분히 설명하는 쪽이 reviewer 방어에는 좋다.
+
+[C]
+- v4의 three-axis narrative를 appendix 확장으로 연결.
+- panel (a): cue / family structure
+- panel (b): stage semantics / scope controls
+- panel (c): placement / order / router variants
+- 이 축 정렬을 유지.
+
+[D]
+- v3_final의 non-tabular descriptive style도 나쁘지 않다.
+- 하지만 supplementary view를 reviewer가 빠르게 확인할 수 있으려면 짧은 table이 있어도 괜찮다.
+- 최종 선택은 실제 결과가 채워지느냐에 따라 결정.
+- 결과가 빈약하면 descriptive paragraph, 결과가 명확하면 compact table.
+
+[E]
+- objective variants는 표가 낫다.
+- full objective vs no aux vs consistency only vs z-loss only vs balance only 정도로 정리.
+
+[F]
+- efficiency는 표가 낫다.
+- 단 지나치게 systems paper처럼 보이지 않게 compact하게.
+
+[G]
+- routing diagnostics figure 유지.
+
+[H]
+- behavior-slice analysis + qualitative routing cases를 한 appendix 안에서 유지해도 괜찮다.
+- 다만 제목은 “Behavior-Slice Analysis”가 더 깔끔하다.
+
+[I]
+- transfer는 appendix 마지막으로 두는 현재 방식 유지.
+
+==================================================
+6. reviewer 관점에서 마지막으로 막아야 할 의문
+==================================================
+
+1) “이 모델은 결국 hand-crafted feature engineering 아닌가?”
+- 답: semantic prior를 갖는 compact cue bank이며, hard expert assignment가 아니라 routing control interface라는 점을 method 3.2/3.4에서 반복적으로 강조.
+- Q4에서 lightweight cues로도 유지된다는 evidence와 연결.
+
+2) “왜 macro/mid/micro여야 하나?”
+- 답: introduction challenge 2 -> method 3.3 -> Q3 panel (b)로 이어지는 선을 더 명확히.
+- Q3 제목과 opening sentence가 매우 중요.
+
+3) “실험 세팅이 자의적인 거 아닌가?”
+- 답: setup에서 session-as-unit, held-out cleanup, seen-target as primary, tuning fairness를 더 직접적으로.
+- 이 부분은 v3 표현을 많이 흡수해야 한다.
+
+4) “이건 그냥 expert 많이 넣어서 좋아진 거 아닌가?”
+- 답: Q2에서 routing signal, Q3에서 dense replacement vs staged structure, router composition ablation으로 방어.
+- 따라서 Q2/Q3 wording은 최대한 선명하게 유지.
+
+==================================================
+7. 한 줄 실행 지시
+==================================================
+
+- v4를 베이스로 유지한다.
+- introduction의 challenge-first 구조와 Q3 three-part design framing은 절대 유지한다.
+- 대신 v3에서 framework vs instantiation 구분, coarsest item-group proxy wording, held-out cleanup과 session-as-unit justification, appendix 분할 구조를 가져온다.
+- method는 “일반 설계 틀 + selected paper instantiation”처럼 보이게 정리하고,
+  experiment는 “왜 이 실험을 했는지”가 reviewer에게 즉시 보이도록 유지한다.
+- 최종 목표는 “아이디어가 많다”가 아니라 “3개의 문제, 3개의 설계축, 그걸 받는 5개의 질문형 실험”이 한 번에 보이는 draft로 만드는 것이다.

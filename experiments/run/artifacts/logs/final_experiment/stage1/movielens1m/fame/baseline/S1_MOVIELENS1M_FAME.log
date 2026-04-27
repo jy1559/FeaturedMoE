@@ -1,0 +1,95 @@
+# job_id=S1_MOVIELENS1M_FAME dataset=movielens1m model=fame stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ml --search-algo tpe --max-evals 24 --tune-epochs 100 --tune-patience 10 --seed 610023 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_MOVIELENS1M_FAME model=fame dataset=movielens1m eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=6 log_wandb=false show_progress=false ++seed=610023 --max-run-hours 2 --oom-retry-limit 2 ++search.learning_rate=[0.0003063,0.00038361,0.00048044,0.00060171,0.00075359,0.0009438,0.00118203] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-06,1e-05,5e-05,0.0001,0.0002] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[96,128,160,192,224] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[96,128,160,192,224] ++search_space_type_overrides.embedding_size=choice ++search.num_layers=[1,2,3,4] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,2,4,8] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.05,0.1,0.12,0.15,0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.08,0.1,0.12,0.15,0.2] ++search_space_type_overrides.attn_dropout_prob=choice ++search.num_experts=[2,3,4,5,6] ++search_space_type_overrides.num_experts=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.15] ++search_space_type_overrides.dropout_ratio=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=525168 ts=2026-04-17T18:05:34
+[UniqueChoice] enabled: dedupe/remap duplicates across 7000000 finite combos
+
+=================================================================
+  Hyperopt  |  FAME x movielens1m
+  max_evals=24  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=2  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/4096/4096
+  track=final_experiment  axis=stage1_broad_search  phase=S1_MOVIELENS1M_FAME
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, embedding_size, hidden_dropout_prob, hidden_size, learning_rate, num_experts, num_heads, num_layers, weight_decay
+Tuned params(len>1): 10  (~7000000 discrete combos)
+Tuned groups: 10
+  [optimization]
+    hidden_dropout_prob             [0.05, 0.1, 0.12, 0.15, 0.2]              -> choice
+    learning_rate                   [0.0003063, 0.00038361, 0.00048044, 0.00060171, 0.00075359, 0.0009438, 0.00118203]  -> choice
+    weight_decay                    [1e-06, 1e-05, 5e-05, 0.0001, 0.0002]     -> choice
+  [model_core]
+    attn_dropout_prob               [0.08, 0.1, 0.12, 0.15, 0.2]              -> choice
+    embedding_size                  [96, 128, 160, 192, 224]                  -> choice
+    hidden_size                     [96, 128, 160, 192, 224]                  -> choice
+    num_heads                       [1, 2, 4, 8]                              -> choice
+    num_layers                      [1, 2, 3, 4]                              -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30, 50]                          -> choice
+    num_experts                     [2, 3, 4, 5, 6]                           -> choice
+Fixed params(singleton/non-list): 2
+Fixed groups: 2
+  [model_core]
+    dropout_ratio                   0.15                                    
+    inner_size                      320                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, embedding_size=192, hidden_dropout_prob=0.1, hidden_size=160, learning_rate=0.0003063, num_experts=6, num_heads=8, num_layers=1, weight_decay=5e-05
+  -> MRR@20=0.072000  best=0.072000  (early_stop@72, trial=35.4min, avg=35.8min/trial, total=35.8min, ETA=13.72h)
+[TRIAL_METRICS] cur_best_mrr20=0.072000 cur_best_hr10=0.165400 cur_test_mrr20=0.043900 cur_test_hr10=0.111100 avg_epoch_time_sec=29.5112 test_eval_time_sec=0.1000 test_eval_batches_per_sec=9.9992 test_eval_targets_per_sec=21588.1677 run_best_mrr20=0.072000 run_best_hr10=0.165400 run_test_mrr20=0.043900 run_test_hr10=0.111100
+
+[2/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, embedding_size=192, hidden_dropout_prob=0.1, hidden_size=96, learning_rate=0.0003063, num_experts=6, num_heads=2, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.084100  best=0.084100  (early_stop@80, trial=19.4min, avg=27.7min/trial, total=55.4min, ETA=10.16h)
+[TRIAL_METRICS] cur_best_mrr20=0.084100 cur_best_hr10=0.184300 cur_test_mrr20=0.059600 cur_test_hr10=0.130600 avg_epoch_time_sec=14.5727 test_eval_time_sec=0.0592 test_eval_batches_per_sec=16.9024 test_eval_targets_per_sec=36492.1976 run_best_mrr20=0.084100 run_best_hr10=0.184300 run_test_mrr20=0.059600 run_test_hr10=0.130600
+
+[3/24] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, embedding_size=224, hidden_dropout_prob=0.05, hidden_size=192, learning_rate=0.0009438, num_experts=2, num_heads=8, num_layers=1, weight_decay=1e-05
+  -> MRR@20=0.079200  best=0.084100  (early_stop@35, trial=13.5min, avg=23.0min/trial, total=1.15h, ETA=8.07h)
+[TRIAL_METRICS] cur_best_mrr20=0.079200 cur_best_hr10=0.171000 cur_test_mrr20=0.052600 cur_test_hr10=0.112000 avg_epoch_time_sec=23.1218 test_eval_time_sec=0.0760 test_eval_batches_per_sec=13.1551 test_eval_targets_per_sec=28401.8453 run_best_mrr20=0.084100 run_best_hr10=0.184300 run_test_mrr20=0.059600 run_test_hr10=0.130600
+
+[4/24] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, embedding_size=96, hidden_dropout_prob=0.05, hidden_size=96, learning_rate=0.0006017, num_experts=2, num_heads=2, num_layers=4, weight_decay=0.0001
+  -> MRR@20=0.085500  best=0.085500  (early_stop@66, trial=16.8min, avg=21.5min/trial, total=1.43h, ETA=7.17h)
+[TRIAL_METRICS] cur_best_mrr20=0.085500 cur_best_hr10=0.189900 cur_test_mrr20=0.066500 cur_test_hr10=0.142700 avg_epoch_time_sec=15.3089 test_eval_time_sec=0.0593 test_eval_batches_per_sec=16.8628 test_eval_targets_per_sec=36406.8103 run_best_mrr20=0.085500 run_best_hr10=0.189900 run_test_mrr20=0.066500 run_test_hr10=0.142700
+
+[5/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.2, embedding_size=96, hidden_dropout_prob=0.1, hidden_size=96, learning_rate=0.0007536, num_experts=2, num_heads=1, num_layers=2, weight_decay=1e-06
+  -> MRR@20=0.081100  best=0.085500  (early_stop@99, trial=15.5min, avg=20.3min/trial, total=1.69h, ETA=6.44h)
+[TRIAL_METRICS] cur_best_mrr20=0.081100 cur_best_hr10=0.190300 cur_test_mrr20=0.065800 cur_test_hr10=0.141300 avg_epoch_time_sec=9.3746 test_eval_time_sec=0.0564 test_eval_batches_per_sec=17.7218 test_eval_targets_per_sec=38261.3387 run_best_mrr20=0.085500 run_best_hr10=0.189900 run_test_mrr20=0.066500 run_test_hr10=0.142700
+
+[6/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.1, embedding_size=192, hidden_dropout_prob=0.1, hidden_size=96, learning_rate=0.0006017, num_experts=3, num_heads=1, num_layers=4, weight_decay=0.0001
+  -> MRR@20=0.090300  best=0.090300  (early_stop@66, trial=23.3min, avg=20.9min/trial, total=2.09h, ETA=6.26h)
+[TRIAL_METRICS] cur_best_mrr20=0.090300 cur_best_hr10=0.210100 cur_test_mrr20=0.059100 cur_test_hr10=0.147300 avg_epoch_time_sec=21.1473 test_eval_time_sec=0.0709 test_eval_batches_per_sec=14.1024 test_eval_targets_per_sec=30447.1578 run_best_mrr20=0.090300 run_best_hr10=0.210100 run_test_mrr20=0.059100 run_test_hr10=0.147300
+[TIME_BUDGET] reached limit=2.000h after 6/24 trials (elapsed=2.09h). Stopping new trials and finalizing current best.
+
+=================================================================
+  DONE  |  FAME x movielens1m
+  Best MRR@20 = 0.090300  |  6/24 trials OK
+  Best HR@10  = 0.210100
+  Test MRR@20 = 0.059100  (best-valid checkpoint)
+  Test HR@10  = 0.147300  (best-valid checkpoint)
+  Stop reason = time_budget(2.000h) reached at 2.09h
+  Avg epoch time = 21.147 sec/epoch
+  Final test eval = 0.071 sec | batches/s=14.102 | targets/s=30447.158
+[RUN_METRICS] best_valid_mrr20=0.090300 best_valid_hr10=0.210100 test_mrr20=0.059100 test_hr10=0.147300 avg_epoch_time_sec=21.1473 test_eval_time_sec=0.0709 test_eval_batches_per_sec=14.1024 test_eval_targets_per_sec=30447.1578
+  Total time: 125.1 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 50
+    attn_dropout_prob: 0.1
+    embedding_size: 192
+    hidden_dropout_prob: 0.1
+    hidden_size: 96
+    learning_rate: 0.00060171
+    num_experts: 3
+    num_heads: 1
+    num_layers: 4
+    weight_decay: 0.0001
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/movielens1m_FAME_s1_movielens1m_fame_20260417_180542_664902_pid525168.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage1_broad_search/S1/movielens1m/FAME/movielens1m_FAME_s1_movielens1m_fame_20260417_180542_664902_pid525168.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage1_broad_search/S1/movielens1m/FAME/movielens1m_FAME_s1_movielens1m_fame_20260417_180542_664902_pid525168_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage1_broad_search/S1/movielens1m/FAME/movielens1m_FAME_s1_movielens1m_fame_20260417_180542_664902_pid525168_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=525168 start=2026-04-17T18:05:34 end=2026-04-17T20:10:51

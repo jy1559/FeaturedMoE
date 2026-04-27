@@ -1,0 +1,98 @@
+# job_id=ADD_STAGE1_RETAIL_ROCKET_DUOREC_DROPOUT dataset=retail_rocket model=duorec stage=stage1
+# cmd=/venv/FMoE/bin/python /workspace/FeaturedMoE/experiments/hyperopt_tune.py --config-name tune_rr --search-algo tpe --max-evals 7 --tune-epochs 40 --tune-patience 5 --seed 910134 --run-group final_experiment_addtuning --run-axis add_stage1_dropout --run-phase ADD_STAGE1_RETAIL_ROCKET_DUOREC_DROPOUT model=duorec dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=1 log_wandb=false show_progress=false ++seed=910134 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00046005,0.00046016,0.00032538,0.00065077,0.00023008] ++search_space_type_overrides.learning_rate=choice ++search.hidden_dropout_prob=[0.05,0.1,0.12] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.15,0.12,0.1] ++search_space_type_overrides.attn_dropout_prob=choice ++search.dropout_ratio=[0.1,0.12,0.13] ++search_space_type_overrides.dropout_ratio=choice ++search.dropout_prob=[0.1,0.15,0.2] ++search_space_type_overrides.dropout_prob=choice ++search.inner_size=[256] ++search_space_type_overrides.inner_size=choice ++search.weight_decay=[1e-05] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[20] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[128] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[128] ++search_space_type_overrides.embedding_size=choice ++search.n_layers=[3] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[2] ++search_space_type_overrides.n_heads=choice ++search.tau=[0.2] ++search_space_type_overrides.tau=choice ++search.lmd=[0.06] ++search_space_type_overrides.lmd=choice ++search.lmd_sem=[0.0] ++search_space_type_overrides.lmd_sem=choice ++search.num_layers=[1] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1] ++search_space_type_overrides.num_heads=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1728163 ts=2026-04-18T19:12:01
+[UniqueChoice] enabled: dedupe/remap duplicates across 405 finite combos
+
+=================================================================
+  Hyperopt  |  DuoRec x retail_rocket
+  max_evals=7  epochs=40  patience=5  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/8192/8192
+  track=final_experiment_addtuning  axis=add_stage1_dropout  phase=ADD_STAGE1_RETAIL_ROCKET_DUOREC_DROPOUT
+=================================================================
+Changed knobs: attn_dropout_prob, dropout_prob, dropout_ratio, hidden_dropout_prob, learning_rate
+Tuned params(len>1): 5  (~405 discrete combos)
+Tuned groups: 5
+  [optimization]
+    hidden_dropout_prob             [0.05, 0.1, 0.12]                         -> choice
+    learning_rate                   [0.00046005, 0.00046016, 0.00032538, 0.00065077, 0.00023008]  -> choice
+  [model_core]
+    attn_dropout_prob               [0.15, 0.12, 0.1]                         -> choice
+    dropout_prob                    [0.1, 0.15, 0.2]                          -> choice
+    dropout_ratio                   [0.1, 0.12, 0.13]                         -> choice
+Fixed params(singleton/non-list): 12
+Fixed groups: 12
+  [optimization]
+    weight_decay                    1e-05                                   
+  [model_core]
+    embedding_size                  128                                     
+    hidden_size                     128                                     
+    inner_size                      256                                     
+    num_heads                       1                                       
+    num_layers                      1                                       
+  [other]
+    MAX_ITEM_LIST_LENGTH            20                                      
+    lmd                             0.06                                    
+    lmd_sem                         0.0                                     
+    n_heads                         2                                       
+    n_layers                        3                                       
+    tau                             0.2                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/7] attn_dropout_prob=0.12, dropout_prob=0.2, dropout_ratio=0.12, hidden_dropout_prob=0.1, learning_rate=0.0006508
+  -> MRR@20=0.361700  best=0.361700  (early_stop@17, trial=7.3min, avg=7.6min/trial, total=7.6min, ETA=45.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.361700 cur_best_hr10=0.568200 cur_test_mrr20=0.360500 cur_test_hr10=0.553100 avg_epoch_time_sec=25.6179 test_eval_time_sec=0.5595 test_eval_batches_per_sec=5.3619 test_eval_targets_per_sec=37497.4157 run_best_mrr20=0.361700 run_best_hr10=0.568200 run_test_mrr20=0.360500 run_test_hr10=0.553100
+
+[2/7] attn_dropout_prob=0.1, dropout_prob=0.2, dropout_ratio=0.1, hidden_dropout_prob=0.12, learning_rate=0.0002301
+  -> MRR@20=0.363500  best=0.363500  (early_stop@39, trial=16.6min, avg=12.1min/trial, total=24.2min, ETA=1.01h)
+[TRIAL_METRICS] cur_best_mrr20=0.363500 cur_best_hr10=0.564100 cur_test_mrr20=0.361600 cur_test_hr10=0.550900 avg_epoch_time_sec=25.4452 test_eval_time_sec=0.5576 test_eval_batches_per_sec=5.3799 test_eval_targets_per_sec=37623.4935 run_best_mrr20=0.363500 run_best_hr10=0.564100 run_test_mrr20=0.361600 run_test_hr10=0.550900
+
+[3/7] attn_dropout_prob=0.1, dropout_prob=0.1, dropout_ratio=0.13, hidden_dropout_prob=0.1, learning_rate=0.0002301
+  -> MRR@20=0.361300  best=0.363500  (early_stop@40, trial=17.0min, avg=13.7min/trial, total=41.2min, ETA=55.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.361300 cur_best_hr10=0.562500 cur_test_mrr20=0.360000 cur_test_hr10=0.548600 avg_epoch_time_sec=25.4794 test_eval_time_sec=0.5605 test_eval_batches_per_sec=5.3521 test_eval_targets_per_sec=37429.1680 run_best_mrr20=0.363500 run_best_hr10=0.564100 run_test_mrr20=0.361600 run_test_hr10=0.550900
+
+[4/7] attn_dropout_prob=0.15, dropout_prob=0.1, dropout_ratio=0.12, hidden_dropout_prob=0.1, learning_rate=0.0006508
+  -> MRR@20=0.361700  best=0.363500  (early_stop@17, trial=7.2min, avg=12.1min/trial, total=48.5min, ETA=36.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.361700 cur_best_hr10=0.568200 cur_test_mrr20=0.360500 cur_test_hr10=0.553100 avg_epoch_time_sec=25.4424 test_eval_time_sec=0.5670 test_eval_batches_per_sec=5.2915 test_eval_targets_per_sec=37004.8814 run_best_mrr20=0.363500 run_best_hr10=0.564100 run_test_mrr20=0.361600 run_test_hr10=0.550900
+
+[5/7] attn_dropout_prob=0.12, dropout_prob=0.1, dropout_ratio=0.12, hidden_dropout_prob=0.12, learning_rate=0.0002301
+  -> MRR@20=0.362800  best=0.363500  (early_stop@39, trial=16.6min, avg=13.0min/trial, total=1.08h, ETA=26.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.362800 cur_best_hr10=0.564100 cur_test_mrr20=0.361600 cur_test_hr10=0.551600 avg_epoch_time_sec=25.5411 test_eval_time_sec=0.5603 test_eval_batches_per_sec=5.3546 test_eval_targets_per_sec=37446.7046 run_best_mrr20=0.363500 run_best_hr10=0.564100 run_test_mrr20=0.361600 run_test_hr10=0.550900
+
+[6/7] attn_dropout_prob=0.15, dropout_prob=0.2, dropout_ratio=0.12, hidden_dropout_prob=0.05, learning_rate=0.0006508
+  -> MRR@20=0.359500  best=0.363500  (early_stop@17, trial=7.3min, avg=12.1min/trial, total=1.21h, ETA=12.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.359500 cur_best_hr10=0.563000 cur_test_mrr20=0.357400 cur_test_hr10=0.549300 avg_epoch_time_sec=25.6116 test_eval_time_sec=0.5616 test_eval_batches_per_sec=5.3422 test_eval_targets_per_sec=37359.9627 run_best_mrr20=0.363500 run_best_hr10=0.564100 run_test_mrr20=0.361600 run_test_hr10=0.550900
+
+[7/7] attn_dropout_prob=0.1, dropout_prob=0.2, dropout_ratio=0.13, hidden_dropout_prob=0.05, learning_rate=0.0004602
+  -> MRR@20=0.358500  best=0.363500  (early_stop@22, trial=9.4min, avg=11.7min/trial, total=1.36h, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.358500 cur_best_hr10=0.560100 cur_test_mrr20=0.358500 cur_test_hr10=0.544000 avg_epoch_time_sec=25.5387 test_eval_time_sec=0.5601 test_eval_batches_per_sec=5.3560 test_eval_targets_per_sec=37456.5074 run_best_mrr20=0.363500 run_best_hr10=0.564100 run_test_mrr20=0.361600 run_test_hr10=0.550900
+
+=================================================================
+  DONE  |  DuoRec x retail_rocket
+  Best MRR@20 = 0.363500  |  7/7 trials OK
+  Best HR@10  = 0.564100
+  Test MRR@20 = 0.361600  (best-valid checkpoint)
+  Test HR@10  = 0.550900  (best-valid checkpoint)
+  Avg epoch time = 25.445 sec/epoch
+  Final test eval = 0.558 sec | batches/s=5.380 | targets/s=37623.494
+[RUN_METRICS] best_valid_mrr20=0.363500 best_valid_hr10=0.564100 test_mrr20=0.361600 test_hr10=0.550900 avg_epoch_time_sec=25.4452 test_eval_time_sec=0.5576 test_eval_batches_per_sec=5.3799 test_eval_targets_per_sec=37623.4935
+  Total time: 81.8 min
+  Best params:
+    attn_dropout_prob: 0.1
+    dropout_prob: 0.2
+    dropout_ratio: 0.1
+    hidden_dropout_prob: 0.12
+    learning_rate: 0.00023008
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/retail_rocket_DuoRec_add_stage1_retail_rocket_duorec_dropout_20260418_191202_015804_pid1728163.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/normal/add_stage1_dropout/ADD/retail_rocket/DuoRec/retail_rocket_DuoRec_add_stage1_retail_rocket_duorec_dropout_20260418_191202_015804_pid1728163.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/special/add_stage1_dropout/ADD/retail_rocket/DuoRec/retail_rocket_DuoRec_add_stage1_retail_rocket_duorec_dropout_20260418_191202_015804_pid1728163_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment_addtuning/special/add_stage1_dropout/ADD/retail_rocket/DuoRec/retail_rocket_DuoRec_add_stage1_retail_rocket_duorec_dropout_20260418_191202_015804_pid1728163_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1728163 start=2026-04-18T19:12:01 end=2026-04-18T20:33:49

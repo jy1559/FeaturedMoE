@@ -1,0 +1,63 @@
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_strict_small --search-algo tpe --max-evals 1 --tune-epochs 35 --tune-patience 4 --seed 980001 --run-group real_final_ablation/appendix --run-axis appendix_special_bins --run-phase SPECIAL_BINS_KUAIRECLARGESTRICTPOSV2_0_2_SASREC_R01_S1 model=sasrec dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=4 log_wandb=false show_progress=false ++seed=980001 --max-run-hours 0.5 ++search.learning_rate=[0.00126491] ++search_space_type_overrides.learning_rate=choice ++search.MAX_ITEM_LIST_LENGTH=[20] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[160] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[160] ++search_space_type_overrides.embedding_size=choice ++search.num_layers=[3] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[2] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.15] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.15] ++search_space_type_overrides.attn_dropout_prob=choice ++search.weight_decay=[5e-05] ++search_space_type_overrides.weight_decay=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=24031 ts=2026-04-20T05:02:35
+[UniqueChoice] enabled: dedupe/remap duplicates across 3 finite combos
+
+=================================================================
+  Hyperopt  |  SASRec x KuaiRecLargeStrictPosV2_0.2
+  max_evals=1  epochs=35  patience=4  wandb=off
+  search_algo=tpe
+  cpu_threads=2
+  max_run_hours=0.500  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=3072/6144/6144
+  track=real_final_ablation/appendix  axis=appendix_special_bins  phase=SPECIAL_BINS_KUAIRECLARGESTRICTPOSV2_0_2_SASREC_R01_S1
+=================================================================
+Changed knobs: dropout_ratio
+Tuned params(len>1): 1  (~3 discrete combos)
+Tuned groups: 1
+  [model_core]
+    dropout_ratio                   [0.0, 0.1, 0.2]                           -> choice
+Fixed params(singleton/non-list): 9
+Fixed groups: 9
+  [optimization]
+    hidden_dropout_prob             0.15                                    
+    learning_rate                   0.00126491                              
+    weight_decay                    5e-05                                   
+  [model_core]
+    attn_dropout_prob               0.15                                    
+    embedding_size                  160                                     
+    hidden_size                     160                                     
+    num_heads                       2                                       
+    num_layers                      3                                       
+  [other]
+    MAX_ITEM_LIST_LENGTH            20                                      
+
+[Wandb] disabled for this hyperopt run
+
+[1/1] dropout_ratio=0.2
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.017600  best=0.017600  (early_stop@10, trial=39s, avg=46s/trial, total=46s, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.017600 cur_best_hr10=0.032200 cur_test_mrr20=0.313700 cur_test_hr10=0.343800 avg_epoch_time_sec=3.8938 test_eval_time_sec=0.0471 test_eval_batches_per_sec=21.2178 test_eval_targets_per_sec=57415.2369 run_best_mrr20=0.017600 run_best_hr10=0.032200 run_test_mrr20=0.313700 run_test_hr10=0.343800
+
+=================================================================
+  DONE  |  SASRec x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.017600  |  1/1 trials OK
+  Best HR@10  = 0.032200
+  Test MRR@20 = 0.313700  (best-valid checkpoint)
+  Test HR@10  = 0.343800  (best-valid checkpoint)
+  Avg epoch time = 3.894 sec/epoch
+  Final test eval = 0.047 sec | batches/s=21.218 | targets/s=57415.237
+[RUN_METRICS] best_valid_mrr20=0.017600 best_valid_hr10=0.032200 test_mrr20=0.313700 test_hr10=0.343800 avg_epoch_time_sec=3.8938 test_eval_time_sec=0.0471 test_eval_batches_per_sec=21.2178 test_eval_targets_per_sec=57415.2369
+  Total time: 0.8 min
+  Best params:
+    dropout_ratio: 0.2
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/real_final_ablation_appendix/KuaiRecLargeStrictPosV2_0.2_SASRec_special_bins_kuaireclargestrictposv2_0_2_sasrec_r01_s1_20260420_050235_762729_pid24031.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/real_final_ablation_appendix/normal/appendix_special_bins/SPECIAL/KuaiRecLargeStrictPosV2_0.2/SASRec/KuaiRecLargeStrictPosV2_0.2_SASRec_special_bins_kuaireclargestrictposv2_0_2_sasrec_r01_s1_20260420_050235_762729_pid24031.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/real_final_ablation_appendix/special/appendix_special_bins/SPECIAL/KuaiRecLargeStrictPosV2_0.2/SASRec/KuaiRecLargeStrictPosV2_0.2_SASRec_special_bins_kuaireclargestrictposv2_0_2_sasrec_r01_s1_20260420_050235_762729_pid24031_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/real_final_ablation_appendix/special/appendix_special_bins/SPECIAL/KuaiRecLargeStrictPosV2_0.2/SASRec/KuaiRecLargeStrictPosV2_0.2_SASRec_special_bins_kuaireclargestrictposv2_0_2_sasrec_r01_s1_20260420_050235_762729_pid24031_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=24031 start=2026-04-20T05:02:35 end=2026-04-20T05:03:21

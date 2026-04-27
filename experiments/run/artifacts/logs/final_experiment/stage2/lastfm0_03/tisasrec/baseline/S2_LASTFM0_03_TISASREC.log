@@ -1,0 +1,94 @@
+# job_id=S2_LASTFM0_03_TISASREC dataset=lastfm0.03 model=tisasrec stage=stage2
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_lfm_small --search-algo tpe --max-evals 10 --tune-epochs 60 --tune-patience 6 --seed 710013 --run-group final_experiment --run-axis stage2_focus_search --run-phase S2_LASTFM0_03_TISASREC model=tisasrec dataset=lastfm0.03 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=0 log_wandb=false show_progress=false ++seed=710013 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00012036,0.0001723,0.00024666,0.00035311,0.0005055] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[5e-05,0.0001,1e-05,1e-06] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[20,30,50,10] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[64,128,96,160] ++search_space_type_overrides.hidden_size=choice ++search.n_layers=[1,3,2] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[1,2,4] ++search_space_type_overrides.n_heads=choice ++search.hidden_dropout_prob=[0.1,0.15,0.2,0.12] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.attn_dropout_prob=choice ++search.time_span=[128,256,384,512] ++search_space_type_overrides.time_span=choice ++search.inner_size=[256] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.15] ++search_space_type_overrides.dropout_ratio=choice ++search.train_batch_size=[1024] ++search_space_type_overrides.train_batch_size=choice ++search.eval_batch_size=[2048] ++search_space_type_overrides.eval_batch_size=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1675559 ts=2026-04-18T09:26:50
+[UniqueChoice] enabled: dedupe/remap duplicates across 184320 finite combos
+
+=================================================================
+  Hyperopt  |  TiSASRec x lastfm0.03
+  max_evals=10  epochs=60  patience=6  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=1024/2048/2048
+  track=final_experiment  axis=stage2_focus_search  phase=S2_LASTFM0_03_TISASREC
+  search.train_batch_size=[1024]
+  search.eval_batch_size=[2048]
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, hidden_dropout_prob, hidden_size, learning_rate, n_heads, n_layers, time_span, weight_decay
+Tuned params(len>1): 9  (~184320 discrete combos)
+Tuned groups: 9
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.15, 0.2, 0.12]                    -> choice
+    learning_rate                   [0.00012036, 0.0001723, 0.00024666, 0.00035311, 0.0005055]  -> choice
+    weight_decay                    [5e-05, 0.0001, 1e-05, 1e-06]             -> choice
+  [model_core]
+    attn_dropout_prob               [0.1, 0.12, 0.15, 0.2]                    -> choice
+    hidden_size                     [64, 128, 96, 160]                        -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [20, 30, 50, 10]                          -> choice
+    n_heads                         [1, 2, 4]                                 -> choice
+    n_layers                        [1, 3, 2]                                 -> choice
+    time_span                       [128, 256, 384, 512]                      -> choice
+Fixed params(singleton/non-list): 4
+Fixed groups: 4
+  [optimization]
+    eval_batch_size                 2048                                    
+    train_batch_size                1024                                    
+  [model_core]
+    dropout_ratio                   0.15                                    
+    inner_size                      256                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/10] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.1, hidden_dropout_prob=0.2, hidden_size=64, learning_rate=0.0002467, n_heads=2, n_layers=3, time_span=512, weight_decay=1e-06
+  -> MRR@20=0.306900  best=0.306900  (early_stop@56, trial=31.6min, avg=31.8min/trial, total=31.8min, ETA=4.77h)
+[TRIAL_METRICS] cur_best_mrr20=0.306900 cur_best_hr10=0.370700 cur_test_mrr20=0.301200 cur_test_hr10=0.382000 avg_epoch_time_sec=33.8808 test_eval_time_sec=0.1463 test_eval_batches_per_sec=13.6708 test_eval_targets_per_sec=23506.9791 run_best_mrr20=0.306900 run_best_hr10=0.370700 run_test_mrr20=0.301200 run_test_hr10=0.382000
+
+[2/10] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.2, hidden_dropout_prob=0.2, hidden_size=64, learning_rate=0.0003531, n_heads=4, n_layers=2, time_span=256, weight_decay=0.0001
+  -> MRR@20=0.305300  best=0.306900  (full@60, trial=10.7min, avg=21.3min/trial, total=42.6min, ETA=2.84h)
+[TRIAL_METRICS] cur_best_mrr20=0.305300 cur_best_hr10=0.365200 cur_test_mrr20=0.299500 cur_test_hr10=0.379100 avg_epoch_time_sec=10.6489 test_eval_time_sec=0.0942 test_eval_batches_per_sec=21.2248 test_eval_targets_per_sec=36496.1097 run_best_mrr20=0.306900 run_best_hr10=0.370700 run_test_mrr20=0.301200 run_test_hr10=0.382000
+
+[3/10] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, hidden_dropout_prob=0.15, hidden_size=64, learning_rate=0.0002467, n_heads=1, n_layers=2, time_span=128, weight_decay=5e-05
+  -> MRR@20=0.306500  best=0.306900  (early_stop@57, trial=18.9min, avg=20.6min/trial, total=1.03h, ETA=2.40h)
+[TRIAL_METRICS] cur_best_mrr20=0.306500 cur_best_hr10=0.378100 cur_test_mrr20=0.301300 cur_test_hr10=0.383100 avg_epoch_time_sec=19.9060 test_eval_time_sec=0.0782 test_eval_batches_per_sec=25.5914 test_eval_targets_per_sec=44004.4280 run_best_mrr20=0.306900 run_best_hr10=0.370700 run_test_mrr20=0.301200 run_test_hr10=0.382000
+
+[4/10] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, hidden_dropout_prob=0.12, hidden_size=64, learning_rate=0.0001723, n_heads=1, n_layers=3, time_span=128, weight_decay=1e-05
+  -> MRR@20=0.302500  best=0.306900  (early_stop@59, trial=26.1min, avg=22.0min/trial, total=1.46h, ETA=2.20h)
+[TRIAL_METRICS] cur_best_mrr20=0.302500 cur_best_hr10=0.371300 cur_test_mrr20=0.293200 cur_test_hr10=0.377600 avg_epoch_time_sec=26.5495 test_eval_time_sec=0.0797 test_eval_batches_per_sec=25.1023 test_eval_targets_per_sec=43163.3878 run_best_mrr20=0.306900 run_best_hr10=0.370700 run_test_mrr20=0.301200 run_test_hr10=0.382000
+
+[5/10] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.2, hidden_dropout_prob=0.1, hidden_size=96, learning_rate=0.0005055, n_heads=2, n_layers=3, time_span=256, weight_decay=0.0001
+  -> MRR@20=0.297700  best=0.306900  (early_stop@29, trial=32.5min, avg=24.1min/trial, total=2.01h, ETA=2.01h)
+[TRIAL_METRICS] cur_best_mrr20=0.297700 cur_best_hr10=0.353900 cur_test_mrr20=0.292000 cur_test_hr10=0.355500 avg_epoch_time_sec=67.1740 test_eval_time_sec=0.1672 test_eval_batches_per_sec=11.9614 test_eval_targets_per_sec=20567.6723 run_best_mrr20=0.306900 run_best_hr10=0.370700 run_test_mrr20=0.301200 run_test_hr10=0.382000
+[TIME_BUDGET] reached limit=2.000h after 5/10 trials (elapsed=2.01h). Stopping new trials and finalizing current best.
+
+=================================================================
+  DONE  |  TiSASRec x lastfm0.03
+  Best MRR@20 = 0.306900  |  5/10 trials OK
+  Best HR@10  = 0.370700
+  Test MRR@20 = 0.301200  (best-valid checkpoint)
+  Test HR@10  = 0.382000  (best-valid checkpoint)
+  Stop reason = time_budget(2.000h) reached at 2.01h
+  Avg epoch time = 33.881 sec/epoch
+  Final test eval = 0.146 sec | batches/s=13.671 | targets/s=23506.979
+[RUN_METRICS] best_valid_mrr20=0.306900 best_valid_hr10=0.370700 test_mrr20=0.301200 test_hr10=0.382000 avg_epoch_time_sec=33.8808 test_eval_time_sec=0.1463 test_eval_batches_per_sec=13.6708 test_eval_targets_per_sec=23506.9791
+  Total time: 120.4 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 50
+    attn_dropout_prob: 0.1
+    hidden_dropout_prob: 0.2
+    hidden_size: 64
+    learning_rate: 0.00024666
+    n_heads: 2
+    n_layers: 3
+    time_span: 512
+    weight_decay: 1e-06
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/lastfm0.03_TiSASRec_s2_lastfm0_03_tisasrec_20260418_092650_765427_pid1675559.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage2_focus_search/S2/lastfm0.03/TiSASRec/lastfm0.03_TiSASRec_s2_lastfm0_03_tisasrec_20260418_092650_765427_pid1675559.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage2_focus_search/S2/lastfm0.03/TiSASRec/lastfm0.03_TiSASRec_s2_lastfm0_03_tisasrec_20260418_092650_765427_pid1675559_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage2_focus_search/S2/lastfm0.03/TiSASRec/lastfm0.03_TiSASRec_s2_lastfm0_03_tisasrec_20260418_092650_765427_pid1675559_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1675559 start=2026-04-18T09:26:50 end=2026-04-18T11:27:17

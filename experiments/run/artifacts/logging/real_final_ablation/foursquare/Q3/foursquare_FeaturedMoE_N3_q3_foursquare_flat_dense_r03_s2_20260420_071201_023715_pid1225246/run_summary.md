@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: foursquare
+- run_group: real_final_ablation
+- run_axis: q3_design_justification
+- run_phase: Q3_FOURSQUARE_FLAT_DENSE_R03_S2
+- best_mrr@20: 0.1999
+- test_mrr@20: 0.1656
+- test_hr@10: 0.3189
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/real_final_ablation/foursquare/Q3/foursquare_FeaturedMoE_N3_q3_foursquare_flat_dense_r03_s2_20260420_071201_023715_pid1225246/diag/raw/epoch_trace.csv
+- feature_ablation: 

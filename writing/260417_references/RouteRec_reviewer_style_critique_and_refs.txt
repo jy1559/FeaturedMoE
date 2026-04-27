@@ -1,0 +1,609 @@
+RouteRec revised draft review notes (reviewer-style, critical)
+
+Purpose
+- Evaluate the revised PDF as if I were a first-pass reviewer reading in order.
+- Focus on what feels stronger now, what still raises skepticism, and what to fix before submission.
+- Include additional reference candidates and links so another model/person can continue digging.
+
+==================================================
+0. One-line overall verdict
+==================================================
+
+Current impression:
+- The paper is noticeably stronger than before in framing and in making the experimental protocol explicit.
+- The central idea is now understandable: hidden states are for representation, behavior cues are for routing, and macro/mid/micro provide temporal scopes.
+- However, the paper still has several reviewer-facing risks that could seriously weaken acceptance chances unless fixed:
+  1) protocol/fairness ambiguity,
+  2) overclaiming relative to the actual win profile,
+  3) missing or unresolved citations/placeholders,
+  4) insufficiently explicit evidence that gains are not an artifact of the sessionized setup,
+  5) not enough “hard proof” for the strongest causal claims in the experiment text.
+
+If I were scoring loosely right now:
+- novelty/idea clarity: decent to good
+- writing/positioning: improved a lot
+- experimental credibility: still the main risk
+- acceptance confidence: would depend heavily on whether the protocol/fairness issues are cleaned up and whether appendix evidence is actually complete
+
+==================================================
+1. Reviewer-style reading flow: what I think while reading
+==================================================
+
+------------------------------
+1.1 Abstract / Introduction
+------------------------------
+
+What works:
+- The opening is clean. “behavioral diversity vs shared computation” is easy to understand.
+- The hidden-state-only routing critique is plausible and intuitive.
+- The behavior-guided routing pitch is readable and not too bloated.
+- Figure 1 helps quickly communicate the specialization motivation.
+
+What I would think as a reviewer:
+- “Okay, this is a seqrec MoE paper, but the key twist is not just MoE: it is behavior-guided routing with interpretable cues.”
+- “Good, but now I will expect the experiments to really prove three things:
+  (a) routing signal matters,
+  (b) stage design matters,
+  (c) behavior cues are semantically meaningful rather than decorative.”
+- “Because the intro emphasizes controllability/diagnosis, I will expect unusually strong diagnostic evidence, not just small metric gains.”
+
+Potential concern already forming:
+- The intro makes a strong conceptual case, so if the empirical gains are only mixed or small, I will scrutinize whether the interpretation is stronger than the ranking improvement.
+
+------------------------------
+1.2 Related Work
+------------------------------
+
+What works:
+- The 4-way structure is neat and easy to follow.
+- The positioning “heterogeneity as routing problem rather than only representation problem” is clear.
+
+What I would think:
+- “This is fine, but still a little too compressed. If the paper leans on session/user heterogeneity, I want at least one or two more explicit bridges to session-intent / multi-interest lines.”
+- “There is enough coverage for baseline families, but the story could still be strengthened with one more explicit session-intent baseline or reference.”
+
+What is still missing / thin:
+- Session-intent / multi-interest / long-short state modeling is mentioned, but not very concretely connected to why RouteRec is different.
+- The MoE subsection is still a bit broad; it would benefit from one sentence separating:
+  - recommendation MoE in general,
+  - seqrec-specific MoE,
+  - behavior-guided routing as your actual niche.
+
+------------------------------
+1.3 Preliminary + Method
+------------------------------
+
+What works:
+- The preliminary section is defensible; it reduces notation shock.
+- Figure 2 is much better for comprehension.
+- The method structure is readable: overview -> features -> routing -> stage instantiation -> objective.
+- The routing/representation separation is clear.
+- The four cue families are named in a way that is intuitive enough for readers.
+
+What I would think:
+- “I understand the architecture. Good.”
+- “But I now want harder specifics: what exactly is in A(.), how many dimensions, what is shared vs stage-specific, and how sensitive is performance to those choices?”
+- “The stages are understandable semantically, but the exact reason macro and mid share the same router form while only differing in granularity may still feel a bit under-argued.”
+
+Main reviewer concern here:
+- The method text says the architecture uses one unified scalar-group conditional router across all stages. That is good for elegance, but it also weakens the feeling that stage design itself is deeply principled unless the experiments prove stage-specific necessity very convincingly.
+- In other words: the paper currently explains why multiple scopes make sense, but it still needs stronger empirical proof that macro/mid/micro are not just a nice decomposition narrative.
+
+Another concern:
+- The behavior features are described at a high level only. That is okay for main text, but then appendix must be concrete enough that a skeptical reviewer feels the cue bank is not hand-wavy.
+- Right now, if appendix feature definitions are not explicit enough, a reviewer may think: “This is an interpretable-cues paper that does not fully specify the cues.”
+
+------------------------------
+1.4 Experimental setup
+------------------------------
+
+This is where reviewer skepticism spikes.
+
+What improved:
+- The paper now explicitly says this is a “sessionized temporal evaluation protocol assembled from established practices” rather than pretending it is canonical.
+- That is the right tone.
+- Explicitly marking KuaiRec and LastFM as sampled subsets is good and honest.
+- Explicitly saying “seen-target view” is the main comparison is also better than hiding it.
+
+What I would immediately notice negatively:
+- There are still unresolved placeholders like “[? ? ? ]”, “[31? ]”, etc.
+- This is a major professionalism issue. It signals the experiment section is still unfinished.
+- Appendix also still has missing citations and even “Table ??” in the objective section.
+- A reviewer will absolutely notice this and may infer that the protocol justification is not fully nailed down.
+
+What I would think in substance:
+- “Fine, they are not claiming canonical seqrec protocol. Good.”
+- “But if this is a custom sessionized protocol, fairness becomes the first question.”
+- “Do all baselines receive comparable information?”
+- “Does RouteRec benefit uniquely from cross-session macro cues while baselines effectively operate on only current-session prefixes?”
+- “If yes, then the comparison may not isolate routing quality; it may partly reflect information asymmetry.”
+
+This is probably the single biggest methodological risk.
+
+Why this matters:
+- RouteRec explicitly uses macro past-session signals.
+- If baselines are fed only current-session examples after sessionization, they may be structurally disadvantaged.
+- Even if every model is trained on the same processed files, the information usage is not necessarily comparable.
+
+If I were a reviewer, I would want one of the following:
+1) a strong explicit statement that all baselines also receive the same available history in a comparable serialized form, or
+2) a second comparison block where strong baselines are history-augmented in some simple but fair way, or
+3) a very clear problem-definition argument that the benchmark is intentionally “session-local prediction with optional cross-session side cues”, and thus the baseline family is being evaluated under that exact problem.
+
+Without that, I would keep thinking:
+- “Maybe RouteRec wins partly because the benchmark favors its design.”
+
+Other setup concerns:
+- Using sampled subsets for KuaiRec and LastFM is honest, but still risky. I would wonder:
+  - Why exactly 20% and 3%?
+  - Are results stable across different random samples/seeds?
+  - Are these subsets stratified or arbitrary?
+  - Could RouteRec’s gains be sample-sensitive?
+- The main text says full details are in Appendix A, but then Appendix A also still has unresolved placeholders.
+- The held-out cleanup / stratification / merge-resplit procedure is nontrivial. A reviewer may think it is too complex unless you explain very clearly why each step exists.
+
+------------------------------
+1.5 Main results
+------------------------------
+
+What works:
+- Table 1 is cleaner now.
+- “Seen-target test results under the sessionized temporal protocol” is a much better caption than pretending it is generic seqrec.
+- Avg. Rank is a nice compact summary.
+
+What I would think when reading the numbers:
+- “The method clearly helps on Beauty and somewhat on KuaiRec, is competitive on Retail Rocket, but is not the best on ML-1M and not clearly dominant on Foursquare/LastFM.”
+- “So this is not a universal across-the-board win story.”
+- “The paper should therefore avoid sounding like it consistently improves everywhere.”
+
+This means the narrative must be more careful.
+
+Good version of the claim:
+- RouteRec helps most in behaviorally dynamic / heterogeneous / concentrated regimes.
+- It is competitive elsewhere.
+
+Risky/overstated version of the claim:
+- RouteRec broadly improves seqrec across datasets.
+
+A skeptical reviewer will notice:
+- ML-1M is a pretty visible negative case.
+- LastFM is basically competitive, not clearly better.
+- Retail Rocket is tiny gain territory.
+
+So the paper should proactively own this pattern and interpret it:
+- Maybe behavior-guided routing is strongest when session-local behavioral regime shifts matter.
+- Maybe in very long, preference-stable settings the advantage narrows or even disappears.
+
+If you say this first, reviewers may accept the nonuniform result profile much more easily.
+
+Another issue:
+- Avg. Rank is helpful, but some reviewers dislike rank summaries over many correlated metrics.
+- Keep it, but do not rely on it too heavily.
+- Consider adding a small “wins / second-best / competitive” count or average relative improvement summary.
+
+Strong recommendation:
+- Add significance testing or at least repeated-run mean±std for main methods, especially on datasets where margins are tiny.
+- Otherwise a reviewer may say the results on Retail Rocket / Foursquare / LastFM are within noise.
+
+------------------------------
+1.6 Routing-control, staged-design, and cue ablations
+------------------------------
+
+What works:
+- These are exactly the right experiments to include.
+- The experiment structure matches the paper’s causal story:
+  routing signal -> stage design -> cue sufficiency.
+
+What I would think critically:
+- “Good experiment categories, but the text is still more interpretive than evidentiary.”
+- Example: “Across all three views, the same pattern is expected.” This phrasing is weak. It sounds like the paper is telling me what should happen, not what actually happened.
+- The text needs sharper, more concrete takeaways with actual effect sizes or at least specific directional findings.
+
+For example, instead of:
+- “the same pattern is expected”
+use something like:
+- “Removing macro causes the largest average drop on X/Y datasets, while dense replacement fails to match the full staged design, confirming that gains come from scope-specific routing rather than merely more experts.”
+
+Likewise for cue ablation:
+- Right now the text says removing category/time lowers performance and sequence-only still retains substantial gain.
+- That is good, but a reviewer may want exact retained proportion or average delta.
+- Quantify it.
+
+------------------------------
+1.7 Appendix
+------------------------------
+
+What works:
+- The appendix direction is good. It now tries to make the protocol explicit rather than sweeping it under the rug.
+- Dataset descriptions by signal availability are useful.
+
+What still hurts a lot:
+- unresolved placeholders in Appendix A
+- “Table ??” in objective section
+- appendix sections that describe what the figure “is intended to show” rather than actually reporting a completed figure/table
+
+As a reviewer, unfinished appendix artifacts damage confidence disproportionately. They make me wonder whether some of the promised evidence is still aspirational.
+
+==================================================
+2. Biggest reviewer risks, ranked by severity
+==================================================
+
+[Risk 1] Baseline fairness under the sessionized protocol
+- This is the most serious issue.
+- RouteRec uses macro past-session signals.
+- It is not yet fully clear whether baselines get equivalent access to past-session information or whether they are effectively evaluated on weaker information.
+- Even if the protocol is shared, the informational comparison may not be apples-to-apples.
+
+What to do:
+- In main text or appendix, explicitly state what each baseline sees.
+- Ideally add one fairer auxiliary comparison:
+  - history-augmented SASRec / GRU4Rec / TiSASRec by concatenating or packing prior sessions into a capped history sequence, OR
+  - a “session-only” comparison family vs a “history-available” comparison family.
+- If you cannot add new baselines, at minimum clearly argue the problem setting: “current-session prediction under session-aware side cues,” and state the comparison scope honestly.
+
+[Risk 2] Unfinished placeholders / missing citations / incomplete appendix references
+- This is an immediate red flag.
+- The experiment section still has citation placeholders and the appendix has unresolved placeholders and “Table ??”.
+- Reviewers may treat this as sloppiness in the most important section.
+
+What to do:
+- Fix all placeholders before anything else.
+- This is zero-science-cost, high-review-impact work.
+
+[Risk 3] Overclaiming relative to mixed result profile
+- The gains are real in some datasets, but the story is not “wins everywhere.”
+- ML-1M is a visible miss.
+- LastFM/Foursquare are more like competitive than clearly superior.
+
+What to do:
+- Reframe the main result story around regime dependence.
+- Explicitly say RouteRec is strongest when behavior regimes are dynamic / concentrated / session-sensitive.
+- Treat stable long-history domains as boundary conditions, not embarrassments.
+
+[Risk 4] Sessionized benchmark protocol is still complex and may feel custom-built
+- The paper is now honest that the protocol is assembled from prior components, which is good.
+- But the more complex the split/cleanup pipeline is, the more a reviewer wants proof it is not over-engineered to help the method.
+
+What to do:
+- Add a small appendix pseudo-code or bullet pipeline.
+- Add protocol robustness evidence if possible:
+  - alternate threshold sanity check,
+  - seen-target vs all-target supplementary table,
+  - maybe one simpler split variant if feasible.
+
+[Risk 5] The strongest claims need harder quantitative support
+- “behavior-consistent expert usage”, “not simple capacity scaling”, “lightweight cues are enough” are plausible but need more explicit numbers.
+- Right now some text sounds a little too narrative.
+
+What to do:
+- In main text, quantify at least once per major claim.
+- Examples:
+  - average gain of behavior-only router over hidden-only router,
+  - average drop after removing macro,
+  - retained fraction under sequence-only cues,
+  - entropy/effective expert count summary.
+
+==================================================
+3. Concrete improvement plan before submission
+==================================================
+
+Priority A: must-fix
+- Remove all “[? ? ?]”, “[31?]”, “Table ??” placeholders.
+- Make sure appendix actually contains the promised completed tables/figures.
+- Tighten claims in 5.2 so they match the actual results.
+
+Priority B: fairness / protocol defense
+- Add one explicit paragraph titled mentally as “Fairness under the sessionized protocol”.
+- Spell out:
+  - what each baseline sees,
+  - whether past sessions are available to baselines,
+  - why the comparison is still meaningful.
+- If possible, add one history-augmented baseline family or at least one strong representative baseline with past-history access.
+
+Priority C: stronger result interpretation
+- Add a short paragraph on failure/boundary cases:
+  - Why does RouteRec underperform on ML-1M?
+  - Why are gains narrow on some datasets?
+- This actually increases credibility.
+
+Priority D: more quantitative ablation writing
+- Replace “expected pattern” language with direct findings.
+- Give concrete average deltas wherever possible.
+
+Priority E: appendix evidence expansion
+Add the following if not already present:
+- exact feature family definitions or at least a concise per-family example table
+- full held-out cleanup procedure as algorithm-like bullets
+- unseen-target rates per dataset
+- target-repeat ratio, popularity bucket distribution, session-length distribution
+- sampled-subset rationale and, ideally, sample-seed stability note
+- one protocol robustness table if feasible
+
+==================================================
+4. What I would rewrite in the experiment narrative
+==================================================
+
+------------------------------
+4.1 Main setting paragraph: recommended tone
+------------------------------
+
+Good tone:
+- “We evaluate under a sessionized temporal protocol assembled from established session-based and session-aware benchmarking components, because our goal is to study behavior-guided routing at the session level rather than to claim a new canonical raw-sequence benchmark.”
+
+Why this works:
+- honest
+- defensible
+- narrows the claim to the actual problem setting
+
+------------------------------
+4.2 Main results paragraph: recommended tone
+------------------------------
+
+Recommended structure:
+1) State the overall pattern honestly.
+2) Interpret where it helps most.
+3) Separate “competitive elsewhere” from “wins strongly here.”
+
+Suggested shape:
+- “RouteRec is strongest on Beauty and KuaiRec, remains competitive on Retail Rocket, Foursquare, and LastFM, and is weaker on ML-1M. This pattern suggests that behavior-guided routing is most beneficial when short-horizon regime variation is pronounced, while its advantage narrows in more preference-stable long-history settings.”
+
+This is much stronger than trying to make everything sound positive.
+
+------------------------------
+4.3 Results-analysis paragraph that is currently missing
+------------------------------
+
+Add a paragraph like this:
+- “Because the protocol is sessionized and temporally split, the reported numbers should be interpreted as performance under a behavior-sensitive session-aware benchmark rather than as directly comparable to canonical raw-sequence results reported elsewhere. All methods are compared under the same processed protocol; the contribution of RouteRec is therefore in how it uses the available behavior structure, not in access to a different evaluation target.”
+
+But only say the last sentence if it is actually true for baseline information access.
+
+------------------------------
+4.4 Appendix protocol paragraph: make it more algorithmic
+------------------------------
+
+Right now Appendix A is better than before, but still a bit prose-heavy.
+
+Better form:
+Step 1. Sort interactions by timestamp.
+Step 2. Reconstruct sessions with dataset-specific inactivity threshold.
+Step 3. Iteratively prune sessions with length < 5 and items with support < 3 until convergence.
+Step 4. Sort sessions by session start time.
+Step 5. Split earliest 70% to train, treat remaining 30% as held-out tail.
+Step 6. Build validation/test from held-out tail under chronology-preserving cleanup.
+Step 7. Report seen-target metrics as main view; keep unseen-target statistics separately.
+
+This makes the protocol feel reproducible rather than ad hoc.
+
+==================================================
+5. Specific criticisms by paper section
+==================================================
+
+Introduction
+- Stronger than before.
+- Still could use one more concrete sentence that foreshadows the exact empirical thesis:
+  “We expect the gains to concentrate in regimes with stronger short-horizon variation.”
+
+Related work
+- Good structure.
+- Still slightly too concise on session-intent / multi-interest lines.
+- Could add NARM or STAMP explicitly in text if page budget allows.
+
+Method
+- Good readability.
+- Would benefit from a tiny table of cue examples in appendix.
+- If the feature families are core to interpretability, specify them a bit more concretely.
+
+Experiments setup
+- Strongly improved, but still the most vulnerable section.
+- Needs all placeholder references fixed.
+- Needs explicit fairness statement.
+- Needs subset rationale.
+
+Main results
+- Table is fine.
+- Avg. Rank is okay but should not bear too much argumentative weight.
+- Add significance or multi-run variability if possible.
+
+Ablations
+- Right categories, but write findings more concretely.
+- Avoid “expected” language.
+
+Appendix
+- Direction is correct.
+- Must remove unfinished artifacts.
+- Add protocol pseudo-code and maybe one robustness table.
+
+==================================================
+6. Extra experiments / analyses that would buy the most reviewer trust
+==================================================
+
+If you can only add one thing:
+1) fairness analysis on baseline access to past-session information
+
+If you can add two things:
+2) seen-target vs all-target (or unseen-target slice) supplementary table
+
+If you can add three things:
+3) one protocol robustness check
+   - maybe alternative threshold,
+   - or a simpler split,
+   - or different sample seed for KuaiRec/LastFM subset
+
+If you can add four things:
+4) significance / mean±std over multiple seeds for main methods
+
+If you can add five things:
+5) one more session-intent-style baseline or at least reference discussion (STAMP/NARM)
+
+==================================================
+7. References that are especially useful now
+==================================================
+
+A. Sessionization / session-aware protocol / general framing
+
+1) A Survey on Session-Based Recommender Systems
+- Wang et al., ACM Computing Surveys 2021
+- why useful: broad conceptual grounding for session-based recommendation and session construction discussion
+- DOI: 10.1145/3465401
+- link: https://doi.org/10.1145/3465401
+- accessible metadata page: https://researchers.mq.edu.au/en/publications/a-survey-on-session-based-recommender-systems/
+
+2) Session-aware Recommendation: A Surprising Quest for the State-of-the-art
+- Latifi, Mauro, Jannach, Information Sciences 2021
+- why useful: benchmark/evaluation methodology discussion in session-aware recommendation; useful for tone and protocol defensibility
+- DOI: 10.1016/j.ins.2021.05.048
+- link: https://doi.org/10.1016/j.ins.2021.05.048
+- open page: https://www.sciencedirect.com/science/article/pii/S0020025521005089
+- mirror/metadata: https://iris.unito.it/handle/2318/1793007
+
+3) Personalizing Session-based Recommendations with Hierarchical Recurrent Neural Networks
+- Quadrana et al., RecSys 2017
+- why useful: concrete session-aware setup using cross-session information; good precedent for session-aware personalization and held-out/session protocol discussion
+- DOI: 10.1145/3109859.3109896
+- link: https://doi.org/10.1145/3109859.3109896
+- metadata: https://dblp.org/rec/conf/recsys/QuadranaKHC17
+- accessible page: https://www.catalyzex.com/paper/personalizing-session-based-recommendations
+
+B. Leakage / split sensitivity / evaluation protocol credibility
+
+4) A Critical Study on Data Leakage in Recommender System Offline Evaluation
+- Ji et al., TOIS 2023
+- why useful: strongest citation for chronology-preserving split and explicit anti-leakage reasoning
+- DOI: 10.1145/3569930
+- accessible summary: https://www.emergentmind.com/papers/2010.11060
+- metadata pages:
+  https://researchr.org/publication/JiS0L23
+  https://www.researchgate.net/publication/364941004_A_Critical_Study_on_Data_Leakage_in_Recommender_System_Offline_Evaluation
+
+5) Time to Split: Exploring Data Splitting Strategies for Offline Evaluation of Sequential Recommenders
+- Gusak et al., RecSys 2025
+- why useful: seqrec-specific split sensitivity; very good for justifying why protocol details matter
+- DOI: 10.1145/3705328.3748164
+- arXiv / summary pages:
+  https://papers.cool/arxiv/2507.16289
+  https://github.com/monkey0head/time-to-split
+- alternative metadata page:
+  https://publications.hse.ru/en/view/1122526709
+
+C. Session-intent / heterogeneous state references to strengthen related work
+
+6) Neural Attentive Session-based Recommendation (NARM)
+- Li et al., CIKM 2017
+- why useful: classic session-intent / main-purpose paper; helps connect “session mission” story to prior art
+- DOI: 10.1145/3132847.3132926
+- link: https://doi.org/10.1145/3132847.3132926
+- accessible metadata:
+  https://ir.webis.de/anthology/2017.cikm_conference-2017.145/
+  https://cir.nii.ac.jp/crid/1360564063984647296
+
+7) STAMP: Short-Term Attention/Memory Priority Model for Session-Based Recommendation
+- Liu et al., KDD 2018
+- why useful: direct session-based intent emphasis; useful if you want one more session baseline or explicit related-work mention
+- DOI: 10.1145/3219819.3219950
+- link: https://doi.org/10.1145/3219819.3219950
+
+8) Hierarchical Gating Networks for Sequential Recommendation (HGN)
+- Ma et al., KDD 2019
+- why useful: long-term / short-term state decomposition line; useful for heterogeneity discussion
+- DOI: 10.1145/3292500.3330984
+- link: https://doi.org/10.1145/3292500.3330984
+- metadata:
+  https://dblp.org/rec/conf/kdd/MaKL19
+  https://liner.com/review/hierarchical-gating-networks-for-sequential-recommendation
+
+9) Multi-Interest Network with Dynamic Routing for Recommendation at Tmall (MIND)
+- Li et al., CIKM 2019
+- why useful: multi-interest modeling; good support for “one representation is often insufficient” narrative
+- DOI: 10.1145/3357384.3357814
+- link: https://doi.org/10.1145/3357384.3357814
+- metadata:
+  https://ir.webis.de/anthology/2019.cikm_conference-2019.326/
+  https://researchportal.hkust.edu.hk/en/publications/multi-interest-network-with-dynamic-routing-for-recommendation-at-2/
+
+10) Controllable Multi-Interest Framework for Recommendation (ComiRec)
+- Cen et al., KDD 2020
+- why useful: multi-interest / controllable representation; helps enrich heterogeneous-state related work
+- DOI: 10.1145/3394486.3403344
+- link: https://doi.org/10.1145/3394486.3403344
+- KDD page: https://www.kdd.org/kdd2020/accepted-papers/view/controllable-multi-interest-framework-for-recommendation.html
+- paper summary: https://www.catalyzex.com/paper/controllable-multi-interest-framework-for
+
+D. Expert specialization / conditional computation references for related work polishing
+
+11) Modeling Task Relationships in Multi-Task Learning with Multi-Gate Mixture-of-Experts (MMoE)
+- Ma et al., KDD 2018
+- why useful: standard recommendation-side MoE reference
+- DOI: 10.1145/3219819.3220007
+- link: https://doi.org/10.1145/3219819.3220007
+
+12) Progressive Layered Extraction (PLE)
+- Tang et al., RecSys 2020
+- why useful: another classic recommendation-side conditional-expert reference
+- DOI: 10.1145/3383313.3412236
+- link: https://doi.org/10.1145/3383313.3412236
+
+13) PEPNet: Parameter and Embedding Personalized Network for Infusing with Personalized Prior Information
+- Chang et al., KDD 2023
+- why useful: personalized gating / parameter adaptation in recommendation-style settings; useful adjacent citation if you discuss explicit control signals
+- DOI: 10.1145/3580305.3599884
+- link: https://doi.org/10.1145/3580305.3599884
+- accessible pages:
+  https://openreview.net/forum?id=trPjVZiuIN
+  https://www.kdd.org/kdd2023/wp-content/uploads/2023/08/toc.html
+
+14) AdaSparse: Learning Adaptively Sparse Structures for Multi-Domain Click-Through Rate Prediction
+- Yang et al., CIKM 2022
+- why useful: domain-aware sparse structure / adaptive sparsity; more industrial/adjacent than seqrec-specific, but useful if you want broader conditional computation context
+- DOI: 10.1145/3511808.3557541
+- link: https://doi.org/10.1145/3511808.3557541
+- summary pages:
+  https://www.catalyzex.com/paper/adasparse-learning-adaptively-sparse
+  https://colab.ws/articles/10.1145%2F3511808.3557541
+
+==================================================
+8. References I would prioritize for insertion vs optional ones
+==================================================
+
+Highest-priority insertion candidates:
+- Ji et al. (data leakage / chronology)
+- Gusak et al. (seqrec split sensitivity)
+- Latifi et al. (session-aware benchmarking/evaluation)
+- Quadrana et al. (cross-session/session-aware precedent)
+- NARM or STAMP (session-intent precedent)
+
+Second-tier / optional depending on page budget:
+- HGN
+- MIND
+- ComiRec
+- PEPNet
+- AdaSparse
+
+==================================================
+9. Minimal patch list if time is very limited
+==================================================
+
+If only a small amount of time remains, do these in order:
+
+1) fix all placeholders and missing references
+2) add explicit fairness statement about what baselines see
+3) soften main-result claims to reflect mixed dataset profile
+4) add one paragraph on why ML-1M / LastFM are weaker cases for RouteRec
+5) make ablation text quantitative rather than predictive (“expected” -> actual findings)
+6) add protocol pseudo-code or numbered bullet pipeline in appendix
+7) if possible, add seen-target vs all-target supplementary table
+
+==================================================
+10. Bottom line
+==================================================
+
+This version is clearly better. The main idea is now understandable, and the experimental protocol is no longer hidden.
+
+But if I were a reviewer, I would still be most worried about whether the sessionized protocol and macro cross-session cues make the comparison slightly favorable to RouteRec unless baseline access/fairness is spelled out very carefully.
+
+So the best next move is not to keep polishing prose in the abstract/introduction. The best next move is to make the experimental section feel airtight:
+- finish all citations/placeholders,
+- clarify fairness,
+- reduce overclaiming,
+- and add one or two robustness/fairness checks that make skepticism expensive.
+

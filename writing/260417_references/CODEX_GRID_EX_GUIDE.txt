@@ -1,0 +1,67 @@
+RouteRec tuning guide for the experiment-focused agent
+
+Purpose
+- The current paper should defend the main result table by making tuning protocol explicit.
+- The target is not an exhaustive retuning campaign, but a fair and reviewer-defensible model-selection protocol under the current sessionized temporal benchmark.
+- The writing draft now assumes a predefined discrete grid or candidate-set search, with the same validation files, early stopping, and final selection rule for all models.
+
+What the writing draft now claims
+- Every compared model should be tuned within a predefined model-specific discrete candidate set.
+- The allowed values should be fixed before the final comparison table is produced.
+- Adaptive search is acceptable for efficiency, but only over those predeclared values.
+- Final reporting should use the configuration with the highest mean validation score over the nine reported metrics.
+- RouteRec may receive a slightly broader documented candidate set if it has more routing-specific hyperparameters, but this needs to be explicit and not open-ended.
+
+What to do next
+1. Inspect the already completed result artifacts and extract the ranges that were actually explored for each model family.
+2. Compress those ranges into a small, defensible discrete candidate set per model.
+3. Keep a shared core across models where possible: learning rate, weight decay or regularization, dropout, hidden size, layers, and optionally batch size.
+4. Add only 1 to 3 model-specific controls per baseline family.
+5. For RouteRec, likely controls are: experts, groups, router temperature, consistency weight, and z-loss weight.
+6. Preserve the current paper selection rule: mean validation score over the nine reported metrics.
+
+Practical recommendation
+- Treat the final protocol as a controlled grid-style search.
+- If implementation uses Hyperopt or TPE, the candidate values should still come from a fixed discrete set.
+- Do not present this as broad black-box retuning; present it as a budgeted search over a predeclared candidate table.
+
+Suggested placeholder grids
+- These are only writing-friendly placeholders. Replace them after checking the existing artifacts.
+
+Common dimensions
+- learning rate: [1e-4, 3e-4, 5e-4, 1e-3, 3e-3]
+- weight decay or reg weight: [0, 1e-6, 1e-5, 1e-4]
+- dropout: [0.1, 0.2, 0.3, 0.5]
+- hidden size: [64, 128, 256]
+- layers: [1, 2, 3] when supported
+- batch size: [256, 512] only if it is not too entangled with throughput or memory effects
+
+Model-family notes
+- GRU4Rec: hidden size, layers, dropout, max length
+- SASRec: hidden size, heads, layers, max length, dropout
+- TiSASRec: SASRec-like controls plus time span
+- FEARec / DuoRec / BSARec / FAME / DIF-SR / FDSA: keep only the 1 to 3 most performance-sensitive architecture-specific controls
+- RouteRec: experts, groups, router temperature, consistency weight, z-loss weight, and maybe feature projection size if it was materially searched
+
+Budget recommendation
+- Keep the budget modest and comparable.
+- One reasonable placeholder protocol is:
+  - stage 1: 20 to 30 trials per model-dataset pair over the fixed candidate sets
+  - stage 2: rerun top 3 validation configurations with 2 to 3 seeds
+  - stage 3: select the best mean-validation configuration and report test once
+- If exact symmetry is not feasible, document where RouteRec receives a slightly larger budget and why.
+
+What outputs are needed for the paper
+1. A model-specific search-space table for the appendix.
+2. A selected-configuration table for the appendix.
+3. A short note on the search budget and whether adaptive search was used over the fixed candidate sets.
+4. A refreshed main result table using the validation-selected configurations.
+
+What not to do
+- Do not leave the impression that baselines were run with paper defaults while RouteRec was substantially retuned.
+- Do not present a vague "we tuned all models" sentence without a search-space table.
+- Do not define the candidate sets after looking only at whichever settings make RouteRec look best.
+
+Important caveat
+- The exact grid should be finalized only after inspecting the already completed artifact directories and previous tuning runs.
+- The goal is to choose a small set of candidate values that reflects what has already been explored and what remains reasonable under the current protocol, not to invent a huge new search from scratch.

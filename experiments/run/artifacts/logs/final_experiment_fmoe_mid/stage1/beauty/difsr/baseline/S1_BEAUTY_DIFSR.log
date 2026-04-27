@@ -1,0 +1,725 @@
+# job_id=S1_BEAUTY_DIFSR dataset=beauty model=difsr stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_ab --search-algo tpe --max-evals 48 --tune-epochs 100 --tune-patience 10 --seed 610004 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_BEAUTY_DIFSR model=difsr dataset=beauty eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=3 log_wandb=false show_progress=false ++seed=610004 ++search.learning_rate=[0.00222862,0.00249992,0.00280426,0.00314564,0.00352858,0.00395815,0.00444] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-05,5e-05,7.02e-05,0.0001,0.000114] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[96,128,160,192,224] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[96,128,160,192,224] ++search_space_type_overrides.embedding_size=choice ++search.num_layers=[1,2,3,4] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,2,4,8] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.05,0.1,0.12,0.15,0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.05,0.08,0.1,0.12,0.15] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[96,128,160,192,224] ++search_space_type_overrides.attribute_hidden_size=choice ++search.fusion_type=["gate","concat","sum"] ++search_space_type_overrides.fusion_type=choice ++search.lambda_attr=[0.08,0.1,0.12,0.14,0.16] ++search_space_type_overrides.lambda_attr=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.use_attribute_predictor=[true] ++search_space_type_overrides.use_attribute_predictor=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1592746 ts=2026-04-17T15:46:09
+[UniqueChoice] enabled: dedupe/remap duplicates across 105000000 finite combos
+
+=================================================================
+  Hyperopt  |  DIFSR x beauty
+  max_evals=48  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=4096/8192/8192
+  track=final_experiment  axis=stage1_broad_search  phase=S1_BEAUTY_DIFSR
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, attribute_hidden_size, embedding_size, fusion_type, hidden_dropout_prob, hidden_size, lambda_attr, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 12  (~105000000 discrete combos)
+Tuned groups: 12
+  [optimization]
+    hidden_dropout_prob             [0.05, 0.1, 0.12, 0.15, 0.2]              -> choice
+    learning_rate                   [0.00222862, 0.00249992, 0.00280426, 0.00314564, 0.00352858, 0.00395815, 0.00444]  -> choice
+    weight_decay                    [1e-05, 5e-05, 7.02e-05, 0.0001, 0.000114]  -> choice
+  [model_core]
+    attn_dropout_prob               [0.05, 0.08, 0.1, 0.12, 0.15]             -> choice
+    embedding_size                  [96, 128, 160, 192, 224]                  -> choice
+    hidden_size                     [96, 128, 160, 192, 224]                  -> choice
+    num_heads                       [1, 2, 4, 8]                              -> choice
+    num_layers                      [1, 2, 3, 4]                              -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30, 50]                          -> choice
+    attribute_hidden_size           [96, 128, 160, 192, 224]                  -> choice
+    fusion_type                     ['gate', 'concat', 'sum']                 -> choice
+    lambda_attr                     [0.08, 0.1, 0.12, 0.14, 0.16]             -> choice
+Fixed params(singleton/non-list): 4
+Fixed groups: 4
+  [model_core]
+    dropout_ratio                   0.12                                    
+    inner_size                      320                                     
+  [other]
+    selected_features               ['category']                            
+    use_attribute_predictor         True                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.15, attribute_hidden_size=160, embedding_size=160, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=128, lambda_attr=0.16, learning_rate=0.002804, num_heads=8, num_layers=1, weight_decay=0.0001
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x160 and 128x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x160 and 128x26)
+
+[2/48] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=224, embedding_size=160, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=224, lambda_attr=0.1, learning_rate=0.003529, num_heads=8, num_layers=1, weight_decay=5e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x160 and 224x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x160 and 224x26)
+
+[3/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.08, attribute_hidden_size=224, embedding_size=96, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=192, lambda_attr=0.16, learning_rate=0.002804, num_heads=1, num_layers=1, weight_decay=1e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x96 and 192x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x96 and 192x26)
+
+[4/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.08, attribute_hidden_size=96, embedding_size=160, fusion_type=concat, hidden_dropout_prob=0.2, hidden_size=160, lambda_attr=0.1, learning_rate=0.002229, num_heads=8, num_layers=2, weight_decay=0.0001
+  -> MRR@20=0.011300  best=0.011300  (early_stop@27, trial=20s, avg=8s/trial, total=33s, ETA=6.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.011300 cur_best_hr10=0.018100 cur_test_mrr20=0.005900 cur_test_hr10=0.017200 avg_epoch_time_sec=0.7023 test_eval_time_sec=0.0150 test_eval_batches_per_sec=66.4950 test_eval_targets_per_sec=39697.5044 run_best_mrr20=0.011300 run_best_hr10=0.018100 run_test_mrr20=0.005900 run_test_hr10=0.017200
+
+[5/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=224, embedding_size=192, fusion_type=concat, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.14, learning_rate=0.002229, num_heads=4, num_layers=2, weight_decay=0.0001
+  -> MRR@20=0.013700  best=0.013700  (early_stop@27, trial=29s, avg=13s/trial, total=1.1min, ETA=9.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.013700 cur_best_hr10=0.030100 cur_test_mrr20=0.010200 cur_test_hr10=0.031500 avg_epoch_time_sec=1.0248 test_eval_time_sec=0.0152 test_eval_batches_per_sec=65.8757 test_eval_targets_per_sec=39327.7758 run_best_mrr20=0.013700 run_best_hr10=0.030100 run_test_mrr20=0.010200 run_test_hr10=0.031500
+
+[6/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=96, embedding_size=192, fusion_type=concat, hidden_dropout_prob=0.12, hidden_size=192, lambda_attr=0.08, learning_rate=0.003958, num_heads=8, num_layers=3, weight_decay=5e-05
+  -> MRR@20=0.014800  best=0.014800  (early_stop@22, trial=26s, avg=15s/trial, total=1.5min, ETA=10.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.014800 cur_best_hr10=0.020100 cur_test_mrr20=0.009100 cur_test_hr10=0.011500 avg_epoch_time_sec=1.1216 test_eval_time_sec=0.0259 test_eval_batches_per_sec=38.6629 test_eval_targets_per_sec=23081.7401 run_best_mrr20=0.014800 run_best_hr10=0.020100 run_test_mrr20=0.009100 run_test_hr10=0.011500
+
+[7/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=192, embedding_size=96, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.12, learning_rate=0.003958, num_heads=8, num_layers=4, weight_decay=0.0001
+  -> MRR@20=0.016800  best=0.016800  (early_stop@17, trial=25s, avg=17s/trial, total=2.0min, ETA=11.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.016800 cur_best_hr10=0.034100 cur_test_mrr20=0.010900 cur_test_hr10=0.020100 avg_epoch_time_sec=1.3723 test_eval_time_sec=0.0177 test_eval_batches_per_sec=56.4152 test_eval_targets_per_sec=33679.8995 run_best_mrr20=0.016800 run_best_hr10=0.034100 run_test_mrr20=0.010900 run_test_hr10=0.020100
+
+[8/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.05, attribute_hidden_size=96, embedding_size=160, fusion_type=concat, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.14, learning_rate=0.0025, num_heads=4, num_layers=2, weight_decay=0.000114
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x160 and 192x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x160 and 192x26)
+
+[9/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=128, embedding_size=96, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=160, lambda_attr=0.14, learning_rate=0.003958, num_heads=8, num_layers=3, weight_decay=1e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x96 and 160x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x96 and 160x26)
+
+[10/48] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.12, attribute_hidden_size=224, embedding_size=192, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=128, lambda_attr=0.12, learning_rate=0.002229, num_heads=8, num_layers=3, weight_decay=1e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x192 and 128x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x192 and 128x26)
+
+[11/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.05, attribute_hidden_size=224, embedding_size=96, fusion_type=gate, hidden_dropout_prob=0.12, hidden_size=96, lambda_attr=0.16, learning_rate=0.002229, num_heads=2, num_layers=2, weight_decay=7.02e-05
+  -> MRR@20=0.005900  best=0.016800  (early_stop@21, trial=17s, avg=13s/trial, total=2.4min, ETA=8.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.005900 cur_best_hr10=0.018100 cur_test_mrr20=0.002800 cur_test_hr10=0.008600 avg_epoch_time_sec=0.7763 test_eval_time_sec=0.0155 test_eval_batches_per_sec=64.6850 test_eval_targets_per_sec=38616.9379 run_best_mrr20=0.016800 run_best_hr10=0.034100 run_test_mrr20=0.010900 run_test_hr10=0.020100
+
+[12/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.12, attribute_hidden_size=160, embedding_size=224, fusion_type=concat, hidden_dropout_prob=0.05, hidden_size=96, lambda_attr=0.12, learning_rate=0.003958, num_heads=4, num_layers=1, weight_decay=0.000114
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x224 and 96x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x224 and 96x26)
+
+[13/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.05, attribute_hidden_size=160, embedding_size=224, fusion_type=gate, hidden_dropout_prob=0.12, hidden_size=96, lambda_attr=0.16, learning_rate=0.002804, num_heads=8, num_layers=4, weight_decay=5e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x224 and 96x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x224 and 96x26)
+
+[14/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=224, embedding_size=160, fusion_type=concat, hidden_dropout_prob=0.2, hidden_size=160, lambda_attr=0.16, learning_rate=0.002229, num_heads=2, num_layers=3, weight_decay=1e-05
+  -> MRR@20=0.012500  best=0.016800  (early_stop@22, trial=23s, avg=13s/trial, total=3.0min, ETA=7.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.012500 cur_best_hr10=0.030100 cur_test_mrr20=0.006300 cur_test_hr10=0.017200 avg_epoch_time_sec=0.9884 test_eval_time_sec=0.0169 test_eval_batches_per_sec=59.2566 test_eval_targets_per_sec=35376.2184 run_best_mrr20=0.016800 run_best_hr10=0.034100 run_test_mrr20=0.010900 run_test_hr10=0.020100
+
+[15/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, attribute_hidden_size=128, embedding_size=160, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=96, lambda_attr=0.08, learning_rate=0.00444, num_heads=1, num_layers=1, weight_decay=0.0001
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x160 and 96x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x160 and 96x26)
+
+[16/48] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=96, embedding_size=96, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.14, learning_rate=0.002229, num_heads=1, num_layers=2, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x96 and 128x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x96 and 128x26)
+
+[17/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.08, attribute_hidden_size=160, embedding_size=192, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=224, lambda_attr=0.16, learning_rate=0.0025, num_heads=4, num_layers=2, weight_decay=0.0001
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x192 and 224x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x192 and 224x26)
+
+[18/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, attribute_hidden_size=224, embedding_size=160, fusion_type=concat, hidden_dropout_prob=0.12, hidden_size=160, lambda_attr=0.12, learning_rate=0.002229, num_heads=2, num_layers=3, weight_decay=1e-05
+  -> MRR@20=0.011400  best=0.016800  (early_stop@24, trial=29s, avg=12s/trial, total=3.6min, ETA=6.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.011400 cur_best_hr10=0.028100 cur_test_mrr20=0.004600 cur_test_hr10=0.014300 avg_epoch_time_sec=1.0987 test_eval_time_sec=0.0161 test_eval_batches_per_sec=61.9195 test_eval_targets_per_sec=36965.9495 run_best_mrr20=0.016800 run_best_hr10=0.034100 run_test_mrr20=0.010900 run_test_hr10=0.020100
+
+[19/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.08, attribute_hidden_size=128, embedding_size=96, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=128, lambda_attr=0.08, learning_rate=0.003529, num_heads=4, num_layers=1, weight_decay=1e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x96 and 128x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x96 and 128x26)
+
+[20/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, attribute_hidden_size=160, embedding_size=224, fusion_type=sum, hidden_dropout_prob=0.2, hidden_size=160, lambda_attr=0.12, learning_rate=0.002229, num_heads=4, num_layers=4, weight_decay=1e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x224 and 160x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x224 and 160x26)
+
+[21/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=192, embedding_size=128, fusion_type=concat, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.08, learning_rate=0.003958, num_heads=8, num_layers=4, weight_decay=5e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x128 and 192x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x128 and 192x26)
+
+[22/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=192, embedding_size=128, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.08, learning_rate=0.003958, num_heads=8, num_layers=4, weight_decay=5e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x128 and 192x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x128 and 192x26)
+
+[23/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=192, embedding_size=192, fusion_type=concat, hidden_dropout_prob=0.12, hidden_size=96, lambda_attr=0.12, learning_rate=0.003146, num_heads=8, num_layers=3, weight_decay=5e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x192 and 96x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x192 and 96x26)
+
+[24/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=192, embedding_size=192, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.08, learning_rate=0.003958, num_heads=8, num_layers=4, weight_decay=5e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x192 and 96x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x192 and 96x26)
+
+[25/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=96, embedding_size=192, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.12, learning_rate=0.00444, num_heads=8, num_layers=4, weight_decay=7.02e-05
+  -> MRR@20=0.022700  best=0.022700  (early_stop@38, trial=52s, avg=11s/trial, total=4.8min, ETA=4.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.022700 cur_best_hr10=0.046200 cur_test_mrr20=0.018800 cur_test_hr10=0.048700 avg_epoch_time_sec=1.3458 test_eval_time_sec=0.0173 test_eval_batches_per_sec=57.7243 test_eval_targets_per_sec=34461.3959 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[26/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=96, embedding_size=96, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=224, lambda_attr=0.12, learning_rate=0.00444, num_heads=2, num_layers=4, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x96 and 224x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x96 and 224x26)
+
+[27/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=192, embedding_size=128, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.12, learning_rate=0.00444, num_heads=1, num_layers=4, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x128 and 96x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x128 and 96x26)
+
+[28/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=96, embedding_size=96, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.12, learning_rate=0.00444, num_heads=8, num_layers=4, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x96 and 192x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x96 and 192x26)
+
+[29/48] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=192, embedding_size=192, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.12, learning_rate=0.003146, num_heads=8, num_layers=4, weight_decay=0.0001
+  -> MRR@20=0.012900  best=0.022700  (early_stop@20, trial=1.0min, avg=12s/trial, total=6.0min, ETA=3.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.012900 cur_best_hr10=0.018100 cur_test_mrr20=0.008600 cur_test_hr10=0.008600 avg_epoch_time_sec=3.0302 test_eval_time_sec=0.0273 test_eval_batches_per_sec=36.5832 test_eval_targets_per_sec=21840.1888 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[30/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=192, embedding_size=96, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.1, learning_rate=0.00444, num_heads=8, num_layers=4, weight_decay=7.02e-05
+  -> MRR@20=0.018800  best=0.022700  (early_stop@18, trial=23s, avg=13s/trial, total=6.4min, ETA=3.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.018800 cur_best_hr10=0.034100 cur_test_mrr20=0.011800 cur_test_hr10=0.020100 avg_epoch_time_sec=1.2407 test_eval_time_sec=0.0176 test_eval_batches_per_sec=56.8658 test_eval_targets_per_sec=33948.8528 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[31/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=96, embedding_size=224, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=224, lambda_attr=0.1, learning_rate=0.00444, num_heads=8, num_layers=4, weight_decay=7.02e-05
+  -> MRR@20=0.013800  best=0.022700  (early_stop@24, trial=35s, avg=13s/trial, total=7.0min, ETA=3.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.013800 cur_best_hr10=0.018100 cur_test_mrr20=0.008600 cur_test_hr10=0.008600 avg_epoch_time_sec=1.3986 test_eval_time_sec=0.0176 test_eval_batches_per_sec=56.7888 test_eval_targets_per_sec=33902.8878 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[32/48] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.08, attribute_hidden_size=128, embedding_size=128, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.1, learning_rate=0.00444, num_heads=1, num_layers=4, weight_decay=7.02e-05
+  -> MRR@20=0.016700  best=0.022700  (early_stop@17, trial=27s, avg=14s/trial, total=7.4min, ETA=3.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.016700 cur_best_hr10=0.024100 cur_test_mrr20=0.013800 cur_test_hr10=0.022900 avg_epoch_time_sec=1.5409 test_eval_time_sec=0.0177 test_eval_batches_per_sec=56.4107 test_eval_targets_per_sec=33677.1817 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[33/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=96, embedding_size=192, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.1, learning_rate=0.003529, num_heads=8, num_layers=4, weight_decay=7.02e-05
+  -> MRR@20=0.014000  best=0.022700  (early_stop@31, trial=43s, avg=15s/trial, total=8.2min, ETA=3.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.014000 cur_best_hr10=0.022100 cur_test_mrr20=0.009400 cur_test_hr10=0.011500 avg_epoch_time_sec=1.3565 test_eval_time_sec=0.0175 test_eval_batches_per_sec=57.1338 test_eval_targets_per_sec=34108.8581 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[34/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=192, embedding_size=96, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=224, lambda_attr=0.1, learning_rate=0.00444, num_heads=8, num_layers=4, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x96 and 224x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x96 and 224x26)
+
+[35/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=96, embedding_size=192, fusion_type=gate, hidden_dropout_prob=0.05, hidden_size=192, lambda_attr=0.1, learning_rate=0.002804, num_heads=2, num_layers=1, weight_decay=0.000114
+  -> MRR@20=0.012500  best=0.022700  (early_stop@22, trial=18s, avg=15s/trial, total=8.6min, ETA=3.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.012500 cur_best_hr10=0.028100 cur_test_mrr20=0.004800 cur_test_hr10=0.011500 avg_epoch_time_sec=0.7475 test_eval_time_sec=0.0143 test_eval_batches_per_sec=70.1541 test_eval_targets_per_sec=41882.0059 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[36/48] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.08, attribute_hidden_size=192, embedding_size=96, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.1, learning_rate=0.00444, num_heads=8, num_layers=4, weight_decay=7.02e-05
+  -> MRR@20=0.013700  best=0.022700  (early_stop@17, trial=43s, avg=16s/trial, total=9.3min, ETA=3.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.013700 cur_best_hr10=0.018100 cur_test_mrr20=0.009800 cur_test_hr10=0.014300 avg_epoch_time_sec=2.4347 test_eval_time_sec=0.0255 test_eval_batches_per_sec=39.2031 test_eval_targets_per_sec=23404.2704 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[37/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.08, attribute_hidden_size=96, embedding_size=192, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=192, lambda_attr=0.1, learning_rate=0.0025, num_heads=1, num_layers=4, weight_decay=7.02e-05
+  -> MRR@20=0.015400  best=0.022700  (early_stop@23, trial=27s, avg=16s/trial, total=9.8min, ETA=2.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.015400 cur_best_hr10=0.020100 cur_test_mrr20=0.009600 cur_test_hr10=0.008600 avg_epoch_time_sec=1.1335 test_eval_time_sec=0.0171 test_eval_batches_per_sec=58.4385 test_eval_targets_per_sec=34887.7640 run_best_mrr20=0.022700 run_best_hr10=0.046200 run_test_mrr20=0.018800 run_test_hr10=0.048700
+
+[38/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.05, attribute_hidden_size=192, embedding_size=96, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.14, learning_rate=0.00444, num_heads=8, num_layers=1, weight_decay=7.02e-05
+  -> MRR@20=0.032300  best=0.032300  (early_stop@12, trial=7s, avg=16s/trial, total=9.9min, ETA=2.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.032300 cur_best_hr10=0.044200 cur_test_mrr20=0.000000 cur_test_hr10=0.000000 avg_epoch_time_sec=0.4778 test_eval_time_sec=0.0138 test_eval_batches_per_sec=72.4255 test_eval_targets_per_sec=43238.0075 run_best_mrr20=0.032300 run_best_hr10=0.044200 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[39/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.05, attribute_hidden_size=96, embedding_size=192, fusion_type=sum, hidden_dropout_prob=0.2, hidden_size=192, lambda_attr=0.14, learning_rate=0.003146, num_heads=8, num_layers=1, weight_decay=0.000114
+  -> MRR@20=0.007300  best=0.032300  (early_stop@22, trial=15s, avg=16s/trial, total=10.2min, ETA=2.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.007300 cur_best_hr10=0.016100 cur_test_mrr20=0.001800 cur_test_hr10=0.005700 avg_epoch_time_sec=0.6130 test_eval_time_sec=0.0143 test_eval_batches_per_sec=69.9179 test_eval_targets_per_sec=41740.9773 run_best_mrr20=0.032300 run_best_hr10=0.044200 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[40/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.05, attribute_hidden_size=128, embedding_size=128, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=128, lambda_attr=0.14, learning_rate=0.003529, num_heads=8, num_layers=1, weight_decay=7.02e-05
+  -> MRR@20=0.008500  best=0.032300  (early_stop@33, trial=23s, avg=16s/trial, total=10.6min, ETA=2.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.008500 cur_best_hr10=0.030100 cur_test_mrr20=0.008600 cur_test_hr10=0.011500 avg_epoch_time_sec=0.6394 test_eval_time_sec=0.0141 test_eval_batches_per_sec=71.0718 test_eval_targets_per_sec=42429.8820 run_best_mrr20=0.032300 run_best_hr10=0.044200 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[41/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.05, attribute_hidden_size=160, embedding_size=224, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=160, lambda_attr=0.14, learning_rate=0.002804, num_heads=2, num_layers=1, weight_decay=0.000114
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x224 and 160x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x224 and 160x26)
+
+[42/48] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.05, attribute_hidden_size=224, embedding_size=160, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=96, lambda_attr=0.14, learning_rate=0.00444, num_heads=4, num_layers=1, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x160 and 96x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x160 and 96x26)
+
+[43/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.05, attribute_hidden_size=96, embedding_size=96, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=224, lambda_attr=0.14, learning_rate=0.0025, num_heads=8, num_layers=1, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x96 and 224x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x96 and 224x26)
+
+[44/48] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.05, attribute_hidden_size=192, embedding_size=192, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.14, learning_rate=0.00444, num_heads=8, num_layers=2, weight_decay=0.0001
+  -> MRR@20=0.018200  best=0.032300  (early_stop@30, trial=33s, avg=15s/trial, total=11.3min, ETA=1.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.018200 cur_best_hr10=0.034100 cur_test_mrr20=0.009700 cur_test_hr10=0.017200 avg_epoch_time_sec=1.0776 test_eval_time_sec=0.0147 test_eval_batches_per_sec=68.1059 test_eval_targets_per_sec=40659.2431 run_best_mrr20=0.032300 run_best_hr10=0.044200 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[45/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, attribute_hidden_size=128, embedding_size=96, fusion_type=sum, hidden_dropout_prob=0.2, hidden_size=96, lambda_attr=0.16, learning_rate=0.002804, num_heads=1, num_layers=1, weight_decay=0.000114
+  -> MRR@20=0.005500  best=0.032300  (early_stop@15, trial=10s, avg=15s/trial, total=11.5min, ETA=46s)
+[TRIAL_METRICS] cur_best_mrr20=0.005500 cur_best_hr10=0.014100 cur_test_mrr20=0.001400 cur_test_hr10=0.005700 avg_epoch_time_sec=0.5793 test_eval_time_sec=0.0142 test_eval_batches_per_sec=70.4605 test_eval_targets_per_sec=42064.9367 run_best_mrr20=0.032300 run_best_hr10=0.044200 run_test_mrr20=0.000000 run_test_hr10=0.000000
+
+[46/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.05, attribute_hidden_size=160, embedding_size=160, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=128, lambda_attr=0.14, learning_rate=0.00444, num_heads=8, num_layers=3, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x160 and 128x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x160 and 128x26)
+
+[47/48] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.05, attribute_hidden_size=224, embedding_size=224, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=160, lambda_attr=0.12, learning_rate=0.003146, num_heads=4, num_layers=2, weight_decay=7.02e-05
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x224 and 160x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x224 and 160x26)
+
+[48/48] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.12, attribute_hidden_size=96, embedding_size=192, fusion_type=sum, hidden_dropout_prob=0.05, hidden_size=96, lambda_attr=0.16, learning_rate=0.003529, num_heads=2, num_layers=1, weight_decay=0.0001
+  -> FAILED: mat1 and mat2 shapes cannot be multiplied (4096x192 and 96x26)
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4288, in objective
+    result = train_and_evaluate(cfg_trial, trial_num=trial_num, progress_cb=_wandb_log_live if log_wandb else None)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 2992, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/difsr.py", line 429, in calculate_loss
+    attr_logits = self.attribute_predictors[feat](seq_output)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 125, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (4096x192 and 96x26)
+
+=================================================================
+  DONE  |  DIFSR x beauty
+  Best MRR@20 = 0.032300  |  21/48 trials OK
+  Best HR@10  = 0.044200
+  Test MRR@20 = 0.000000  (best-valid checkpoint)
+  Test HR@10  = 0.000000  (best-valid checkpoint)
+  Avg epoch time = 0.478 sec/epoch
+  Final test eval = 0.014 sec | batches/s=72.425 | targets/s=43238.007
+[RUN_METRICS] best_valid_mrr20=0.032300 best_valid_hr10=0.044200 test_mrr20=0.000000 test_hr10=0.000000 avg_epoch_time_sec=0.4778 test_eval_time_sec=0.0138 test_eval_batches_per_sec=72.4255 test_eval_targets_per_sec=43238.0075
+  Total time: 11.7 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 20
+    attn_dropout_prob: 0.05
+    attribute_hidden_size: 192
+    embedding_size: 96
+    fusion_type: sum
+    hidden_dropout_prob: 0.15
+    hidden_size: 96
+    lambda_attr: 0.14
+    learning_rate: 0.00444
+    num_heads: 8
+    num_layers: 1
+    weight_decay: 7.02e-05
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/beauty_DIFSR_s1_beauty_difsr_20260417_154833_900376_pid1592746.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage1_broad_search/S1/beauty/DIFSR/beauty_DIFSR_s1_beauty_difsr_20260417_154833_900376_pid1592746.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage1_broad_search/S1/beauty/DIFSR/beauty_DIFSR_s1_beauty_difsr_20260417_154833_900376_pid1592746_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage1_broad_search/S1/beauty/DIFSR/beauty_DIFSR_s1_beauty_difsr_20260417_154833_900376_pid1592746_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1592746 start=2026-04-17T15:46:09 end=2026-04-17T16:00:57

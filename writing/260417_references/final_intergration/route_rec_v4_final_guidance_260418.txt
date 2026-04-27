@@ -1,0 +1,352 @@
+RouteRec_v4 최종 수정 가이드 (v3 장점 반영)
+작성일: 2026-04-18
+
+목적
+- 최종 베이스는 v4로 유지한다.
+- 다만 v3에서 더 좋았던 부분을 흡수해, v4의 스토리 강도는 살리고 method/experimental setup의 방어력은 높인다.
+- 핵심은 "새 내용을 더 넣는 것"이 아니라, v4의 3축 서사를 유지한 채 reviewer가 물을 수 있는 구현/세팅 관련 의문을 미리 막는 것이다.
+
+============================================================
+0. 최종 방향 한 줄 요약
+============================================================
+
+v4를 베이스로 유지하라.
+특히 아래는 절대 유지하는 쪽이 좋다.
+
+- introduction의 challenge → design question framing
+- method의 three design axes
+- experiment의 Q3 = three-part design justification
+- Q4 = portability / lightweight cue question
+- Q5 = behavior-regime alignment question
+
+즉, 논문의 큰 흐름은 v4가 더 좋다.
+
+대신 v3에서 아래를 흡수하라.
+
+1) method의 framework vs paper instantiation 구분
+2) feature 정의의 더 보수적이고 정확한 wording
+3) experimental setup의 held-out cleanup / session evaluation unit 설명
+4) Q2/Q3/Q4가 각각 어떤 challenge를 받는지 더 분명하게 연결하는 reviewer-friendly 문장
+
+============================================================
+1. 왜 v4를 베이스로 가는가
+============================================================
+
+meeting summary 기준으로 봤을 때, 지금 논문에서 가장 중요하게 보여야 하는 것은
+- challenge 3개
+- 대응하는 method 축 3개
+- 그 축을 직접 정당화하는 ablation / experiment 구조
+이다.
+
+이 기준에서 v4의 가장 큰 강점은 다음과 같다.
+
+1) introduction이 design question으로 더 자연스럽게 이어진다
+v4는 challenge 1/2/3 뒤에서
+- why routing should exist
+- where routing should differ
+- what should drive routing
+이라는 식으로 세 문제를 design question처럼 묶는다.
+이건 meeting에서 말한 "problem/challenge 먼저, 그다음 대응 method" 구조와 잘 맞는다.
+
+2) Q3가 method의 3축을 본문에서 직접 검증한다
+v4의 핵심 장점은 Q3다.
+Q3는
+- semantic cue design
+- stage semantics
+- router composition
+이라는 세 축을 본문 figure에서 직접 다룬다.
+이건 "feature / stage / router의 각 축을 본문에서 보여주자"는 meeting 방향과 가장 잘 맞는다.
+
+3) Q4와 Q5의 역할이 선명하다
+- Q4: lightweight cues가 실제로 충분한가
+- Q5: behavior regime와 routing이 실제로 맞물리는가
+이 구조는 논문 목적과 실험 목적의 대응이 분명하다.
+
+즉 v4는 "이 논문이 왜 이런 실험을 하는가"를 독자가 따라가기 더 쉽다.
+
+============================================================
+2. v4에서 절대 유지해야 할 것
+============================================================
+
+아래는 유지하는 것이 좋다. 크게 건드리지 말 것.
+
+A. introduction의 challenge framing
+- Challenge 1 / 2 / 3
+- three concrete design questions
+이 구조는 유지
+
+B. RouteRec 소개 문단의 3-axis 대응
+- Portable Behavioral Cues
+- Coarse-to-Fine Multi-Stage Routing
+- Behavior-Guided Expert Allocation
+이 순서 유지
+
+C. experiment question structure
+- Q1 ranking quality
+- Q2 routing control
+- Q3 three-part design
+- Q4 lightweight cues
+- Q5 behavioral regimes
+이 구조 유지
+
+D. Q3의 panel semantics
+- semantic cue design
+- stage semantics
+- router composition
+이 3개는 v4의 핵심 장점이므로 유지
+
+E. Q4/Q5의 역할 분리
+- Q4 = portability / cue availability
+- Q5 = externally defined behavioral regime alignment
+이 구분 유지
+
+============================================================
+3. v3에서 반드시 흡수할 것
+============================================================
+
+------------------------------------------------------------
+3.1 method: framework vs paper instantiation 구분
+------------------------------------------------------------
+
+v3의 가장 좋은 문장 중 하나는
+"We first describe RouteRec as a design framework and then refer to the fixed paper instantiation only when concrete implementation choices matter."
+이다.
+
+이건 v4에 꼭 흡수하는 게 좋다.
+
+왜 필요한가:
+- v4는 개념적으로는 강하지만, reader가 읽을 때 가끔 "framework를 말하는 건지, selected implementation을 말하는 건지" 경계가 흐려질 수 있다.
+- 이 문장 하나만 있으면, concept layer와 chosen architecture layer가 분리된다.
+- reviewer가 "이게 일반 claim인지, current paper setting claim인지"를 덜 헷갈린다.
+
+수정 지시:
+- 3.1 RouteRec Overview의 두 번째 문단에 이 문장을 넣어라.
+- 이후 main text에서 "paper instantiation"을 언급할 때도 이 framing을 일관되게 유지하라.
+
+------------------------------------------------------------
+3.2 feature 정의: 더 보수적이고 정확한 wording
+------------------------------------------------------------
+
+v4는 portability를 더 잘 살리지만, 몇몇 표현은 구현보다 살짝 추상적으로 읽힐 수 있다.
+v3의 장점은 여기서 더 정확하고 방어적이라는 점이다.
+
+추천 수정:
+현재 v4의 3.2 wording을 아래 방향으로 조정하라.
+
+좋은 톤:
+- optional coarse item-group labels
+- the coarsest item-group proxy available in the dataset
+- if unavailable, the corresponding cues are omitted through the fixed missing-signal rule
+
+즉,
+"fallback proxy" narrative는 살리되,
+실제 구현과 정확히 맞는 wording으로 바꿔라.
+
+특히 Focus family는 아래처럼 쓰는 것이 좋다.
+- Focus captures concentration and switching behavior over the coarsest item-group proxy available in the dataset (e.g., product category, venue category, artist grouping, or genre). When such grouping fields are unavailable, the corresponding focus cues are omitted through the fixed missing-signal rule documented in Appendix A.
+
+이 문장이 좋은 이유:
+- portability는 유지된다.
+- 동시에 "없는 신호를 마법처럼 만들어낸다"는 인상을 주지 않는다.
+- reviewer가 implementation fidelity를 공격하기 어렵다.
+
+------------------------------------------------------------
+3.3 experimental setup: held-out cleanup / session unit 설명
+------------------------------------------------------------
+
+이건 v3가 확실히 더 좋았다.
+v4는 setup의 큰 논리는 맞지만, reviewer가 실제 protocol fairness를 따질 때는 v3의 wording이 더 방어적이다.
+
+v4 4.1에 아래 내용을 더 명시적으로 흡수하라.
+
+반드시 들어가면 좋은 포인트:
+1) session is the evaluation unit
+2) unseen non-target rows are removed in held-out cleanup
+3) unseen targets are retained only as supplementary accounting
+4) this is a deliberate sessionized protocol choice, not a raw-sequence leaderboard claim
+
+추천 문장 방향:
+- "This protocol is a deliberate methodological choice: sessions are the unit of evaluation because the paper studies session-aware behavioral routing, the split preserves temporal order at the session level, and the held-out cleanup keeps the target space realistic while reducing uncontrolled leakage from unseen non-target rows."
+- "The comparison should therefore be read as a sessionized, behavior-aware next-item setting under a shared temporal protocol, not a claim about direct comparability to canonical raw-sequence leaderboards."
+
+이건 meeting summary에서 강조한
+- session split을 일단 고정하되 근거를 보강하자
+- 실험 세팅의 납득 가능성을 높이자
+를 가장 잘 반영한다.
+
+------------------------------------------------------------
+3.4 Q2/Q3/Q4가 어느 challenge를 받는지 다시 명시
+------------------------------------------------------------
+
+v4의 큰 구조는 좋지만, reviewer-handholding은 v3가 조금 더 낫다.
+특히 각 subsection 끝에서
+- 이게 어느 challenge에 대응하는지
+- method의 어느 축을 뒷받침하는지
+를 한 번 더 말해주면 읽는 사람이 훨씬 편하다.
+
+추천:
+- Q2 끝: "This directly addresses Challenge 3 and supports the behavior-guided expert-allocation axis introduced in Sec. 3."
+- Q3 끝: "This directly addresses Challenge 2 and supports the coarse-to-fine multi-stage routing axis."
+- Q4 끝: "This directly addresses Challenge 1 and supports the portable behavioral-cue axis."
+- Q5 끝은 challenge 번호를 굳이 안 써도 되지만, Figure 1 / introduction motivation을 다시 연결해주는 문장이 있으면 좋다.
+
+주의:
+- 길게 쓰지 말고 subsection 마지막 1문장 정도로 처리
+- 메타 서술처럼 길어지면 안 됨
+
+============================================================
+4. v4에서 더 다듬으면 좋은 부분
+============================================================
+
+------------------------------------------------------------
+4.1 Q3는 유지하되, 너무 추상적이면 안 된다
+------------------------------------------------------------
+
+v4의 Q3 구조는 좋다.
+하지만 panel 설명이 너무 개념적이기만 하면 reviewer가 "그래서 실제 ablation이 뭐였는데?"라고 생각할 수 있다.
+
+따라서 Q3는 지금 구조를 유지하되, panel 설명에 실제 변형 종류를 한 번씩 더 연결해주는 게 좋다.
+
+예:
+- panel (a): semantic cue design variants such as reduced, shuffled, flat, and random-group cue settings
+- panel (b): stage semantics variants including scope swap, identical-scope controls, and layout variants
+- panel (c): router composition variants including stage placement, ordering, and router alternatives
+
+즉 v4의 3-axis logic을 유지하면서, v3의 "실제로 무엇을 건드렸는지"를 조금 더 넣어라.
+
+------------------------------------------------------------
+4.2 Q4 portability 문장은 유지하되, 과장하지 말 것
+------------------------------------------------------------
+
+v4의 Q4는 좋다.
+다만 "ordinary logs만으로 충분하다"는 문장이 너무 세게 읽히면 reviewer가 "dataset마다 가능한 정보가 다 다른데?"라고 반응할 수 있다.
+
+따라서 톤은
+- meaningful fraction of the benefit
+- conservative portability test
+- practically deployable subset of cues
+정도로 유지하는 것이 좋다.
+
+즉 full metadata-free universal claim처럼 들리지 않게 조절하라.
+
+------------------------------------------------------------
+4.3 Q5는 slice 정의를 본문에서 한 문장 더 구체화
+------------------------------------------------------------
+
+이건 v3가 더 좋았다.
+
+v4에서도 아래 정도는 본문에 넣는 게 좋다.
+- repeat ratio
+- average inter-event gap
+- concentration entropy
+- switching or novelty rate
+
+추천 문장 방향:
+- "To avoid circularity, the slices are defined by simple externally computed statistics such as repeat ratio, average inter-event gap, concentration entropy, and switching or novelty rate, with the full thresholds given in Appendix H."
+
+이 문장은 Q5의 방어력을 크게 높여준다.
+
+============================================================
+5. appendix는 어떻게 바꾸면 좋은가
+============================================================
+
+본문은 v4를 유지하되, appendix organization은 v3식으로 더 분리하는 것이 좋다.
+
+추천 구조:
+- A Method Details and Design Rationale
+- B Dataset, Evaluation, and Full Results
+- C Extended Structural Ablations
+- D Protocol Sensitivity and Supplementary Views
+- E Objective and Regularization Variants
+- F Efficiency and Model Cost
+- G Extended Diagnostics
+- H Behavior-Slice Analysis
+- I Extended Transfer Results
+
+즉 내용은 v4를 유지하되, appendix 흐름은 v3처럼 기능별로 잘게 분리하라.
+
+왜 좋은가:
+- reviewer가 필요한 방어 근거를 찾기 쉽다
+- main text 질문(Q1~Q5)과 appendix 보조 섹션이 더 직접적으로 매핑된다
+- meeting summary에서 원한 "핵심 ablation 및 정성 분석 강화"와도 잘 맞는다
+
+============================================================
+6. v4에서 꼭 제거/수정해야 할 것
+============================================================
+
+이건 내용 방향의 문제가 아니라, 문장 톤과 완성도 문제다.
+
+무조건 제거:
+- placeholder
+- will be finalized
+- in the final version
+- intended appendix message
+- should be built
+- Table ??
+- placeholder search ranges
+같은 표현
+
+원칙:
+- 본문과 appendix는 planning memo가 아니라 finished paper처럼 읽혀야 한다.
+- 못 채운 표는 삭제하거나 online appendix로 미뤄라.
+- 테이블/도표의 설명은 future tense가 아니라 present/past observation으로 써라.
+
+============================================================
+7. 최종 수정 순서
+============================================================
+
+[Step 1] v4의 큰 구조는 유지
+- intro challenge / design question framing 유지
+- Q1~Q5 structure 유지
+- Q3의 three-part design framing 유지
+
+[Step 2] 3.1에 v3의 framework vs instantiation 문장 흡수
+- concept layer vs selected implementation layer 분리
+
+[Step 3] 3.2 Focus family wording을 v3식으로 보수화
+- coarsest item-group proxy
+- fixed missing-signal rule
+- portability는 유지하되 구현 fidelity를 높이기
+
+[Step 4] 4.1 setup에 v3의 protocol defense 추가
+- session evaluation unit
+- held-out cleanup logic
+- unseen non-target removal / unseen target supplementary accounting
+- raw-sequence leaderboard와의 차이 명시
+
+[Step 5] Q2/Q3/Q4 마지막에 challenge 대응 1문장 추가
+- reviewer가 실험 구조를 빠르게 이해하게 하기
+
+[Step 6] appendix organization을 v3식으로 더 정리
+- 내용은 유지하되 section title/flow 재정리
+
+[Step 7] placeholder / future-tense / TODO 문장 전부 제거
+
+============================================================
+8. 아주 짧은 버전
+============================================================
+
+- v4를 베이스로 유지
+- intro와 Q3의 three-part design logic는 절대 유지
+- v3에서 가져올 핵심은
+  1) framework vs instantiation 구분
+  2) feature 정의의 더 정확한 wording
+  3) held-out cleanup / session evaluation unit 설명
+  4) Q2/Q3/Q4의 challenge 대응 문장
+- appendix는 v3처럼 기능별 분리 구조로 정리
+- placeholder / Table ?? / future-tense 문장은 전부 삭제
+
+============================================================
+9. 최종 목표
+============================================================
+
+최종 목표는 v4를 더 장황하게 만드는 것이 아니다.
+
+오히려
+- v4의 experiment-driven three-axis story는 유지하고
+- v3의 방어력과 정확성을 흡수해서
+- reviewer가 읽을 때 "왜 이 실험을 했는지"와 "이 설명이 실제 구현과 얼마나 맞는지"를 동시에 납득하게 만드는 것이다.
+
+즉 이번 수정의 본질은
+"v4의 논문 스토리 + v3의 방어 문장"
+으로 합치는 것이다.

@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: GRU4Rec
+- dataset: KuaiRecLargeStrictPosV2_0.2
+- run_group: final_experiment
+- run_axis: stage3_seed_confirm
+- run_phase: S3_KUAIRECLARGESTRICTPOSV2_0_2_GRU4REC_C2_SEED3
+- best_mrr@20: 0.0164
+- test_mrr@20: 0.2234
+- test_hr@10: 0.2979
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/final_experiment/KuaiRecLargeStrictPosV2_0.2/S3/KuaiRecLargeStrictPosV2_0.2_GRU4Rec_s3_kuaireclargestrictposv2_0_2_gru4rec_c2_seed3_20260418_131746_976715_pid635375/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: 
+- diag_raw_best_valid: 
+- diag_raw_test: 
+- diag_raw_epoch_trace: 
+- feature_ablation: 

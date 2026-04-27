@@ -827,11 +827,17 @@ class N3StageBlock(nn.Module):
     def _build_group_feature_context(self, raw_feature_context: torch.Tensor) -> torch.Tensor:
         if self.group_feature_projections is None:
             return raw_feature_context.new_zeros(*raw_feature_context.shape[:-1], self.n_base_groups, self.d_feat_emb)
+        if raw_feature_context.size(-1) <= 0:
+            return raw_feature_context.new_zeros(*raw_feature_context.shape[:-1], self.n_base_groups, self.d_feat_emb)
         group_feats = []
         for local_idx, proj in zip(self.group_feature_local_indices, self.group_feature_projections):
             if local_idx:
-                idx = torch.tensor(local_idx, dtype=torch.long, device=raw_feature_context.device)
-                feat = raw_feature_context.index_select(-1, idx)
+                valid_local_idx = [int(i) for i in local_idx if 0 <= int(i) < int(raw_feature_context.size(-1))]
+                if valid_local_idx:
+                    idx = torch.tensor(valid_local_idx, dtype=torch.long, device=raw_feature_context.device)
+                    feat = raw_feature_context.index_select(-1, idx)
+                else:
+                    feat = raw_feature_context.new_zeros(*raw_feature_context.shape[:-1], 1)
             else:
                 feat = raw_feature_context.new_zeros(*raw_feature_context.shape[:-1], 1)
             group_feats.append(proj(feat).unsqueeze(-2))

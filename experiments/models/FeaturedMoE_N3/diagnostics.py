@@ -131,6 +131,8 @@ class N3DiagnosticCollector:
         max_positions: int,
         feature_mode: str = "none",
         consistency_pairs: int = 4,
+        pair_max_points: int = 4096,
+        pair_bin_count: int = 20,
     ):
         self.split_name = str(split_name)
         self.stage_family_features = {
@@ -148,6 +150,9 @@ class N3DiagnosticCollector:
         self.max_positions = max(int(max_positions), 1)
         self.feature_mode = str(feature_mode or "none")
         self.consistency_pairs = max(int(consistency_pairs), 1)
+        self.pair_max_points = max(int(pair_max_points), 0)
+        self.pair_bin_count = max(int(pair_bin_count), 4)
+        self.pair_points_per_update = min(1024, max(self.pair_max_points, 1))
         self._stage_data: Dict[str, dict] = {}
 
     def _stage_aggregation_level(self, stage_key: str) -> str:
@@ -317,10 +322,81 @@ class N3DiagnosticCollector:
                 "intra_group_consistency_js_count": torch.zeros(n_groups),
                 "feature_group_consistency_js_sum": torch.zeros(n_groups),
                 "feature_group_consistency_js_count": torch.zeros(n_groups),
+                # Pair-level feature-vs-routing similarity logging
+                "pair_feat_sum": torch.zeros(self.pair_bin_count),
+                "pair_route_sum": torch.zeros(self.pair_bin_count),
+                "pair_js_sum": torch.zeros(self.pair_bin_count),
+                "pair_count": torch.zeros(self.pair_bin_count),
+                "pair_sample_points": [],
                 "wrapper_name_hist": defaultdict(int),
                 "node_acc": {},
             }
         return self._stage_data[stage_key]
+
+    @staticmethod
+    def _pairwise_js(pi: torch.Tensor, pj: torch.Tensor) -> torch.Tensor:
+        mix = 0.5 * (pi + pj)
+        return 0.5 * (
+            (pi * (pi.log() - mix.log())).sum(dim=-1)
+            + (pj * (pj.log() - mix.log())).sum(dim=-1)
+        )
+
+    def _update_pair_similarity_logging(
+        self,
+        *,
+        stage_store: dict,
+        feat_norm: torch.Tensor,
+        route_session_prob: torch.Tensor,
+    ) -> None:
+        if self.pair_max_points <= 0:
+            return
+        if not torch.is_tensor(feat_norm) or not torch.is_tensor(route_session_prob):
+            return
+        if feat_norm.ndim != 2 or route_session_prob.ndim != 2:
+            return
+        if feat_norm.size(0) != route_session_prob.size(0):
+            return
+        n_sessions = int(feat_norm.size(0))
+        if n_sessions <= 1:
+            return
+
+        n_pairs = min(self.pair_points_per_update, n_sessions * (n_sessions - 1))
+        if n_pairs <= 0:
+            return
+        device = feat_norm.device
+        i = torch.randint(0, n_sessions, (n_pairs,), device=device)
+        j = torch.randint(0, n_sessions - 1, (n_pairs,), device=device)
+        j = torch.where(j >= i, j + 1, j)
+
+        feature_cos = (feat_norm.index_select(0, i) * feat_norm.index_select(0, j)).sum(dim=-1).clamp(min=-1.0, max=1.0)
+        pi = route_session_prob.index_select(0, i).clamp(min=1e-8)
+        pj = route_session_prob.index_select(0, j).clamp(min=1e-8)
+        route_js = self._pairwise_js(pi, pj)
+        route_sim = torch.exp(-route_js)
+
+        bin_idx = (((feature_cos + 1.0) * 0.5) * float(self.pair_bin_count)).long().clamp(min=0, max=self.pair_bin_count - 1)
+        bin_cpu = bin_idx.detach().cpu()
+        feature_cpu = feature_cos.detach().cpu()
+        route_cpu = route_sim.detach().cpu()
+        js_cpu = route_js.detach().cpu()
+
+        stage_store["pair_count"] += torch.bincount(bin_cpu, minlength=self.pair_bin_count).float()
+        stage_store["pair_feat_sum"] += torch.bincount(bin_cpu, weights=feature_cpu, minlength=self.pair_bin_count).float()
+        stage_store["pair_route_sum"] += torch.bincount(bin_cpu, weights=route_cpu, minlength=self.pair_bin_count).float()
+        stage_store["pair_js_sum"] += torch.bincount(bin_cpu, weights=js_cpu, minlength=self.pair_bin_count).float()
+
+        remain = max(self.pair_max_points - len(stage_store["pair_sample_points"]), 0)
+        if remain <= 0:
+            return
+        keep = min(remain, int(feature_cpu.numel()))
+        for idx in range(keep):
+            stage_store["pair_sample_points"].append(
+                {
+                    "feature_cosine": float(feature_cpu[idx].item()),
+                    "routing_js": float(js_cpu[idx].item()),
+                    "routing_similarity": float(route_cpu[idx].item()),
+                }
+            )
 
     @torch.no_grad()
     def update(
@@ -347,10 +423,11 @@ class N3DiagnosticCollector:
 
         neigh_idx = None
         neigh_k = 0
-        if torch.is_tensor(feat) and feat.ndim == 3 and feat.size(0) > 1:
+        feat_session_norm = None
+        if torch.is_tensor(feat) and feat.ndim == 3 and feat.size(0) > 1 and feat.size(-1) > 0:
             feat_repr = feat.to(device=device).mean(dim=1)
-            feat_norm = F.normalize(feat_repr, p=2, dim=-1)
-            sim = feat_norm @ feat_norm.transpose(0, 1)
+            feat_session_norm = F.normalize(feat_repr, p=2, dim=-1)
+            sim = feat_session_norm @ feat_session_norm.transpose(0, 1)
             sim.fill_diagonal_(-1e9)
             neigh_k = min(int(self.consistency_pairs), int(feat.size(0)) - 1)
             if neigh_k > 0:
@@ -412,6 +489,16 @@ class N3DiagnosticCollector:
                 )
                 stage_store["consistency_js_sum"] += float(js.sum().item())
                 stage_store["consistency_js_count"] += int(js.numel())
+
+            if session_prob is None:
+                session_prob = (w * mask.unsqueeze(-1).float()).sum(dim=1) / mask.float().sum(dim=1, keepdim=True).clamp(min=1.0)
+                session_prob = session_prob.clamp(min=1e-8)
+            if feat_session_norm is not None:
+                self._update_pair_similarity_logging(
+                    stage_store=stage_store,
+                    feat_norm=feat_session_norm,
+                    route_session_prob=session_prob,
+                )
 
             for b_idx in range(weights.size(0)):
                 valid_pos = mask[b_idx].nonzero(as_tuple=False).view(-1)
@@ -865,6 +952,42 @@ class N3DiagnosticCollector:
                 feature_score_by_group = [1.0] * n_groups
             feature_mean_js = float(sum(feature_js_by_group) / max(len(feature_js_by_group), 1))
             feature_mean_score = float(sum(feature_score_by_group) / max(len(feature_score_by_group), 1))
+            pair_count = raw.get("pair_count")
+            pair_feat_sum = raw.get("pair_feat_sum")
+            pair_route_sum = raw.get("pair_route_sum")
+            pair_js_sum = raw.get("pair_js_sum")
+            pair_bins: List[dict] = []
+            if (
+                torch.is_tensor(pair_count)
+                and torch.is_tensor(pair_feat_sum)
+                and torch.is_tensor(pair_route_sum)
+                and torch.is_tensor(pair_js_sum)
+            ):
+                n_bins = min(
+                    int(pair_count.numel()),
+                    int(pair_feat_sum.numel()),
+                    int(pair_route_sum.numel()),
+                    int(pair_js_sum.numel()),
+                    int(self.pair_bin_count),
+                )
+                for idx in range(n_bins):
+                    cnt = float(pair_count[idx].item())
+                    if cnt <= 0:
+                        continue
+                    left = -1.0 + (2.0 * idx / float(max(n_bins, 1)))
+                    right = -1.0 + (2.0 * (idx + 1) / float(max(n_bins, 1)))
+                    pair_bins.append(
+                        {
+                            "bin_index": int(idx),
+                            "left": float(left),
+                            "right": float(right),
+                            "count": float(cnt),
+                            "feature_cosine_mean": float(pair_feat_sum[idx].item() / cnt),
+                            "routing_similarity_mean": float(pair_route_sum[idx].item() / cnt),
+                            "routing_js_mean": float(pair_js_sum[idx].item() / cnt),
+                        }
+                    )
+            pair_samples = list(raw.get("pair_sample_points", []) or [])
             wrapper_name = self._dominant_name(dict(raw.get("wrapper_name_hist", {}) or {}), default="")
             family_payload = {
                 "mean_top_expert_share": 0.0,
@@ -920,6 +1043,12 @@ class N3DiagnosticCollector:
                     "score_by_group": feature_score_by_group,
                     "mean_js": feature_mean_js,
                     "mean_score": feature_mean_score,
+                },
+                "feature_route_pair_similarity": {
+                    "bin_stats": pair_bins,
+                    "sample_points": pair_samples,
+                    "sample_count": int(len(pair_samples)),
+                    "bin_count": int(self.pair_bin_count),
                 },
                 "condition_norm": condition_norm,
                 "stage_delta_norm": delta_norm,

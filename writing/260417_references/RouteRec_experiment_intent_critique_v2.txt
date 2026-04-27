@@ -1,0 +1,251 @@
+RouteRec experiment-section intent critique (reviewer-style, results-agnostic)
+
+Source note
+- This memo is based on the current PDF draft "RouteRec__Behavior_Guided_Expert_Routing_for_Sequential_Recommendation (6).pdf".
+- Focus here is NOT whether the numbers are good, but whether the experiment section, as currently framed, answers the questions a critical reviewer will naturally ask after reading the method.
+
+Overall verdict
+- The current Q1~Q5 structure is a clear improvement over the previous version.
+- As a reader, I can now see the intended logical chain:
+  Q1 performance -> Q2 routing signal -> Q3 design justification -> Q4 portability/lightweight cue sufficiency -> Q5 semantic alignment.
+- So the section is no longer “just a list of experiments.” It now looks like an argument.
+- That said, it is not yet fully airtight. A skeptical reviewer can still ask several “why is this really true?” questions.
+- The biggest issue is not lack of experiments in quantity, but that some questions still overlap, while some very likely reviewer questions are only partially covered.
+
+What is already good
+1) The experiment section now has an explicit reviewer-facing structure.
+   - This is good because it shows that experiments were designed to answer claims, not just to collect plots.
+2) Q2, Q3, Q5 are conceptually strong.
+   - Q2 directly addresses the core claim that routing should be behavior-guided rather than hidden-guided.
+   - Q3 tries to justify the method’s three-part design rather than only saying “our final model is best.”
+   - Q5 attempts to connect the learned routing patterns back to the behavioral motivation from Figure 1.
+3) Appendix organization is much stronger.
+   - Structural ablations, protocol sensitivity, objective variants, diagnostics, slice analysis, qualitative cases, and transfer results are separated in a way that a reviewer can navigate.
+
+Main reviewer questions that can STILL arise
+
+A. Q3 and Q4 are still too close to each other
+Current state:
+- Q3 says it tests the three design axes: feature construction, stage decomposition, and router composition.
+- Q4 again asks whether lightweight cues are sufficient and tests cue reduction / shuffling.
+
+Why a reviewer may object:
+- “Aren’t Q3(a) and Q4 both cue ablations?”
+- “What exactly is the difference between proving that cue construction matters and proving that lightweight cues are sufficient?”
+
+Why this matters:
+- If these two questions are not sharply separated, the experiment story can feel repetitive.
+- It can make the paper look like it is spending too much main-text space on similar cue-removal plots.
+
+Best fix:
+- Separate NECESSITY from PORTABILITY.
+- Q3 should answer: “Does the semantic cue design matter?”
+  Recommended variants for Q3(a):
+  * full cue design
+  * shuffled cue-family assignment
+  * corrupted/misaligned cue mapping
+  * flat scalar router without semantic grouping
+  Goal: show that semantic organization / alignment matters.
+- Q4 should answer: “How much signal do we need in practice?”
+  Recommended variants for Q4:
+  * full cues
+  * no category
+  * no time
+  * sequence-only/minimal-log cues
+  Goal: show portability under reduced availability.
+
+In one line:
+- Q3 = “is the cue design meaningful?”
+- Q4 = “is the cue design lightweight enough to be practical?”
+
+B. Q5 risks sounding circular unless slice definition is made clearly external / post-hoc
+Current state:
+- Q5 asks whether routing patterns align with behavioral regimes.
+- It compares ranking quality and routing concentration over repeat-heavy / fast-tempo / focused / exploration-heavy slices.
+
+Likely reviewer question:
+- “How were these slices defined?”
+- “Are these the same cues used by the model itself?”
+- “If yes, isn’t this partly tautological? Of course a model using tempo/focus cues will look aligned with tempo/focus slices.”
+
+Why this matters:
+- Q5 is potentially one of the strongest parts of the paper.
+- But if slice construction is not explained carefully, it may become one of the most attackable parts.
+
+Best fix:
+- In the paper text or appendix, explicitly say that the slices are diagnostic bins defined post hoc from raw statistics / dataset-level observable summaries.
+- Give exact thresholding or percentile rules.
+- Make it explicit that these slice labels are NOT optimized targets and are NOT fed as supervision.
+- Even better: if possible, define slices from very simple raw statistics (e.g., repeat ratio, mean inter-event gap, category entropy) rather than directly from the full internal feature vector.
+
+In one line:
+- Q5 can be very persuasive, but only if the slice definition is clearly non-circular.
+
+C. Q3 does not yet fully prove that macro/mid/micro are the RIGHT temporal roles
+Current state:
+- Q3(b) compares stage removal, shallow layouts, and dense expert replacement.
+- This shows that staged routing helps.
+
+Likely reviewer question:
+- “Why macro = cross-session, mid = within-session prefix, micro = recent suffix?”
+- “Why these scopes specifically, and not just three generic MoE blocks?”
+- “Have you shown that the semantics of the stages matter, not only the fact that there are multiple stages?”
+
+Why this matters:
+- Your method story depends heavily on the idea that the three stages correspond to three temporal roles.
+- Stage removal alone does not prove that the chosen scope assignment is right.
+
+Best fix:
+Add one stronger stage-semantics control, preferably in Q3 or appendix:
+- swap macro and micro evidence windows
+- use the same window for all three stages
+- use three stages but identical scope summaries
+- change broadcast granularity (e.g., session-level everywhere vs token-level everywhere)
+
+These are stronger than simple stage removal because they test whether the semantics of the role assignment matter.
+
+In one line:
+- You have evidence that “three stages help,” but you still need evidence that “these three stage roles make sense.”
+
+D. The four semantic families (Tempo / Focus / Memory / Exposure) are still under-justified as a grouping choice
+Current state:
+- Method text emphasizes these four families.
+- Q3(a) partially touches feature construction.
+
+Likely reviewer question:
+- “Why exactly these four families?”
+- “Are the families real modeling structure, or just a convenient description after the fact?”
+- “Would a flat bag of scalars work just as well?”
+
+Best fix:
+At least one of the following:
+- grouped semantic families vs flat scalar concatenation
+- semantically matched grouping vs random grouping
+- family-aware router vs family-agnostic router with same scalar inputs
+
+This would convert the family taxonomy from a descriptive narrative into an experimentally supported design choice.
+
+In one line:
+- Right now the family story is plausible; one more comparison can make it convincing.
+
+E. Q2 may invite the objection that “route consistency” is partly rewarded by the training objective itself
+Current state:
+- Q2 compares routing controls.
+- The second panel uses routing similarity / consistency over feature-similarity buckets.
+- The model objective includes route consistency regularization.
+
+Likely reviewer question:
+- “Isn’t it unsurprising that the behavior-guided model looks more behavior-consistent if part of the objective already encourages consistency?”
+- “How much of Q2(b) is a genuine emergent property, and how much is simply what the loss optimized for?”
+
+Why this matters:
+- This does not kill the experiment, but it weakens the interpretation if not addressed.
+
+Best fix:
+- Point reviewers to the objective-variants appendix explicitly when discussing Q2.
+- Show at least one version without the consistency term, or compare hidden-only vs behavior-guided under matched regularization settings.
+- Clarify whether the diagnostic metric is identical to the training loss or only related.
+
+In one line:
+- Q2 is good, but it becomes much stronger if the paper explicitly separates routing-signal effects from regularizer effects.
+
+F. “Lightweight” may still trigger a parameter / compute skepticism
+Current state:
+- The paper repeatedly claims the routing branch is lightweight.
+- But the model still adds multi-stage MoE structure.
+
+Likely reviewer question:
+- “Lightweight compared to what?”
+- “How many parameters / active experts / extra compute are added?”
+- “Is the gain simply paying for more inference/training cost?”
+
+Best fix:
+- Add a small efficiency table, even in the appendix if main-text space is tight.
+- Suggested columns:
+  * total params
+  * active params per example / per token
+  * train time ratio
+  * inference time ratio
+  * GPU memory ratio (optional)
+- This does not need to be a huge section. Even a small appendix table helps.
+
+In one line:
+- If you say “lightweight,” one small cost table makes the claim much safer.
+
+Recommended final Q structure (cleaner version)
+
+Main-text Qs
+Q1. Does RouteRec improve ranking quality under the shared protocol?
+- Keep as is.
+- This is the headline effectiveness question.
+
+Q2. What should control routing?
+- Keep as is.
+- Compare shared FFN / hidden-only / mixed / behavior-guided.
+- Important note: point to objective-variant appendix so reviewers do not attribute everything to consistency loss.
+
+Q3. Why does the three-part design work?
+- Keep as the central method-justification question.
+- But define the three parts more sharply:
+  (a) semantic cue design / alignment
+  (b) stage semantics and decomposition
+  (c) router composition
+- Strongly recommended addition:
+  * one stage-scope swap / identical-scope control
+
+Q4. Are simple, widely available cues sufficient in practice?
+- Keep as a separate portability question.
+- This should focus on cue availability, not semantic alignment.
+- Full vs no-category vs no-time vs sequence-only is enough.
+
+Q5. Do learned routes align with behavioral regimes?
+- Keep this in the main text.
+- This is now one of the best “why the model is good” questions.
+- But define slices carefully and defensively.
+
+Optional appendix-only Q6
+Q6. Are the conclusions robust to reporting view and protocol details?
+- This matches Appendix C well.
+- Keep this mostly in appendix unless reviewers are very likely to attack the protocol.
+
+What the reviewer should ideally feel after reading experiments
+Right now, your intended experiment story is close to this:
+1) the model helps in ranking (Q1)
+2) the helpful part is behavior-guided routing, not hidden-only routing (Q2)
+3) the gain is not from one arbitrary trick; the three-part design matters (Q3)
+4) the method does not require rich metadata to remain useful (Q4)
+5) the learned routing is semantically aligned with the kinds of behavioral differences that motivated the paper (Q5)
+
+This is a strong story.
+But to make it fully persuasive, a reviewer should not be left with these unresolved thoughts:
+- “Q3 and Q4 feel redundant.”
+- “The stage semantics are still not fully proven.”
+- “The behavior slices may be partially circular.”
+- “The consistency figure may reflect the regularizer.”
+- “Lightweight is asserted but not costed.”
+
+Best-priority fixes before worrying about more experiments
+Priority 1
+- Sharpen the boundary between Q3 and Q4.
+- Add one stage-semantics control (swap / same-window / identical-scope control).
+- Define Q5 slice construction explicitly and defensively.
+
+Priority 2
+- Add one family-structure comparison: semantic grouping vs flat or random grouping.
+- Add one small efficiency/cost table.
+
+Priority 3
+- In the Q2 discussion, point more explicitly to objective-variant appendix.
+- Fill appendix placeholders (currently there are still Table ?? sections in protocol sensitivity and objective variants).
+
+If main-text space is tight, what to prioritize
+If you can only afford ONE more substantive structural experiment in the main paper, choose:
+- stage-scope semantics control (swap / same-window / same-granularity)
+Because this most directly supports the claim that macro / mid / micro are meaningful roles rather than three arbitrary MoE insertions.
+
+If you can afford ONE more compact figure/table in the appendix, choose:
+- semantic grouping vs flat/random grouping
+Because this validates the Tempo / Focus / Memory / Exposure story.
+
+One-sentence conclusion
+- The current Q1~Q5 framing is good and much more persuasive than before, but a critical reviewer can still press on stage semantics, Q3/Q4 overlap, slice circularity, regularizer-driven diagnostics, and the lack of a small efficiency anchor.

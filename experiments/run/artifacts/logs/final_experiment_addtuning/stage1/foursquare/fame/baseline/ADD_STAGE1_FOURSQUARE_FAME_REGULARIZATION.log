@@ -1,0 +1,117 @@
+# job_id=ADD_STAGE1_FOURSQUARE_FAME_REGULARIZATION dataset=foursquare model=fame stage=stage1
+# cmd=/venv/FMoE/bin/python /workspace/FeaturedMoE/experiments/hyperopt_tune.py --config-name tune_fs --search-algo tpe --max-evals 12 --tune-epochs 40 --tune-patience 5 --seed 910033 --run-group final_experiment_addtuning --run-axis add_stage1_regularization --run-phase ADD_STAGE1_FOURSQUARE_FAME_REGULARIZATION model=fame dataset=foursquare eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=0 log_wandb=false show_progress=false ++seed=910033 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00113349,0.00073359,0.00051873,0.0003668,0.00025936] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[0.0001,0.00015,5e-05] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.inner_size=[256] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.12] ++search_space_type_overrides.dropout_ratio=choice ++search.hidden_size=[160] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[96] ++search_space_type_overrides.embedding_size=choice ++search.num_layers=[1] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.1] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.12] ++search_space_type_overrides.attn_dropout_prob=choice ++search.num_experts=[5] ++search_space_type_overrides.num_experts=choice ++search.n_layers=[1] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[1] ++search_space_type_overrides.n_heads=choice ++search.dropout_prob=[0.1] ++search_space_type_overrides.dropout_prob=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1724038 ts=2026-04-18T15:56:24
+[UniqueChoice] enabled: dedupe/remap duplicates across 45 finite combos
+
+=================================================================
+  Hyperopt  |  FAME x foursquare
+  max_evals=12  epochs=40  patience=5  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/4096/4096
+  track=final_experiment_addtuning  axis=add_stage1_regularization  phase=ADD_STAGE1_FOURSQUARE_FAME_REGULARIZATION
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, learning_rate, weight_decay
+Tuned params(len>1): 3  (~45 discrete combos)
+Tuned groups: 3
+  [optimization]
+    learning_rate                   [0.00113349, 0.00073359, 0.00051873, 0.0003668, 0.00025936]  -> choice
+    weight_decay                    [0.0001, 0.00015, 5e-05]                  -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30]                              -> choice
+Fixed params(singleton/non-list): 12
+Fixed groups: 12
+  [optimization]
+    hidden_dropout_prob             0.1                                     
+  [model_core]
+    attn_dropout_prob               0.12                                    
+    dropout_prob                    0.1                                     
+    dropout_ratio                   0.12                                    
+    embedding_size                  96                                      
+    hidden_size                     160                                     
+    inner_size                      256                                     
+    num_heads                       1                                       
+    num_layers                      1                                       
+  [other]
+    n_heads                         1                                       
+    n_layers                        1                                       
+    num_experts                     5                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/12] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0002594, weight_decay=5e-05
+  -> MRR@20=0.047000  best=0.047000  (full@40, trial=48s, avg=53s/trial, total=53s, ETA=9.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.047000 cur_best_hr10=0.065500 cur_test_mrr20=0.036400 cur_test_hr10=0.052000 avg_epoch_time_sec=1.1901 test_eval_time_sec=0.0781 test_eval_batches_per_sec=12.7973 test_eval_targets_per_sec=45571.3431 run_best_mrr20=0.047000 run_best_hr10=0.065500 run_test_mrr20=0.036400 run_test_hr10=0.052000
+
+[2/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.0007336, weight_decay=0.00015
+  -> MRR@20=0.089000  best=0.089000  (full@40, trial=1.2min, avg=1.1min/trial, total=2.2min, ETA=10.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.089000 cur_best_hr10=0.138400 cur_test_mrr20=0.068200 cur_test_hr10=0.112700 avg_epoch_time_sec=1.8332 test_eval_time_sec=0.0723 test_eval_batches_per_sec=13.8378 test_eval_targets_per_sec=49276.3780 run_best_mrr20=0.089000 run_best_hr10=0.138400 run_test_mrr20=0.068200 run_test_hr10=0.112700
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'learning_rate': 0.00113349, 'weight_decay': 0.0001}
+
+[3/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.001133, weight_decay=0.0001
+  -> MRR@20=0.134400  best=0.134400  (full@40, trial=1.3min, avg=1.1min/trial, total=3.4min, ETA=10.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.134400 cur_best_hr10=0.212500 cur_test_mrr20=0.103100 cur_test_hr10=0.174300 avg_epoch_time_sec=1.9198 test_eval_time_sec=0.0737 test_eval_batches_per_sec=13.5687 test_eval_targets_per_sec=48318.1606 run_best_mrr20=0.134400 run_best_hr10=0.212500 run_test_mrr20=0.103100 run_test_hr10=0.174300
+
+[4/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.0005187, weight_decay=5e-05
+  -> MRR@20=0.085300  best=0.134400  (full@40, trial=1.3min, avg=1.2min/trial, total=4.7min, ETA=9.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.085300 cur_best_hr10=0.135100 cur_test_mrr20=0.065700 cur_test_hr10=0.109900 avg_epoch_time_sec=1.8747 test_eval_time_sec=0.0730 test_eval_batches_per_sec=13.6925 test_eval_targets_per_sec=48758.8764 run_best_mrr20=0.134400 run_best_hr10=0.212500 run_test_mrr20=0.103100 run_test_hr10=0.174300
+
+[5/12] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.0005187, weight_decay=5e-05
+  -> MRR@20=0.086500  best=0.134400  (full@40, trial=1.4min, avg=1.2min/trial, total=6.2min, ETA=8.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.086500 cur_best_hr10=0.134700 cur_test_mrr20=0.064500 cur_test_hr10=0.107500 avg_epoch_time_sec=2.0963 test_eval_time_sec=0.0769 test_eval_batches_per_sec=13.0060 test_eval_targets_per_sec=46314.3556 run_best_mrr20=0.134400 run_best_hr10=0.212500 run_test_mrr20=0.103100 run_test_hr10=0.174300
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'learning_rate': 0.00113349, 'weight_decay': 0.00015}
+
+[6/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.001133, weight_decay=0.00015
+  -> MRR@20=0.126600  best=0.134400  (full@40, trial=1.4min, avg=1.3min/trial, total=7.6min, ETA=7.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.126600 cur_best_hr10=0.196800 cur_test_mrr20=0.096200 cur_test_hr10=0.165500 avg_epoch_time_sec=2.0235 test_eval_time_sec=0.0729 test_eval_batches_per_sec=13.7234 test_eval_targets_per_sec=48869.1152 run_best_mrr20=0.134400 run_best_hr10=0.212500 run_test_mrr20=0.103100 run_test_hr10=0.174300
+
+[7/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.0005187, weight_decay=0.00015
+  -> MRR@20=0.071900  best=0.134400  (full@40, trial=1.3min, avg=1.3min/trial, total=8.9min, ETA=6.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.071900 cur_best_hr10=0.102500 cur_test_mrr20=0.054900 cur_test_hr10=0.081500 avg_epoch_time_sec=1.8947 test_eval_time_sec=0.0735 test_eval_batches_per_sec=13.6010 test_eval_targets_per_sec=48433.1658 run_best_mrr20=0.134400 run_best_hr10=0.212500 run_test_mrr20=0.103100 run_test_hr10=0.174300
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'learning_rate': 0.00113349, 'weight_decay': 5e-05}
+
+[8/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.001133, weight_decay=5e-05
+  -> MRR@20=0.140700  best=0.140700  (full@40, trial=1.3min, avg=1.3min/trial, total=10.2min, ETA=5.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.140700 cur_best_hr10=0.221500 cur_test_mrr20=0.114400 cur_test_hr10=0.188200 avg_epoch_time_sec=1.9558 test_eval_time_sec=0.0738 test_eval_batches_per_sec=13.5576 test_eval_targets_per_sec=48278.4903 run_best_mrr20=0.140700 run_best_hr10=0.221500 run_test_mrr20=0.114400 run_test_hr10=0.188200
+
+[9/12] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0003668, weight_decay=0.00015
+  -> MRR@20=0.052700  best=0.140700  (full@40, trial=1.6min, avg=1.3min/trial, total=11.8min, ETA=3.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.052700 cur_best_hr10=0.068500 cur_test_mrr20=0.044200 cur_test_hr10=0.060800 avg_epoch_time_sec=2.3645 test_eval_time_sec=0.0810 test_eval_batches_per_sec=12.3427 test_eval_targets_per_sec=43952.3059 run_best_mrr20=0.140700 run_best_hr10=0.221500 run_test_mrr20=0.114400 run_test_hr10=0.188200
+
+[10/12] MAX_ITEM_LIST_LENGTH=10, learning_rate=0.0007336, weight_decay=0.0001
+  -> MRR@20=0.098200  best=0.140700  (full@40, trial=1.3min, avg=1.3min/trial, total=13.1min, ETA=2.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.098200 cur_best_hr10=0.155600 cur_test_mrr20=0.072900 cur_test_hr10=0.125900 avg_epoch_time_sec=1.9050 test_eval_time_sec=0.0720 test_eval_batches_per_sec=13.8830 test_eval_targets_per_sec=49437.1971 run_best_mrr20=0.140700 run_best_hr10=0.221500 run_test_mrr20=0.114400 run_test_hr10=0.188200
+
+[11/12] MAX_ITEM_LIST_LENGTH=30, learning_rate=0.0007336, weight_decay=0.00015
+  -> MRR@20=0.087900  best=0.140700  (full@40, trial=1.6min, avg=1.3min/trial, total=14.7min, ETA=1.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.087900 cur_best_hr10=0.132400 cur_test_mrr20=0.065700 cur_test_hr10=0.105900 avg_epoch_time_sec=2.3321 test_eval_time_sec=0.0792 test_eval_batches_per_sec=12.6196 test_eval_targets_per_sec=44938.4306 run_best_mrr20=0.140700 run_best_hr10=0.221500 run_test_mrr20=0.114400 run_test_hr10=0.188200
+
+[12/12] MAX_ITEM_LIST_LENGTH=20, learning_rate=0.0003668, weight_decay=0.00015
+  -> MRR@20=0.057200  best=0.140700  (full@40, trial=1.3min, avg=1.3min/trial, total=16.1min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.057200 cur_best_hr10=0.077400 cur_test_mrr20=0.043100 cur_test_hr10=0.063100 avg_epoch_time_sec=1.9733 test_eval_time_sec=0.0751 test_eval_batches_per_sec=13.3218 test_eval_targets_per_sec=47439.1017 run_best_mrr20=0.140700 run_best_hr10=0.221500 run_test_mrr20=0.114400 run_test_hr10=0.188200
+
+=================================================================
+  DONE  |  FAME x foursquare
+  Best MRR@20 = 0.140700  |  12/12 trials OK
+  Best HR@10  = 0.221500
+  Test MRR@20 = 0.114400  (best-valid checkpoint)
+  Test HR@10  = 0.188200  (best-valid checkpoint)
+  Avg epoch time = 1.956 sec/epoch
+  Final test eval = 0.074 sec | batches/s=13.558 | targets/s=48278.490
+[RUN_METRICS] best_valid_mrr20=0.140700 best_valid_hr10=0.221500 test_mrr20=0.114400 test_hr10=0.188200 avg_epoch_time_sec=1.9558 test_eval_time_sec=0.0738 test_eval_batches_per_sec=13.5576 test_eval_targets_per_sec=48278.4903
+  Total time: 16.1 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 10
+    learning_rate: 0.00113349
+    weight_decay: 5e-05
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/foursquare_FAME_add_stage1_foursquare_fame_regularization_20260418_155624_839691_pid1724038.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/normal/add_stage1_regularization/ADD/foursquare/FAME/foursquare_FAME_add_stage1_foursquare_fame_regularization_20260418_155624_839691_pid1724038.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment_addtuning/special/add_stage1_regularization/ADD/foursquare/FAME/foursquare_FAME_add_stage1_foursquare_fame_regularization_20260418_155624_839691_pid1724038_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment_addtuning/special/add_stage1_regularization/ADD/foursquare/FAME/foursquare_FAME_add_stage1_foursquare_fame_regularization_20260418_155624_839691_pid1724038_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1724038 start=2026-04-18T15:56:24 end=2026-04-18T16:12:29

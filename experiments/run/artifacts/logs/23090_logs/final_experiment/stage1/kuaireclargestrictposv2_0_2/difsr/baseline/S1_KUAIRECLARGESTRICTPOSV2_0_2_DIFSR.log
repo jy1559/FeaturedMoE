@@ -1,0 +1,252 @@
+# job_id=S1_KUAIRECLARGESTRICTPOSV2_0_2_DIFSR dataset=KuaiRecLargeStrictPosV2_0.2 model=difsr stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_strict_small --search-algo tpe --max-evals 36 --tune-epochs 35 --tune-patience 4 --seed 610052 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_KUAIRECLARGESTRICTPOSV2_0_2_DIFSR model=difsr dataset=KuaiRecLargeStrictPosV2_0.2 eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=2 log_wandb=false show_progress=false ++seed=610052 --max-run-hours 2 --oom-retry-limit 5 ++search.learning_rate=[0.00040373,0.00060289,0.00090029,0.00134441,0.00200761] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-05,5e-05,0.0001,0.0002] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[112,128,160,192] ++search_space_type_overrides.hidden_size=choice ++search.num_layers=[2,3,4] ++search_space_type_overrides.num_layers=choice ++search.num_heads=[1,2,4] ++search_space_type_overrides.num_heads=choice ++search.hidden_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[112,128,160,192] ++search_space_type_overrides.attribute_hidden_size=choice ++search.fusion_type=["gate","concat","sum"] ++search_space_type_overrides.fusion_type=choice ++search.lambda_attr=[0.12,0.14,0.15,0.16] ++search_space_type_overrides.lambda_attr=choice ++search.inner_size=[320] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.15] ++search_space_type_overrides.dropout_ratio=choice ++search.use_attribute_predictor=[true] ++search_space_type_overrides.use_attribute_predictor=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=1623901 ts=2026-04-18T02:19:45
+[UniqueChoice] enabled: dedupe/remap duplicates across 2211840 finite combos
+
+=================================================================
+  Hyperopt  |  DIFSR x KuaiRecLargeStrictPosV2_0.2
+  max_evals=36  epochs=35  patience=4  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=3072/6144/6144
+  track=final_experiment  axis=stage1_broad_search  phase=S1_KUAIRECLARGESTRICTPOSV2_0_2_DIFSR
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, attribute_hidden_size, fusion_type, hidden_dropout_prob, hidden_size, lambda_attr, learning_rate, num_heads, num_layers, weight_decay
+Tuned params(len>1): 11  (~2211840 discrete combos)
+Tuned groups: 11
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.12, 0.15, 0.2]                    -> choice
+    learning_rate                   [0.00040373, 0.00060289, 0.00090029, 0.00134441, 0.00200761]  -> choice
+    weight_decay                    [1e-05, 5e-05, 0.0001, 0.0002]            -> choice
+  [model_core]
+    attn_dropout_prob               [0.1, 0.12, 0.15, 0.2]                    -> choice
+    hidden_size                     [112, 128, 160, 192]                      -> choice
+    num_heads                       [1, 2, 4]                                 -> choice
+    num_layers                      [2, 3, 4]                                 -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30, 50]                          -> choice
+    attribute_hidden_size           [112, 128, 160, 192]                      -> choice
+    fusion_type                     ['gate', 'concat', 'sum']                 -> choice
+    lambda_attr                     [0.12, 0.14, 0.15, 0.16]                  -> choice
+Fixed params(singleton/non-list): 4
+Fixed groups: 4
+  [model_core]
+    dropout_ratio                   0.15                                    
+    inner_size                      320                                     
+  [other]
+    selected_features               ['category']                            
+    use_attribute_predictor         True                                    
+
+[Wandb] disabled for this hyperopt run
+
+[1/36] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=160, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=128, lambda_attr=0.16, learning_rate=0.002008, num_heads=2, num_layers=3, weight_decay=0.0002
+  -> MRR@20=0.013200  best=0.013200  (early_stop@10, trial=49s, avg=51s/trial, total=51s, ETA=29.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.013200 cur_best_hr10=0.016700 cur_test_mrr20=0.280800 cur_test_hr10=0.295600 avg_epoch_time_sec=4.8183 test_eval_time_sec=0.0623 test_eval_batches_per_sec=16.0418 test_eval_targets_per_sec=43409.0997 run_best_mrr20=0.013200 run_best_hr10=0.016700 run_test_mrr20=0.280800 run_test_hr10=0.295600
+
+[2/36] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.2, attribute_hidden_size=160, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=160, lambda_attr=0.15, learning_rate=0.001344, num_heads=2, num_layers=2, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=30 (anchor len=50 only)
+  -> MRR@20=0.014100  best=0.014100  (early_stop@13, trial=29s, avg=43s/trial, total=1.4min, ETA=24.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.014100 cur_best_hr10=0.019300 cur_test_mrr20=0.277300 cur_test_hr10=0.292300 avg_epoch_time_sec=2.2172 test_eval_time_sec=0.0505 test_eval_batches_per_sec=19.7869 test_eval_targets_per_sec=53543.2960 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[3/36] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=112, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=160, lambda_attr=0.14, learning_rate=0.0009003, num_heads=4, num_layers=3, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=30 (anchor len=50 only)
+  -> MRR@20=0.013000  best=0.014100  (early_stop@9, trial=30s, avg=38s/trial, total=1.9min, ETA=21.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.013000 cur_best_hr10=0.017400 cur_test_mrr20=0.254700 cur_test_hr10=0.271000 avg_epoch_time_sec=3.2931 test_eval_time_sec=0.0554 test_eval_batches_per_sec=18.0615 test_eval_targets_per_sec=48874.5155 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[4/36] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=192, fusion_type=sum, hidden_dropout_prob=0.2, hidden_size=192, lambda_attr=0.15, learning_rate=0.002008, num_heads=2, num_layers=4, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=30 (anchor len=50 only)
+  -> MRR@20=0.012600  best=0.014100  (early_stop@9, trial=41s, avg=39s/trial, total=2.6min, ETA=20.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.012600 cur_best_hr10=0.015900 cur_test_mrr20=0.257600 cur_test_hr10=0.275500 avg_epoch_time_sec=4.5577 test_eval_time_sec=0.0607 test_eval_batches_per_sec=16.4634 test_eval_targets_per_sec=44549.8482 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[5/36] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=192, fusion_type=concat, hidden_dropout_prob=0.12, hidden_size=128, lambda_attr=0.14, learning_rate=0.002008, num_heads=1, num_layers=3, weight_decay=0.0002
+  -> MRR@20=0.013300  best=0.014100  (early_stop@6, trial=27s, avg=37s/trial, total=3.1min, ETA=19.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.013300 cur_best_hr10=0.018600 cur_test_mrr20=0.246000 cur_test_hr10=0.255300 avg_epoch_time_sec=4.3747 test_eval_time_sec=0.0580 test_eval_batches_per_sec=17.2350 test_eval_targets_per_sec=46638.0394 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[6/36] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=192, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=160, lambda_attr=0.16, learning_rate=0.0006029, num_heads=2, num_layers=4, weight_decay=0.0002
+  -> MRR@20=0.013500  best=0.014100  (early_stop@8, trial=1.2min, avg=42s/trial, total=4.2min, ETA=21.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.013500 cur_best_hr10=0.017800 cur_test_mrr20=0.236300 cur_test_hr10=0.244100 avg_epoch_time_sec=8.6075 test_eval_time_sec=0.0792 test_eval_batches_per_sec=12.6291 test_eval_targets_per_sec=34174.2668 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[7/36] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.15, hidden_size=160, lambda_attr=0.16, learning_rate=0.001344, num_heads=1, num_layers=2, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.013900  best=0.014100  (early_stop@8, trial=12s, avg=39s/trial, total=4.5min, ETA=18.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.013900 cur_best_hr10=0.018200 cur_test_mrr20=0.304000 cur_test_hr10=0.313500 avg_epoch_time_sec=1.4905 test_eval_time_sec=0.0459 test_eval_batches_per_sec=21.7761 test_eval_targets_per_sec=58926.2584 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[8/36] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.12, attribute_hidden_size=128, fusion_type=concat, hidden_dropout_prob=0.12, hidden_size=160, lambda_attr=0.15, learning_rate=0.001344, num_heads=1, num_layers=3, weight_decay=1e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=30 (anchor len=50 only)
+  -> MRR@20=0.012800  best=0.014100  (early_stop@8, trial=23s, avg=37s/trial, total=5.0min, ETA=17.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.012800 cur_best_hr10=0.017100 cur_test_mrr20=0.278100 cur_test_hr10=0.285600 avg_epoch_time_sec=2.8176 test_eval_time_sec=0.0511 test_eval_batches_per_sec=19.5535 test_eval_targets_per_sec=52911.7715 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[9/36] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.2, attribute_hidden_size=112, fusion_type=concat, hidden_dropout_prob=0.15, hidden_size=128, lambda_attr=0.16, learning_rate=0.0004037, num_heads=1, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.013800  best=0.014100  (early_stop@16, trial=47s, avg=38s/trial, total=5.8min, ETA=17.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.013800 cur_best_hr10=0.021200 cur_test_mrr20=0.296000 cur_test_hr10=0.304600 avg_epoch_time_sec=2.8897 test_eval_time_sec=0.0519 test_eval_batches_per_sec=19.2495 test_eval_targets_per_sec=52089.0470 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[10/36] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=112, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=160, lambda_attr=0.14, learning_rate=0.002008, num_heads=4, num_layers=3, weight_decay=0.0001
+  -> MRR@20=0.013800  best=0.014100  (early_stop@7, trial=55s, avg=40s/trial, total=6.7min, ETA=17.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.013800 cur_best_hr10=0.018900 cur_test_mrr20=0.269000 cur_test_hr10=0.282200 avg_epoch_time_sec=7.8125 test_eval_time_sec=0.0770 test_eval_batches_per_sec=12.9917 test_eval_targets_per_sec=35155.5286 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[11/36] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=192, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=192, lambda_attr=0.15, learning_rate=0.0004037, num_heads=1, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.012900  best=0.014100  (early_stop@16, trial=58s, avg=42s/trial, total=7.7min, ETA=17.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.012900 cur_best_hr10=0.017100 cur_test_mrr20=0.291700 cur_test_hr10=0.301200 avg_epoch_time_sec=3.5954 test_eval_time_sec=0.0539 test_eval_batches_per_sec=18.5367 test_eval_targets_per_sec=50160.3687 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[12/36] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.2, attribute_hidden_size=192, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=112, lambda_attr=0.14, learning_rate=0.002008, num_heads=1, num_layers=3, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.012600  best=0.014100  (early_stop@7, trial=16s, avg=40s/trial, total=8.0min, ETA=16.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.012600 cur_best_hr10=0.017800 cur_test_mrr20=0.244600 cur_test_hr10=0.271000 avg_epoch_time_sec=2.2799 test_eval_time_sec=0.0466 test_eval_batches_per_sec=21.4798 test_eval_targets_per_sec=58124.4482 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[13/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, attribute_hidden_size=112, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=192, lambda_attr=0.16, learning_rate=0.001344, num_heads=4, num_layers=2, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.013300  best=0.014100  (early_stop@8, trial=15s, avg=39s/trial, total=8.4min, ETA=14.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.013300 cur_best_hr10=0.018200 cur_test_mrr20=0.291400 cur_test_hr10=0.300100 avg_epoch_time_sec=1.8634 test_eval_time_sec=0.0456 test_eval_batches_per_sec=21.9363 test_eval_targets_per_sec=59359.5669 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[14/36] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.2, attribute_hidden_size=192, fusion_type=concat, hidden_dropout_prob=0.12, hidden_size=128, lambda_attr=0.15, learning_rate=0.001344, num_heads=2, num_layers=2, weight_decay=1e-05
+  -> MRR@20=0.013000  best=0.014100  (early_stop@9, trial=35s, avg=38s/trial, total=9.0min, ETA=14.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.013000 cur_best_hr10=0.020100 cur_test_mrr20=0.283900 cur_test_hr10=0.293400 avg_epoch_time_sec=3.8706 test_eval_time_sec=0.0579 test_eval_batches_per_sec=17.2767 test_eval_targets_per_sec=46750.8058 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[15/36] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=112, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=160, lambda_attr=0.16, learning_rate=0.002008, num_heads=1, num_layers=2, weight_decay=1e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=30 (anchor len=50 only)
+  -> MRR@20=0.013800  best=0.014100  (early_stop@8, trial=16s, avg=37s/trial, total=9.3min, ETA=13.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.013800 cur_best_hr10=0.017100 cur_test_mrr20=0.304500 cur_test_hr10=0.309100 avg_epoch_time_sec=1.9030 test_eval_time_sec=0.0482 test_eval_batches_per_sec=20.7344 test_eval_targets_per_sec=56107.3456 run_best_mrr20=0.014100 run_best_hr10=0.019300 run_test_mrr20=0.277300 run_test_hr10=0.292300
+
+[16/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=192, lambda_attr=0.12, learning_rate=0.0006029, num_heads=4, num_layers=2, weight_decay=0.0002
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.014600  best=0.014600  (early_stop@14, trial=26s, avg=37s/trial, total=9.8min, ETA=12.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.014600 cur_best_hr10=0.020800 cur_test_mrr20=0.292600 cur_test_hr10=0.301200 avg_epoch_time_sec=1.8106 test_eval_time_sec=0.0457 test_eval_batches_per_sec=21.8922 test_eval_targets_per_sec=59240.2832 run_best_mrr20=0.014600 run_best_hr10=0.020800 run_test_mrr20=0.292600 run_test_hr10=0.301200
+
+[17/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.2, attribute_hidden_size=128, fusion_type=concat, hidden_dropout_prob=0.12, hidden_size=128, lambda_attr=0.12, learning_rate=0.0006029, num_heads=1, num_layers=4, weight_decay=0.0002
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.013000  best=0.014600  (early_stop@10, trial=23s, avg=36s/trial, total=10.2min, ETA=11.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.013000 cur_best_hr10=0.016300 cur_test_mrr20=0.257900 cur_test_hr10=0.273200 avg_epoch_time_sec=2.2528 test_eval_time_sec=0.0468 test_eval_batches_per_sec=21.3484 test_eval_targets_per_sec=57768.8420 run_best_mrr20=0.014600 run_best_hr10=0.020800 run_test_mrr20=0.292600 run_test_hr10=0.301200
+
+[18/36] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.2, attribute_hidden_size=160, fusion_type=concat, hidden_dropout_prob=0.1, hidden_size=192, lambda_attr=0.14, learning_rate=0.002008, num_heads=2, num_layers=4, weight_decay=0.0001
+  -> MRR@20=0.013000  best=0.014600  (early_stop@7, trial=60s, avg=37s/trial, total=11.2min, ETA=11.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.013000 cur_best_hr10=0.017400 cur_test_mrr20=0.251800 cur_test_hr10=0.265400 avg_epoch_time_sec=8.5137 test_eval_time_sec=0.0795 test_eval_batches_per_sec=12.5773 test_eval_targets_per_sec=34034.2827 run_best_mrr20=0.014600 run_best_hr10=0.020800 run_test_mrr20=0.292600 run_test_hr10=0.301200
+
+[19/36] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.2, attribute_hidden_size=192, fusion_type=gate, hidden_dropout_prob=0.15, hidden_size=192, lambda_attr=0.14, learning_rate=0.001344, num_heads=2, num_layers=3, weight_decay=0.0002
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=30 (anchor len=50 only)
+  -> MRR@20=0.013300  best=0.014600  (early_stop@9, trial=35s, avg=37s/trial, total=11.9min, ETA=10.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.013300 cur_best_hr10=0.016300 cur_test_mrr20=0.279700 cur_test_hr10=0.291200 avg_epoch_time_sec=3.8945 test_eval_time_sec=0.0574 test_eval_batches_per_sec=17.4103 test_eval_targets_per_sec=47112.1441 run_best_mrr20=0.014600 run_best_hr10=0.020800 run_test_mrr20=0.292600 run_test_hr10=0.301200
+
+[20/36] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=192, fusion_type=sum, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.12, learning_rate=0.001344, num_heads=4, num_layers=2, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=30 (anchor len=50 only)
+  -> MRR@20=0.013300  best=0.014600  (early_stop@15, trial=34s, avg=37s/trial, total=12.4min, ETA=9.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.013300 cur_best_hr10=0.018600 cur_test_mrr20=0.273700 cur_test_hr10=0.291200 avg_epoch_time_sec=2.2434 test_eval_time_sec=0.0502 test_eval_batches_per_sec=19.9218 test_eval_targets_per_sec=53908.4945 run_best_mrr20=0.014600 run_best_hr10=0.020800 run_test_mrr20=0.292600 run_test_hr10=0.301200
+
+[21/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.12, learning_rate=0.0006029, num_heads=4, num_layers=2, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.015200  best=0.015200  (early_stop@20, trial=35s, avg=37s/trial, total=13.1min, ETA=9.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.015200 cur_best_hr10=0.020100 cur_test_mrr20=0.296200 cur_test_hr10=0.306800 avg_epoch_time_sec=1.7478 test_eval_time_sec=0.0458 test_eval_batches_per_sec=21.8283 test_eval_targets_per_sec=59067.3257 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+[22/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.12, learning_rate=0.0006029, num_heads=4, num_layers=2, weight_decay=0.0002
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.014700  best=0.015200  (early_stop@17, trial=27s, avg=37s/trial, total=13.6min, ETA=8.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.014700 cur_best_hr10=0.020100 cur_test_mrr20=0.291000 cur_test_hr10=0.297900 avg_epoch_time_sec=1.5720 test_eval_time_sec=0.0459 test_eval_batches_per_sec=21.7764 test_eval_targets_per_sec=58926.8702 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'attn_dropout_prob': 0.1, 'attribute_hidden_size': 112, 'fusion_type': 'gate', 'hidden_dropout_prob': 0.1, 'hidden_size': 112, 'lambda_attr': 0.12, 'learning_rate': 0.00040373, 'num_heads': 1, 'num_layers': 2, 'weight_decay': 1e-05}
+
+[23/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=112, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=112, lambda_attr=0.12, learning_rate=0.0004037, num_heads=1, num_layers=2, weight_decay=1e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.013800  best=0.015200  (early_stop@18, trial=32s, avg=37s/trial, total=14.1min, ETA=8.0min)
+[TRIAL_METRICS] cur_best_mrr20=0.013800 cur_best_hr10=0.019700 cur_test_mrr20=0.296400 cur_test_hr10=0.309100 avg_epoch_time_sec=1.7418 test_eval_time_sec=0.0455 test_eval_batches_per_sec=21.9888 test_eval_targets_per_sec=59501.7831 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'attn_dropout_prob': 0.1, 'attribute_hidden_size': 112, 'fusion_type': 'gate', 'hidden_dropout_prob': 0.1, 'hidden_size': 112, 'lambda_attr': 0.12, 'learning_rate': 0.00040373, 'num_heads': 1, 'num_layers': 2, 'weight_decay': 5e-05}
+
+[24/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=112, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=112, lambda_attr=0.12, learning_rate=0.0004037, num_heads=1, num_layers=2, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.013700  best=0.015200  (early_stop@18, trial=31s, avg=37s/trial, total=14.6min, ETA=7.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.013700 cur_best_hr10=0.018900 cur_test_mrr20=0.288300 cur_test_hr10=0.303500 avg_epoch_time_sec=1.7239 test_eval_time_sec=0.0457 test_eval_batches_per_sec=21.8663 test_eval_targets_per_sec=59170.1768 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'attn_dropout_prob': 0.1, 'attribute_hidden_size': 112, 'fusion_type': 'gate', 'hidden_dropout_prob': 0.1, 'hidden_size': 112, 'lambda_attr': 0.12, 'learning_rate': 0.00040373, 'num_heads': 1, 'num_layers': 2, 'weight_decay': 0.0001}
+
+[25/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=112, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=112, lambda_attr=0.12, learning_rate=0.0004037, num_heads=1, num_layers=2, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.013700  best=0.015200  (early_stop@18, trial=27s, avg=36s/trial, total=15.1min, ETA=6.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.013700 cur_best_hr10=0.019300 cur_test_mrr20=0.283800 cur_test_hr10=0.300100 avg_epoch_time_sec=1.4585 test_eval_time_sec=0.0454 test_eval_batches_per_sec=22.0499 test_eval_targets_per_sec=59666.9451 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+[26/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.12, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.12, learning_rate=0.0009003, num_heads=4, num_layers=2, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.014500  best=0.015200  (early_stop@10, trial=19s, avg=36s/trial, total=15.4min, ETA=5.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.014500 cur_best_hr10=0.021200 cur_test_mrr20=0.293200 cur_test_hr10=0.302400 avg_epoch_time_sec=1.8906 test_eval_time_sec=0.0462 test_eval_batches_per_sec=21.6328 test_eval_targets_per_sec=58538.4536 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'attn_dropout_prob': 0.1, 'attribute_hidden_size': 112, 'fusion_type': 'gate', 'hidden_dropout_prob': 0.1, 'hidden_size': 112, 'lambda_attr': 0.12, 'learning_rate': 0.00040373, 'num_heads': 1, 'num_layers': 2, 'weight_decay': 0.0002}
+
+[27/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=112, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=112, lambda_attr=0.12, learning_rate=0.0004037, num_heads=1, num_layers=2, weight_decay=0.0002
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.014100  best=0.015200  (early_stop@18, trial=28s, avg=35s/trial, total=15.9min, ETA=5.3min)
+[TRIAL_METRICS] cur_best_mrr20=0.014100 cur_best_hr10=0.020100 cur_test_mrr20=0.281100 cur_test_hr10=0.293400 avg_epoch_time_sec=1.5165 test_eval_time_sec=0.0456 test_eval_batches_per_sec=21.9336 test_eval_targets_per_sec=59352.4273 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+[28/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.12, learning_rate=0.0006029, num_heads=4, num_layers=4, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.014000  best=0.015200  (early_stop@14, trial=38s, avg=35s/trial, total=16.5min, ETA=4.7min)
+[TRIAL_METRICS] cur_best_mrr20=0.014000 cur_best_hr10=0.018600 cur_test_mrr20=0.273900 cur_test_hr10=0.285600 avg_epoch_time_sec=2.7195 test_eval_time_sec=0.0478 test_eval_batches_per_sec=20.9390 test_eval_targets_per_sec=56660.8255 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+[29/36] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.12, learning_rate=0.0004037, num_heads=4, num_layers=2, weight_decay=0.0002
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.014200  best=0.015200  (early_stop@15, trial=25s, avg=35s/trial, total=17.0min, ETA=4.1min)
+[TRIAL_METRICS] cur_best_mrr20=0.014200 cur_best_hr10=0.019300 cur_test_mrr20=0.278900 cur_test_hr10=0.287800 avg_epoch_time_sec=1.6406 test_eval_time_sec=0.0467 test_eval_batches_per_sec=21.4011 test_eval_targets_per_sec=57911.5066 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'attn_dropout_prob': 0.1, 'attribute_hidden_size': 112, 'fusion_type': 'gate', 'hidden_dropout_prob': 0.1, 'hidden_size': 112, 'lambda_attr': 0.12, 'learning_rate': 0.00040373, 'num_heads': 1, 'num_layers': 3, 'weight_decay': 1e-05}
+
+[30/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=112, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=112, lambda_attr=0.12, learning_rate=0.0004037, num_heads=1, num_layers=3, weight_decay=1e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.013400  best=0.015200  (early_stop@18, trial=41s, avg=36s/trial, total=17.8min, ETA=3.6min)
+[TRIAL_METRICS] cur_best_mrr20=0.013400 cur_best_hr10=0.018600 cur_test_mrr20=0.293400 cur_test_hr10=0.303500 avg_epoch_time_sec=2.2863 test_eval_time_sec=0.0463 test_eval_batches_per_sec=21.6073 test_eval_targets_per_sec=58469.3951 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+[UniqueChoice] remap duplicate suggestion -> {'MAX_ITEM_LIST_LENGTH': 10, 'attn_dropout_prob': 0.1, 'attribute_hidden_size': 112, 'fusion_type': 'gate', 'hidden_dropout_prob': 0.1, 'hidden_size': 112, 'lambda_attr': 0.12, 'learning_rate': 0.00040373, 'num_heads': 1, 'num_layers': 3, 'weight_decay': 5e-05}
+
+[31/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=112, fusion_type=gate, hidden_dropout_prob=0.1, hidden_size=112, lambda_attr=0.12, learning_rate=0.0004037, num_heads=1, num_layers=3, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.013400  best=0.015200  (early_stop@14, trial=27s, avg=35s/trial, total=18.2min, ETA=2.9min)
+[TRIAL_METRICS] cur_best_mrr20=0.013400 cur_best_hr10=0.017400 cur_test_mrr20=0.267700 cur_test_hr10=0.281100 avg_epoch_time_sec=1.8831 test_eval_time_sec=0.0463 test_eval_batches_per_sec=21.5965 test_eval_targets_per_sec=58440.1923 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+[32/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=128, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.12, learning_rate=0.0006029, num_heads=4, num_layers=2, weight_decay=0.0001
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.013800  best=0.015200  (early_stop@19, trial=35s, avg=35s/trial, total=18.8min, ETA=2.4min)
+[TRIAL_METRICS] cur_best_mrr20=0.013800 cur_best_hr10=0.019300 cur_test_mrr20=0.291000 cur_test_hr10=0.303500 avg_epoch_time_sec=1.8276 test_eval_time_sec=0.0455 test_eval_batches_per_sec=21.9655 test_eval_targets_per_sec=59438.5264 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+[33/36] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.12, learning_rate=0.0009003, num_heads=4, num_layers=4, weight_decay=0.0002
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.013300  best=0.015200  (early_stop@11, trial=34s, avg=35s/trial, total=19.5min, ETA=1.8min)
+[TRIAL_METRICS] cur_best_mrr20=0.013300 cur_best_hr10=0.017800 cur_test_mrr20=0.260600 cur_test_hr10=0.275500 avg_epoch_time_sec=3.0329 test_eval_time_sec=0.0514 test_eval_batches_per_sec=19.4488 test_eval_targets_per_sec=52628.3931 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+[34/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.15, learning_rate=0.0006029, num_heads=4, num_layers=2, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.015200  best=0.015200  (early_stop@20, trial=37s, avg=36s/trial, total=20.2min, ETA=1.2min)
+[TRIAL_METRICS] cur_best_mrr20=0.015200 cur_best_hr10=0.019700 cur_test_mrr20=0.296800 cur_test_hr10=0.308000 avg_epoch_time_sec=1.8484 test_eval_time_sec=0.0453 test_eval_batches_per_sec=22.0666 test_eval_targets_per_sec=59712.1485 run_best_mrr20=0.015200 run_best_hr10=0.019700 run_test_mrr20=0.296800 run_test_hr10=0.308000
+
+[35/36] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.1, attribute_hidden_size=160, fusion_type=gate, hidden_dropout_prob=0.2, hidden_size=112, lambda_attr=0.15, learning_rate=0.0006029, num_heads=2, num_layers=3, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=10 (anchor len=50 only)
+  -> MRR@20=0.014700  best=0.015200  (early_stop@14, trial=32s, avg=36s/trial, total=20.7min, ETA=36s)
+[TRIAL_METRICS] cur_best_mrr20=0.014700 cur_best_hr10=0.021200 cur_test_mrr20=0.277800 cur_test_hr10=0.288900 avg_epoch_time_sec=2.2583 test_eval_time_sec=0.0469 test_eval_batches_per_sec=21.3021 test_eval_targets_per_sec=57643.5612 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+[36/36] MAX_ITEM_LIST_LENGTH=20, attn_dropout_prob=0.12, attribute_hidden_size=128, fusion_type=sum, hidden_dropout_prob=0.12, hidden_size=112, lambda_attr=0.15, learning_rate=0.0004037, num_heads=4, num_layers=4, weight_decay=5e-05
+[CachePolicy] Disk cache OFF for KuaiRecLargeStrictPosV2_0.2 len=20 (anchor len=50 only)
+  -> MRR@20=0.014000  best=0.015200  (early_stop@13, trial=34s, avg=36s/trial, total=21.4min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.014000 cur_best_hr10=0.019700 cur_test_mrr20=0.256600 cur_test_hr10=0.267600 avg_epoch_time_sec=2.5532 test_eval_time_sec=0.0502 test_eval_batches_per_sec=19.9203 test_eval_targets_per_sec=53904.3980 run_best_mrr20=0.015200 run_best_hr10=0.020100 run_test_mrr20=0.296200 run_test_hr10=0.306800
+
+=================================================================
+  DONE  |  DIFSR x KuaiRecLargeStrictPosV2_0.2
+  Best MRR@20 = 0.015200  |  36/36 trials OK
+  Best HR@10  = 0.020100
+  Test MRR@20 = 0.296200  (best-valid checkpoint)
+  Test HR@10  = 0.306800  (best-valid checkpoint)
+  Avg epoch time = 1.748 sec/epoch
+  Final test eval = 0.046 sec | batches/s=21.828 | targets/s=59067.326
+[RUN_METRICS] best_valid_mrr20=0.015200 best_valid_hr10=0.020100 test_mrr20=0.296200 test_hr10=0.306800 avg_epoch_time_sec=1.7478 test_eval_time_sec=0.0458 test_eval_batches_per_sec=21.8283 test_eval_targets_per_sec=59067.3257
+  Total time: 21.4 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 10
+    attn_dropout_prob: 0.1
+    attribute_hidden_size: 160
+    fusion_type: gate
+    hidden_dropout_prob: 0.2
+    hidden_size: 112
+    lambda_attr: 0.12
+    learning_rate: 0.00060289
+    num_heads: 4
+    num_layers: 2
+    weight_decay: 5e-05
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/KuaiRecLargeStrictPosV2_0.2_DIFSR_s1_kuaireclargestrictposv2_0_2_difsr_20260418_021948_244129_pid1623901.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage1_broad_search/S1/KuaiRecLargeStrictPosV2_0.2/DIFSR/KuaiRecLargeStrictPosV2_0.2_DIFSR_s1_kuaireclargestrictposv2_0_2_difsr_20260418_021948_244129_pid1623901.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage1_broad_search/S1/KuaiRecLargeStrictPosV2_0.2/DIFSR/KuaiRecLargeStrictPosV2_0.2_DIFSR_s1_kuaireclargestrictposv2_0_2_difsr_20260418_021948_244129_pid1623901_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage1_broad_search/S1/KuaiRecLargeStrictPosV2_0.2/DIFSR/KuaiRecLargeStrictPosV2_0.2_DIFSR_s1_kuaireclargestrictposv2_0_2_difsr_20260418_021948_244129_pid1623901_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=1623901 start=2026-04-18T02:19:45 end=2026-04-18T02:41:10

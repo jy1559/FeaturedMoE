@@ -1,0 +1,315 @@
+# job_id=S1_RETAIL_ROCKET_FDSA dataset=retail_rocket model=fdsa stage=stage1
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_rr --search-algo tpe --max-evals 24 --tune-epochs 35 --tune-patience 4 --seed 610029 --run-group final_experiment --run-axis stage1_broad_search --run-phase S1_RETAIL_ROCKET_FDSA model=fdsa dataset=retail_rocket eval_mode=session_fixed feature_mode=full_v4 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++special_logging=true ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=4 log_wandb=false show_progress=false ++seed=610029 --max-run-hours 2 --oom-retry-limit 2 ++search.learning_rate=[0.00013594,0.00020145,0.00029853,0.00044239,0.00065559] ++search_space_type_overrides.learning_rate=choice ++search.weight_decay=[1e-05,5e-05,0.0001,0.0002] ++search_space_type_overrides.weight_decay=choice ++search.MAX_ITEM_LIST_LENGTH=[10,20,30,50] ++search_space_type_overrides.MAX_ITEM_LIST_LENGTH=choice ++search.hidden_size=[64,96,112,128] ++search_space_type_overrides.hidden_size=choice ++search.embedding_size=[64,96,112,128] ++search_space_type_overrides.embedding_size=choice ++search.n_layers=[1,2,3] ++search_space_type_overrides.n_layers=choice ++search.n_heads=[1,2,4] ++search_space_type_overrides.n_heads=choice ++search.hidden_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.hidden_dropout_prob=choice ++search.attn_dropout_prob=[0.1,0.12,0.15,0.2] ++search_space_type_overrides.attn_dropout_prob=choice ++search.attribute_hidden_size=[64,96,112,128] ++search_space_type_overrides.attribute_hidden_size=choice ++search.lambda_attr=[0.0,0.08,0.1,0.12] ++search_space_type_overrides.lambda_attr=choice ++search.inner_size=[224] ++search_space_type_overrides.inner_size=choice ++search.dropout_ratio=[0.15] ++search_space_type_overrides.dropout_ratio=choice ++search.selected_features=[["category"]] ++search_space_type_overrides.selected_features=choice ++search.pooling_mode=["mean"] ++search_space_type_overrides.pooling_mode=choice
+
+/venv/FMoE/lib/python3.10/site-packages/ray/_private/parameter.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[RUN_STATUS] START pid=552306 ts=2026-04-18T03:45:00
+[UniqueChoice] disabled: finite choice-only space has 2949120 combos, exceeding enumeration cap 200000
+
+=================================================================
+  Hyperopt  |  FDSA x retail_rocket
+  max_evals=24  epochs=35  patience=4  wandb=off
+  search_algo=tpe
+  max_run_hours=2.000  (stop launching new trials after current trial)
+  oom_retry_limit=2  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=4096/8192/8192
+  track=final_experiment  axis=stage1_broad_search  phase=S1_RETAIL_ROCKET_FDSA
+=================================================================
+Changed knobs: MAX_ITEM_LIST_LENGTH, attn_dropout_prob, attribute_hidden_size, embedding_size, hidden_dropout_prob, hidden_size, lambda_attr, learning_rate, n_heads, n_layers, weight_decay
+Tuned params(len>1): 11  (~2949120 discrete combos)
+Tuned groups: 11
+  [optimization]
+    hidden_dropout_prob             [0.1, 0.12, 0.15, 0.2]                    -> choice
+    learning_rate                   [0.00013594, 0.00020145, 0.00029853, 0.00044239, 0.00065559]  -> choice
+    weight_decay                    [1e-05, 5e-05, 0.0001, 0.0002]            -> choice
+  [model_core]
+    attn_dropout_prob               [0.1, 0.12, 0.15, 0.2]                    -> choice
+    embedding_size                  [64, 96, 112, 128]                        -> choice
+    hidden_size                     [64, 96, 112, 128]                        -> choice
+  [other]
+    MAX_ITEM_LIST_LENGTH            [10, 20, 30, 50]                          -> choice
+    attribute_hidden_size           [64, 96, 112, 128]                        -> choice
+    lambda_attr                     [0.0, 0.08, 0.1, 0.12]                    -> choice
+    n_heads                         [1, 2, 4]                                 -> choice
+    n_layers                        [1, 2, 3]                                 -> choice
+Fixed params(singleton/non-list): 4
+Fixed groups: 4
+  [model_core]
+    dropout_ratio                   0.15                                    
+    inner_size                      224                                     
+  [other]
+    pooling_mode                    mean                                    
+    selected_features               ['category']                            
+
+[Wandb] disabled for this hyperopt run
+
+[1/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.2, attribute_hidden_size=112, embedding_size=96, hidden_dropout_prob=0.12, hidden_size=128, lambda_attr=0, learning_rate=0.0002014, n_heads=1, n_layers=1, weight_decay=5e-05
+[OOM_RETRY] trial=1 retry=1/2 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.56 GiB of which 3.85 GiB is free. Process 465971 has 19.71 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.25 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=1 retry=2/2 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.334300  best=0.334300  (early_stop@24, trial=11.2min, avg=12.2min/trial, total=12.2min, ETA=4.68h)
+[TRIAL_METRICS] cur_best_mrr20=0.334300 cur_best_hr10=0.542800 cur_test_mrr20=0.329700 cur_test_hr10=0.528200 avg_epoch_time_sec=27.8818 test_eval_time_sec=1.4928 test_eval_batches_per_sec=7.3689 test_eval_targets_per_sec=14054.4565 run_best_mrr20=0.334300 run_best_hr10=0.542800 run_test_mrr20=0.329700 run_test_hr10=0.528200
+
+[2/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.15, attribute_hidden_size=96, embedding_size=128, hidden_dropout_prob=0.2, hidden_size=64, lambda_attr=0.1, learning_rate=0.0002985, n_heads=1, n_layers=1, weight_decay=1e-05
+/venv/FMoE/lib/python3.10/site-packages/torch/autograd/graph.py:823: UserWarning: Error detected in LogSoftmaxBackward0. Traceback of forward call that caused the error:
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4952, in <module>
+    main()
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4746, in main
+    best = fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 540, in fmin
+    return trials.fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 671, in fmin
+    return fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 586, in fmin
+    rval.exhaust()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 364, in exhaust
+    self.run(self.max_evals - n_done, block_until_done=self.asynchronous)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 300, in run
+    self.serial_evaluate()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 178, in serial_evaluate
+    result = self.domain.evaluate(spec, ctrl)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 892, in evaluate
+    rval = self.fn(pyll_rval)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4417, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3087, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+ (Triggered internally at /pytorch/torch/csrc/autograd/python_anomaly_mode.cpp:122.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+[OOM_RETRY] trial=2 retry=1/2 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.56 GiB of which 3.86 GiB is free. Process 465971 has 19.69 GiB memory in use. Of the allocated memory 14.75 GiB is allocated by PyTorch, and 4.63 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=2 retry=2/2 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.343000  best=0.343000  (early_stop@32, trial=27.8min, avg=20.6min/trial, total=41.2min, ETA=7.55h)
+[TRIAL_METRICS] cur_best_mrr20=0.343000 cur_best_hr10=0.553900 cur_test_mrr20=0.339700 cur_test_hr10=0.539700 avg_epoch_time_sec=51.9580 test_eval_time_sec=1.4820 test_eval_batches_per_sec=7.4222 test_eval_targets_per_sec=14156.0750 run_best_mrr20=0.343000 run_best_hr10=0.553900 run_test_mrr20=0.339700 run_test_hr10=0.539700
+
+[3/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.15, attribute_hidden_size=112, embedding_size=128, hidden_dropout_prob=0.1, hidden_size=128, lambda_attr=0.12, learning_rate=0.0006556, n_heads=4, n_layers=1, weight_decay=5e-05
+/venv/FMoE/lib/python3.10/site-packages/torch/autograd/graph.py:823: UserWarning: Error detected in LogSoftmaxBackward0. Traceback of forward call that caused the error:
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4952, in <module>
+    main()
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4746, in main
+    best = fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 540, in fmin
+    return trials.fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 671, in fmin
+    return fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 586, in fmin
+    rval.exhaust()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 364, in exhaust
+    self.run(self.max_evals - n_done, block_until_done=self.asynchronous)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 300, in run
+    self.serial_evaluate()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 178, in serial_evaluate
+    result = self.domain.evaluate(spec, ctrl)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 892, in evaluate
+    rval = self.fn(pyll_rval)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4417, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3087, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+ (Triggered internally at /pytorch/torch/csrc/autograd/python_anomaly_mode.cpp:122.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+[OOM_RETRY] trial=3 retry=1/2 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.56 GiB of which 3.86 GiB is free. Process 465971 has 19.69 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.23 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=3 retry=2/2 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.336200  best=0.343000  (early_stop@10, trial=9.0min, avg=17.1min/trial, total=51.4min, ETA=6.00h)
+[TRIAL_METRICS] cur_best_mrr20=0.336200 cur_best_hr10=0.540500 cur_test_mrr20=0.332400 cur_test_hr10=0.523400 avg_epoch_time_sec=53.6687 test_eval_time_sec=1.4991 test_eval_batches_per_sec=7.3377 test_eval_targets_per_sec=13994.9905 run_best_mrr20=0.343000 run_best_hr10=0.553900 run_test_mrr20=0.339700 run_test_hr10=0.539700
+
+[4/24] MAX_ITEM_LIST_LENGTH=30, attn_dropout_prob=0.1, attribute_hidden_size=64, embedding_size=64, hidden_dropout_prob=0.1, hidden_size=96, lambda_attr=0, learning_rate=0.0001359, n_heads=1, n_layers=1, weight_decay=1e-05
+/venv/FMoE/lib/python3.10/site-packages/torch/autograd/graph.py:823: UserWarning: Error detected in LogSoftmaxBackward0. Traceback of forward call that caused the error:
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4952, in <module>
+    main()
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4746, in main
+    best = fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 540, in fmin
+    return trials.fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 671, in fmin
+    return fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 586, in fmin
+    rval.exhaust()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 364, in exhaust
+    self.run(self.max_evals - n_done, block_until_done=self.asynchronous)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 300, in run
+    self.serial_evaluate()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 178, in serial_evaluate
+    result = self.domain.evaluate(spec, ctrl)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 892, in evaluate
+    rval = self.fn(pyll_rval)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4417, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3087, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+ (Triggered internally at /pytorch/torch/csrc/autograd/python_anomaly_mode.cpp:122.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+[OOM_RETRY] trial=4 retry=1/2 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.56 GiB of which 3.86 GiB is free. Process 465971 has 19.69 GiB memory in use. Of the allocated memory 14.95 GiB is allocated by PyTorch, and 4.43 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=4 retry=2/2 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.351100  best=0.351100  (early_stop@35, trial=29.6min, avg=20.4min/trial, total=1.36h, ETA=6.81h)
+[TRIAL_METRICS] cur_best_mrr20=0.351100 cur_best_hr10=0.555300 cur_test_mrr20=0.347600 cur_test_hr10=0.540200 avg_epoch_time_sec=50.5842 test_eval_time_sec=1.4804 test_eval_batches_per_sec=7.4302 test_eval_targets_per_sec=14171.4247 run_best_mrr20=0.351100 run_best_hr10=0.555300 run_test_mrr20=0.347600 run_test_hr10=0.540200
+
+[5/24] MAX_ITEM_LIST_LENGTH=50, attn_dropout_prob=0.1, attribute_hidden_size=64, embedding_size=128, hidden_dropout_prob=0.15, hidden_size=96, lambda_attr=0.08, learning_rate=0.0004424, n_heads=4, n_layers=2, weight_decay=5e-05
+/venv/FMoE/lib/python3.10/site-packages/torch/autograd/graph.py:823: UserWarning: Error detected in LogSoftmaxBackward0. Traceback of forward call that caused the error:
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4952, in <module>
+    main()
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4746, in main
+    best = fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 540, in fmin
+    return trials.fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 671, in fmin
+    return fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 586, in fmin
+    rval.exhaust()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 364, in exhaust
+    self.run(self.max_evals - n_done, block_until_done=self.asynchronous)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 300, in run
+    self.serial_evaluate()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 178, in serial_evaluate
+    result = self.domain.evaluate(spec, ctrl)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 892, in evaluate
+    rval = self.fn(pyll_rval)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4417, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3087, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+ (Triggered internally at /pytorch/torch/csrc/autograd/python_anomaly_mode.cpp:122.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+[OOM_RETRY] trial=5 retry=1/2 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.56 GiB of which 8.16 GiB is free. Process 465971 has 15.39 GiB memory in use. Of the allocated memory 14.95 GiB is allocated by PyTorch, and 137.50 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=5 retry=2/2 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.340900  best=0.351100  (early_stop@17, trial=21.9min, avg=21.0min/trial, total=1.75h, ETA=6.66h)
+[TRIAL_METRICS] cur_best_mrr20=0.340900 cur_best_hr10=0.543900 cur_test_mrr20=0.338700 cur_test_hr10=0.527000 avg_epoch_time_sec=77.2211 test_eval_time_sec=1.6319 test_eval_batches_per_sec=6.7408 test_eval_targets_per_sec=12856.4855 run_best_mrr20=0.351100 run_best_hr10=0.555300 run_test_mrr20=0.347600 run_test_hr10=0.540200
+
+[6/24] MAX_ITEM_LIST_LENGTH=10, attn_dropout_prob=0.15, attribute_hidden_size=128, embedding_size=64, hidden_dropout_prob=0.2, hidden_size=128, lambda_attr=0.12, learning_rate=0.0001359, n_heads=1, n_layers=2, weight_decay=5e-05
+/venv/FMoE/lib/python3.10/site-packages/torch/autograd/graph.py:823: UserWarning: Error detected in LogSoftmaxBackward0. Traceback of forward call that caused the error:
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4952, in <module>
+    main()
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4746, in main
+    best = fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 540, in fmin
+    return trials.fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 671, in fmin
+    return fmin(
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 586, in fmin
+    rval.exhaust()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 364, in exhaust
+    self.run(self.max_evals - n_done, block_until_done=self.asynchronous)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 300, in run
+    self.serial_evaluate()
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/fmin.py", line 178, in serial_evaluate
+    result = self.domain.evaluate(spec, ctrl)
+  File "/venv/FMoE/lib/python3.10/site-packages/hyperopt/base.py", line 892, in evaluate
+    rval = self.fn(pyll_rval)
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4417, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3087, in train_and_evaluate
+    train_loss = trainer._train_epoch(train_data, epoch_idx=epoch, show_progress=show_progress)
+  File "/workspace/FeaturedMoE/experiments/recbole_patch.py", line 1284, in _patched_train_epoch
+    return _original_train_epoch(self, *args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/trainer/trainer.py", line 245, in _train_epoch
+    losses = loss_func(interaction)
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 186, in calculate_loss
+    return self.loss_fct(logits, pos_items)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/modules/loss.py", line 1295, in forward
+    return F.cross_entropy(
+  File "/venv/FMoE/lib/python3.10/site-packages/torch/nn/functional.py", line 3494, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+ (Triggered internally at /pytorch/torch/csrc/autograd/python_anomaly_mode.cpp:122.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+[OOM_RETRY] trial=6 retry=1/2 train_batch_size 4096 -> 2048 eval_batch_size 8192 -> 4096
+special metric collection skipped for one batch: CUDA out of memory. Tried to allocate 12.73 GiB. GPU 0 has a total capacity of 23.56 GiB of which 4.06 GiB is free. Process 465971 has 19.50 GiB memory in use. Of the allocated memory 15.15 GiB is allocated by PyTorch, and 4.03 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[OOM_RETRY] trial=6 retry=2/2 train_batch_size 2048 -> 1024 eval_batch_size 4096 -> 2048
+  -> MRR@20=0.344700  best=0.351100  (full@35, trial=35.8min, avg=23.7min/trial, total=2.37h, ETA=7.11h)
+[TRIAL_METRICS] cur_best_mrr20=0.344700 cur_best_hr10=0.548300 cur_test_mrr20=0.341500 cur_test_hr10=0.532000 avg_epoch_time_sec=61.2018 test_eval_time_sec=1.4162 test_eval_batches_per_sec=7.7675 test_eval_targets_per_sec=14814.7714 run_best_mrr20=0.351100 run_best_hr10=0.555300 run_test_mrr20=0.347600 run_test_hr10=0.540200
+[TIME_BUDGET] reached limit=2.000h after 6/24 trials (elapsed=2.37h). Stopping new trials and finalizing current best.
+
+=================================================================
+  DONE  |  FDSA x retail_rocket
+  Best MRR@20 = 0.351100  |  6/24 trials OK
+  Best HR@10  = 0.555300
+  Test MRR@20 = 0.347600  (best-valid checkpoint)
+  Test HR@10  = 0.540200  (best-valid checkpoint)
+  Stop reason = time_budget(2.000h) reached at 2.37h
+  Avg epoch time = 50.584 sec/epoch
+  Final test eval = 1.480 sec | batches/s=7.430 | targets/s=14171.425
+[RUN_METRICS] best_valid_mrr20=0.351100 best_valid_hr10=0.555300 test_mrr20=0.347600 test_hr10=0.540200 avg_epoch_time_sec=50.5842 test_eval_time_sec=1.4804 test_eval_batches_per_sec=7.4302 test_eval_targets_per_sec=14171.4247
+  Total time: 142.2 min
+  Best params:
+    MAX_ITEM_LIST_LENGTH: 30
+    attn_dropout_prob: 0.1
+    attribute_hidden_size: 64
+    embedding_size: 64
+    eval_batch_size: 2048
+    hidden_dropout_prob: 0.1
+    hidden_size: 96
+    lambda_attr: 0
+    learning_rate: 0.00013594
+    n_heads: 1
+    n_layers: 1
+    train_batch_size: 1024
+    weight_decay: 1e-05
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/retail_rocket_FDSA_s1_retail_rocket_fdsa_20260418_034500_615165_pid552306.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/normal/stage1_broad_search/S1/retail_rocket/FDSA/retail_rocket_FDSA_s1_retail_rocket_fdsa_20260418_034500_615165_pid552306.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/final_experiment/special/stage1_broad_search/S1/retail_rocket/FDSA/retail_rocket_FDSA_s1_retail_rocket_fdsa_20260418_034500_615165_pid552306_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/final_experiment/special/stage1_broad_search/S1/retail_rocket/FDSA/retail_rocket_FDSA_s1_retail_rocket_fdsa_20260418_034500_615165_pid552306_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=552306 start=2026-04-18T03:45:00 end=2026-04-18T06:07:11

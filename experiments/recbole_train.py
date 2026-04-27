@@ -43,6 +43,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "4"
 os.environ["NUMEXPR_NUM_THREADS"] = "4"
 
 import torch
+import numpy as np
 torch.set_num_threads(4)
 
 # Apply RecBole 1.2.1 bugfix before importing RecBole
@@ -528,9 +529,24 @@ def _put_data_cache(key: str, bundle, max_entries: int):
         _DATA_BUNDLE_CACHE.popitem(last=False)
 
 
+def _disable_disk_data_cache(cfg_dict, *, reason: str | None = None):
+    cfg_dict["save_dataset"] = False
+    cfg_dict["save_dataloaders"] = False
+    cfg_dict["cache_dataloaders"] = False
+    cfg_dict["enable_session_split_cache"] = False
+    cfg_dict["dataset_save_path"] = ""
+    cfg_dict["dataloaders_save_path"] = ""
+    if reason:
+        print(reason)
+
+
 def configure_data_cache(cfg_dict):
     """Enable deterministic dataset/dataloader cache paths for faster startup."""
     if not bool(cfg_dict.get("enable_data_cache", True)):
+        return
+
+    if not bool(cfg_dict.get("enable_disk_data_cache", False)):
+        _disable_disk_data_cache(cfg_dict)
         return
 
     dataset = str(cfg_dict.get("dataset", "dataset"))
@@ -544,15 +560,12 @@ def configure_data_cache(cfg_dict):
     anchor_len = _get_large_dataset_cache_anchor_len(cfg_dict)
     if _is_large_dataset_cache_target(cfg_dict) and int(max_len) != int(anchor_len):
         # Keep experiment MAX_ITEM_LIST_LENGTH unchanged, but skip disk cache writes.
-        cfg_dict["save_dataset"] = False
-        cfg_dict["save_dataloaders"] = False
-        cfg_dict["cache_dataloaders"] = False
-        cfg_dict["enable_session_split_cache"] = False
-        cfg_dict["dataset_save_path"] = ""
-        cfg_dict["dataloaders_save_path"] = ""
-        print(
-            f"[CachePolicy] Disk cache OFF for {dataset} len={max_len} "
-            f"(anchor len={anchor_len} only)"
+        _disable_disk_data_cache(
+            cfg_dict,
+            reason=(
+                f"[CachePolicy] Disk cache OFF for {dataset} len={max_len} "
+                f"(anchor len={anchor_len} only)"
+            ),
         )
         return
 
@@ -638,6 +651,194 @@ def _collect_featured_moe_runtime_config(model) -> dict:
             val = val.item()
         out[key] = val
     return out
+
+
+def _default_checkpoint_export_root() -> Path:
+    return Path(__file__).resolve().parent / "run" / "artifacts" / "checkpoints"
+
+
+def export_best_checkpoint(
+    *,
+    best_model_state,
+    run_name: str,
+    cfg_i: dict,
+    run_logger=None,
+):
+    """Persist the best checkpoint so later eval-only passes can reload it."""
+    if not isinstance(best_model_state, dict) or not best_model_state:
+        return ""
+
+    export_enabled = bool(cfg_i.get("export_best_checkpoint", True))
+    if not export_enabled:
+        return ""
+
+    if run_logger is not None and hasattr(run_logger, "output_path"):
+        checkpoint_dir = Path(run_logger.output_path) / "checkpoints"
+    else:
+        checkpoint_dir = _default_checkpoint_export_root() / sanitize(run_name)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    checkpoint_path = checkpoint_dir / "best_model_state.pth"
+    payload = {
+        "state_dict": best_model_state,
+        "run_name": str(run_name),
+        "model": str(cfg_i.get("model", "")),
+        "dataset": str(cfg_i.get("dataset", "")),
+        "run_phase": str(cfg_i.get("run_phase", "")),
+        "run_id": str(cfg_i.get("fmoe_run_id", "")),
+    }
+    torch.save(payload, checkpoint_path)
+    return str(checkpoint_path.resolve())
+
+
+def _extract_seen_target_metric(metrics: dict | None, metric_name: str) -> float | None:
+    if not isinstance(metrics, dict):
+        return None
+    seen = metrics.get("overall_seen_target", {}) or {}
+    value = seen.get(metric_name, None)
+    try:
+        return None if value is None else float(value)
+    except Exception:
+        return None
+
+
+def _evaluate_loaded_model(
+    *,
+    trainer,
+    config,
+    cfg_i: dict,
+    valid_data,
+    test_data,
+    best_valid_result: dict | None,
+    run_logger=None,
+    start_time: float,
+    avg_epoch_time_sec: float = 0.0,
+    epoch_count: int = 0,
+    eval_show: bool = True,
+):
+    """Run valid/test special+diag logging for the currently loaded model state."""
+    model_name_l = str(cfg_i.get("model", "")).lower()
+    special_logging_enabled = bool(_cfg_get(config, "special_logging", cfg_i.get("special_logging", False)))
+    if model_name_l in _FEATURE_AWARE_MOE_MODELS:
+        special_logging_enabled = special_logging_enabled or bool(
+            _cfg_get(config, "fmoe_special_logging", cfg_i.get("fmoe_special_logging", True))
+        )
+    diag_logging_enabled = bool(_cfg_get(config, "fmoe_diag_logging", cfg_i.get("fmoe_diag_logging", False)))
+    best_only_logging = bool(_cfg_get(config, "fmoe_best_only_logging", cfg_i.get("fmoe_best_only_logging", True)))
+
+    best_valid_special_metrics = None
+    valid_diag_metrics = None
+    test_special_metrics = None
+    test_diag_metrics = None
+
+    valid_eval_started = time.time()
+    if best_only_logging and (special_logging_enabled or diag_logging_enabled):
+        if special_logging_enabled:
+            from recbole_patch import begin_special_eval
+            begin_special_eval(trainer, valid_data, split_name="valid")
+        if diag_logging_enabled:
+            from recbole_patch import begin_diagnostic_eval
+            begin_diagnostic_eval(trainer, split_name="valid")
+        valid_result = trainer._valid_epoch(valid_data, show_progress=eval_show)
+        if special_logging_enabled:
+            from recbole_patch import end_special_eval
+            best_valid_special_metrics = end_special_eval(trainer)
+        if diag_logging_enabled:
+            from recbole_patch import end_diagnostic_eval
+            valid_diag_metrics = end_diagnostic_eval(trainer)
+        if isinstance(valid_result, tuple):
+            valid_result = next((x for x in valid_result if isinstance(x, dict)), valid_result[0])
+    else:
+        valid_result = dict(best_valid_result or {})
+    valid_inference_time_sec = time.time() - valid_eval_started
+
+    if special_logging_enabled:
+        from recbole_patch import begin_special_eval
+        begin_special_eval(trainer, test_data, split_name="test")
+    if diag_logging_enabled:
+        from recbole_patch import begin_diagnostic_eval
+        begin_diagnostic_eval(trainer, split_name="test")
+    test_eval_started = time.time()
+    test_result = trainer._valid_epoch(test_data, show_progress=eval_show)
+    test_inference_time_sec = time.time() - test_eval_started
+    if special_logging_enabled:
+        from recbole_patch import end_special_eval
+        test_special_metrics = end_special_eval(trainer)
+    if diag_logging_enabled:
+        from recbole_patch import end_diagnostic_eval
+        test_diag_metrics = end_diagnostic_eval(trainer)
+    if isinstance(test_result, tuple):
+        test_result = next((x for x in test_result if isinstance(x, dict)), test_result[0])
+
+    elapsed_time = time.time() - start_time
+    valid_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "valid")
+    test_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "test")
+    valid_cold = _extract_cold_slice_metrics(best_valid_special_metrics)
+    test_cold = _extract_cold_slice_metrics(test_special_metrics)
+
+    result = {
+        'best_valid_score': float(valid_result.get(str(config['valid_metric']).lower(), 0.0) or 0.0) if isinstance(valid_result, dict) else 0.0,
+        'best_valid_result': valid_result or {},
+        'test_result': test_result,
+        'best_valid_special_metrics': best_valid_special_metrics or {},
+        'test_special_metrics': test_special_metrics or {},
+        'valid_diag_metrics': valid_diag_metrics or {},
+        'test_diag_metrics': test_diag_metrics or {},
+        'elapsed_time': elapsed_time,
+        'avg_epoch_time_sec': avg_epoch_time_sec,
+        'avg_epoch_time_ms': avg_epoch_time_sec * 1000.0,
+        'valid_inference_time_sec': valid_inference_time_sec,
+        'test_inference_time_sec': test_inference_time_sec,
+        'main_eval_filter': {
+            'valid': valid_main_filter,
+            'test': test_main_filter,
+        },
+        'cold_target_metrics': {
+            'valid': valid_cold,
+            'test': test_cold,
+        },
+        'valid_seen_target_mrr20': _extract_seen_target_metric(best_valid_special_metrics, "mrr@20"),
+        'test_seen_target_mrr20': _extract_seen_target_metric(test_special_metrics, "mrr@20"),
+    }
+
+    if run_logger is not None:
+        try:
+            run_logger.log_special_metrics(
+                valid_special_metrics=best_valid_special_metrics,
+                test_special_metrics=test_special_metrics,
+            )
+            run_logger.log_final(
+                best_valid_result=valid_result or {},
+                test_result=test_result,
+                elapsed_time=elapsed_time,
+                extra={
+                    "best_valid_score": result["best_valid_score"],
+                    "epochs_run": int(epoch_count),
+                    "avg_epoch_time_sec": avg_epoch_time_sec,
+                    "avg_epoch_time_ms": avg_epoch_time_sec * 1000.0,
+                    "valid_inference_time_sec": valid_inference_time_sec,
+                    "test_inference_time_sec": test_inference_time_sec,
+                    "model": cfg_i.get("model", ""),
+                    "dataset": cfg_i.get("dataset", ""),
+                    "phase": cfg_i.get("fmoe_phase", cfg_i.get("phase", "")),
+                    "run_id": cfg_i.get("fmoe_run_id", ""),
+                    "selection_rule_default": "overall_seen_target",
+                    "best_valid_seen_mrr20": result["valid_seen_target_mrr20"],
+                    "test_seen_mrr20": result["test_seen_target_mrr20"],
+                    "main_eval_valid_seen_targets": int(valid_main_filter.get("seen_targets", 0)),
+                    "main_eval_valid_unseen_targets": int(valid_main_filter.get("unseen_targets", 0)),
+                    "main_eval_test_seen_targets": int(test_main_filter.get("seen_targets", 0)),
+                    "main_eval_test_unseen_targets": int(test_main_filter.get("unseen_targets", 0)),
+                },
+            )
+            run_logger.log_router_diagnostics(
+                valid_diag=valid_diag_metrics,
+                test_diag=test_diag_metrics,
+            )
+        except Exception:
+            pass
+
+    return result
 
 
 def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logger=None):
@@ -1036,100 +1237,329 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
     if best_valid_special_metrics is None:
         best_valid_special_metrics = last_valid_special_metrics
 
-    # Load best model for test evaluation
+    best_checkpoint_file = export_best_checkpoint(
+        best_model_state=best_model_state,
+        run_name=run_name,
+        cfg_i=cfg_i,
+        run_logger=run_logger,
+    )
+
+    # Load best model for final evaluation
     if best_model_state is not None:
         trainer.model.load_state_dict(best_model_state)
 
-    diag_logging_enabled = bool(_cfg_get(config, "fmoe_diag_logging", cfg_i.get("fmoe_diag_logging", False)))
-    best_only_logging = bool(_cfg_get(config, "fmoe_best_only_logging", cfg_i.get("fmoe_best_only_logging", True)))
-    valid_diag_metrics = None
-    test_diag_metrics = None
+    avg_epoch_time_sec = (sum(epoch_times) / len(epoch_times)) if epoch_times else 0.0
+    result = _evaluate_loaded_model(
+        trainer=trainer,
+        config=config,
+        cfg_i=cfg_i,
+        valid_data=valid_data,
+        test_data=test_data,
+        best_valid_result=best_valid_result or {},
+        run_logger=run_logger,
+        start_time=start_time,
+        avg_epoch_time_sec=avg_epoch_time_sec,
+        epoch_count=len(epoch_times),
+        eval_show=eval_show,
+    )
+    result["best_valid_score"] = best_metric
+    result["best_checkpoint_file"] = best_checkpoint_file
+    if run_logger is not None and hasattr(run_logger, "output_path"):
+        result["logging_output_dir"] = str(run_logger.output_path)
+    return result
 
-    if best_only_logging and (special_logging_enabled or diag_logging_enabled):
-        if special_logging_enabled:
-            from recbole_patch import begin_special_eval
-            begin_special_eval(trainer, valid_data, split_name="valid")
-        if diag_logging_enabled:
-            from recbole_patch import begin_diagnostic_eval
-            begin_diagnostic_eval(trainer, split_name="valid")
-        _ = trainer._valid_epoch(valid_data, show_progress=eval_show)
-        if special_logging_enabled:
-            from recbole_patch import end_special_eval
-            final_valid_special = end_special_eval(trainer)
-            if final_valid_special is not None:
-                best_valid_special_metrics = final_valid_special
-        if diag_logging_enabled:
-            from recbole_patch import end_diagnostic_eval
-            valid_diag_metrics = end_diagnostic_eval(trainer)
 
-    if special_logging_enabled:
-        from recbole_patch import begin_special_eval
-        begin_special_eval(trainer, test_data, split_name="test")
-    if diag_logging_enabled:
-        from recbole_patch import begin_diagnostic_eval
-        begin_diagnostic_eval(trainer, split_name="test")
-    test_result = trainer._valid_epoch(test_data, show_progress=eval_show)
-    if special_logging_enabled:
-        from recbole_patch import end_special_eval
-        test_special_metrics = end_special_eval(trainer)
-    if diag_logging_enabled:
-        from recbole_patch import end_diagnostic_eval
-        test_diag_metrics = end_diagnostic_eval(trainer)
-    if isinstance(test_result, tuple):
-        test_result = next((x for x in test_result if isinstance(x, dict)), test_result[0])
-    elapsed_time = time.time() - start_time
+def run_checkpoint_evaluation(
+    cfg_i,
+    *,
+    run_name: str,
+    checkpoint_path: str,
+    run_logger=None,
+):
+    """Load one checkpoint and run valid/test evaluation only."""
+    def _read_inter_session_tokens(inter_path: Path) -> list[str]:
+        """Read session_id tokens from a RecBole *.inter file (tab-separated).
 
-    valid_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "valid")
-    test_main_filter = _extract_main_eval_seen_unseen_stats(trainer, "test")
-    valid_cold = _extract_cold_slice_metrics(best_valid_special_metrics)
-    test_cold = _extract_cold_slice_metrics(test_special_metrics)
+        We intentionally keep this dependency-free (no pandas) so it can run in
+        the same environment as the training/eval scripts.
+        """
+        if not inter_path.exists():
+            return []
+        with open(inter_path, "r", encoding="utf-8") as f:
+            header = f.readline().rstrip("\n")
+            if not header:
+                return []
+            cols = header.split("\t")
+            # Column names may include type suffix, e.g. "session_id:token".
+            def _base(col: str) -> str:
+                return col.split(":", 1)[0].strip()
 
-    result = {
-        'best_valid_score': best_metric,
-        'best_valid_result': best_valid_result or {},
-        'test_result': test_result,
-        'elapsed_time': elapsed_time,
-        'main_eval_filter': {
-            'valid': valid_main_filter,
-            'test': test_main_filter,
-        },
-        'cold_target_metrics': {
-            'valid': valid_cold,
-            'test': test_cold,
-        },
-    }
+            session_col = None
+            for i, col in enumerate(cols):
+                if _base(col) == "session_id":
+                    session_col = i
+                    break
+            if session_col is None:
+                return []
+            out: list[str] = []
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split("\t")
+                if session_col >= len(parts):
+                    continue
+                out.append(parts[session_col])
+            return out
 
-    # RunLogger: save final summary
-    if run_logger is not None:
+    def _resolve_case_eval_inter_files(*, case_root: Path, dataset_name: str) -> tuple[Path | None, Path | None]:
+        # Support both layouts:
+        # 1) case_root/<dataset>/<dataset>.valid.inter
+        # 2) case_root/<dataset>.valid.inter
+        d = case_root / dataset_name
+        candidates = [
+            (d / f"{dataset_name}.valid.inter", d / f"{dataset_name}.test.inter"),
+            (case_root / f"{dataset_name}.valid.inter", case_root / f"{dataset_name}.test.inter"),
+        ]
+        for valid_p, test_p in candidates:
+            if valid_p.exists() or test_p.exists():
+                return valid_p if valid_p.exists() else None, test_p if test_p.exists() else None
+        return None, None
+
+    def _tokens_to_internal_ids(dataset_obj, field: str, tokens: list[str]) -> set[int]:
+        """Convert raw token strings to internal ids if mapping exists.
+
+        RecBole datasets typically keep token->id mapping in one of these:
+        - dataset.field2token_id[field] : dict[token, int]
+        - dataset.token2id(field, token) or dataset.token2id(field, [tokens])
+        """
+        mapping = getattr(dataset_obj, "field2token_id", None)
+        if isinstance(mapping, dict):
+            field_map = mapping.get(field)
+            if isinstance(field_map, dict):
+                return {int(field_map[t]) for t in tokens if t in field_map}
+        token2id = getattr(dataset_obj, "token2id", None)
+        if callable(token2id):
+            # Try vectorized then scalar conversion.
+            try:
+                ids = token2id(field, tokens)
+                try:
+                    return {int(x) for x in list(ids)}
+                except Exception:
+                    return {int(ids)}
+            except TypeError:
+                pass
+            out: set[int] = set()
+            for t in tokens:
+                try:
+                    out.add(int(token2id(field, t)))
+                except Exception:
+                    continue
+            return out
+        return set()
+
+    def _slice_rows(value, keep_indices: list[int]):
+        if value is None:
+            return value
+        if torch.is_tensor(value):
+            index_tensor = torch.as_tensor(keep_indices, dtype=torch.long, device=value.device)
+            return value[index_tensor]
+        if isinstance(value, np.ndarray):
+            return value[np.asarray(keep_indices, dtype=np.int64)]
+        if isinstance(value, list):
+            return [value[idx] for idx in keep_indices]
         try:
-            run_logger.log_special_metrics(
-                valid_special_metrics=best_valid_special_metrics,
-                test_special_metrics=test_special_metrics,
+            return value[keep_indices]
+        except Exception:
+            return value
+
+    def _extract_loader_sequence_session_ids(loader_obj):
+        dataset_obj = getattr(loader_obj, "dataset", None)
+        if dataset_obj is None:
+            return []
+        inter_feat = getattr(dataset_obj, "inter_feat", None)
+        if inter_feat is None:
+            return []
+        try:
+            sess_all = inter_feat["session_id"]
+        except Exception:
+            return []
+        target_index = getattr(loader_obj, "target_index", None)
+        if target_index is None:
+            target_index = getattr(dataset_obj, "target_index", None)
+        seq_sess = sess_all
+        if target_index is not None:
+            try:
+                target_index_tensor = target_index
+                if not torch.is_tensor(target_index_tensor):
+                    target_index_tensor = torch.as_tensor(target_index_tensor, dtype=torch.long)
+                else:
+                    target_index_tensor = target_index_tensor.long()
+                seq_sess = sess_all[target_index_tensor]
+            except Exception:
+                seq_sess = sess_all
+        try:
+            return [int(x) for x in seq_sess.tolist()]
+        except Exception:
+            return []
+
+    def _filter_loader_by_session_ids(loader_obj, allowed_session_ids: set[int]):
+        stats = {
+            "requested_session_ids": int(len(allowed_session_ids or set())),
+            "loader_sequences_before": 0,
+            "loader_sequences_after": 0,
+            "matched_sequences": 0,
+        }
+        if not allowed_session_ids:
+            return loader_obj, stats
+        dataset_obj = getattr(loader_obj, "dataset", None)
+        session_ids = _extract_loader_sequence_session_ids(loader_obj)
+        stats["loader_sequences_before"] = int(len(session_ids))
+        if not session_ids:
+            return loader_obj, stats
+        keep_indices = [idx for idx, session_id in enumerate(session_ids) if session_id in allowed_session_ids]
+        stats["matched_sequences"] = int(len(keep_indices))
+        if len(keep_indices) == len(session_ids):
+            stats["loader_sequences_after"] = int(len(session_ids))
+            return loader_obj, stats
+        if getattr(loader_obj, "is_sequential", False) and dataset_obj is not None:
+            filtered_dataset = copy.copy(dataset_obj)
+            inter_feat = getattr(dataset_obj, "inter_feat", None)
+            if inter_feat is not None:
+                filtered_dataset.inter_feat = inter_feat[keep_indices]
+            filtered_loader = loader_obj.__class__(
+                loader_obj.config,
+                filtered_dataset,
+                getattr(loader_obj, "_sampler", None),
+                shuffle=False,
             )
-            run_logger.log_final(
-                best_valid_result=best_valid_result or {},
-                test_result=test_result,
-                elapsed_time=elapsed_time,
-                extra={
-                    "best_valid_score": best_metric,
-                    "epochs_run": len(epoch_times),
-                    "model": cfg_i.get("model", ""),
-                    "dataset": cfg_i.get("dataset", ""),
-                    "phase": cfg_i.get("fmoe_phase", cfg_i.get("phase", "")),
-                    "run_id": cfg_i.get("fmoe_run_id", ""),
-                    "main_eval_valid_seen_targets": int(valid_main_filter.get("seen_targets", 0)),
-                    "main_eval_valid_unseen_targets": int(valid_main_filter.get("unseen_targets", 0)),
-                    "main_eval_test_seen_targets": int(test_main_filter.get("seen_targets", 0)),
-                    "main_eval_test_unseen_targets": int(test_main_filter.get("unseen_targets", 0)),
-                },
-            )
-            run_logger.log_router_diagnostics(
-                valid_diag=valid_diag_metrics,
-                test_diag=test_diag_metrics,
-            )
+            stats["loader_sequences_after"] = int(len(keep_indices))
+            return filtered_loader, stats
+        for holder in (dataset_obj, loader_obj):
+            if holder is None:
+                continue
+            for attr_name in ("uid_list", "item_list_index", "target_index", "item_list_length", "same_target_index"):
+                if not hasattr(holder, attr_name):
+                    continue
+                attr_value = getattr(holder, attr_name)
+                try:
+                    if len(attr_value) != len(session_ids):
+                        continue
+                except Exception:
+                    continue
+                setattr(holder, attr_name, _slice_rows(attr_value, keep_indices))
+        if hasattr(loader_obj, "data_preprocess") and callable(loader_obj.data_preprocess):
+            try:
+                loader_obj.data_preprocess()
+            except Exception:
+                pass
+        try:
+            loader_obj.pr = 0
         except Exception:
             pass
+        stats["loader_sequences_after"] = int(len(keep_indices))
+        return loader_obj, stats
 
+    cfg_local = cfg_i.copy()
+    cfg_local['log_wandb'] = False
+    model_name_local = str(cfg_local.get("model", "")).lower()
+    if model_name_local in _FEATURE_AWARE_MOE_MODELS and "fmoe_special_logging" not in cfg_local:
+        cfg_local["fmoe_special_logging"] = True
+        cfg_i["fmoe_special_logging"] = True
+
+    if cfg_local.get('loss_type', 'CE').upper() == 'CE':
+        cfg_local['train_neg_sample_args'] = None
+
+    configure_runtime_acceleration(cfg_local)
+    configure_data_cache(cfg_local)
+
+    argv_backup = sys.argv
+    sys.argv = sys.argv[:1]
+    try:
+        config = Config(model=cfg_local['model'], dataset=cfg_local['dataset'], config_dict=cfg_local)
+    finally:
+        sys.argv = argv_backup
+
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", category=FutureWarning, message=".*GradScaler.*")
+    init_seed(config['seed'], config['reproducibility'])
+
+    dataset = create_dataset(config)
+    train_data, valid_data, test_data = data_preparation(config, dataset)
+
+    # Case-eval: keep vocab from the original data_path, but restrict valid/test to
+    # the session subset provided by a separate case root.
+    case_filter_root_raw = str(cfg_local.get("case_eval_filter_data_path", "") or "").strip()
+    if case_filter_root_raw:
+        try:
+            case_filter_root = Path(case_filter_root_raw).expanduser().resolve()
+            base_root = Path(str(cfg_local.get("data_path", "") or "")).expanduser().resolve()
+            if case_filter_root == base_root:
+                case_filter_root_raw = ""
+        except Exception:
+            case_filter_root_raw = ""
+
+    case_filter_stats = {}
+    if case_filter_root_raw:
+        try:
+            case_filter_root = Path(case_filter_root_raw).expanduser().resolve()
+            valid_inter, test_inter = _resolve_case_eval_inter_files(
+                case_root=case_filter_root, dataset_name=str(config["dataset"])
+            )
+            if valid_inter is not None or test_inter is not None:
+                # Read tokens (raw strings) from subset split files.
+                valid_tokens = _read_inter_session_tokens(valid_inter) if valid_inter is not None else []
+                test_tokens = _read_inter_session_tokens(test_inter) if test_inter is not None else []
+
+                # Convert to internal ids using the mapping in each split's dataset instance.
+                # Note: valid_data/test_data loaders may hold different dataset objects.
+                valid_allowed = _tokens_to_internal_ids(valid_data.dataset, "session_id", valid_tokens) if valid_tokens else set()
+                test_allowed = _tokens_to_internal_ids(test_data.dataset, "session_id", test_tokens) if test_tokens else set()
+
+                valid_data, case_filter_stats["valid"] = _filter_loader_by_session_ids(valid_data, valid_allowed)
+                test_data, case_filter_stats["test"] = _filter_loader_by_session_ids(test_data, test_allowed)
+                case_filter_stats["valid"]["raw_subset_sessions"] = int(len(valid_tokens))
+                case_filter_stats["test"]["raw_subset_sessions"] = int(len(test_tokens))
+        except Exception as exc:
+            # Never fail evaluation purely because case-eval filtering couldn't be applied.
+            case_filter_stats["error"] = str(exc)
+
+    model_cls = get_model(config['model'])
+    model = model_cls(config, train_data.dataset).to(config['device'])
+    trainer_cls = get_trainer(config['MODEL_TYPE'], config['model'])
+    trainer = trainer_cls(config, model)
+    setattr(trainer, '_disable_patch_logging', True)
+    trainer._fmoe_special_item_counts_train = _build_item_counts_from_loader(train_data)
+    trainer._main_eval_unseen_filter_stats = {}
+
+    ckpt_obj = torch.load(str(checkpoint_path), map_location="cpu")
+    if isinstance(ckpt_obj, dict) and isinstance(ckpt_obj.get("state_dict"), dict):
+        state_dict = ckpt_obj["state_dict"]
+    elif isinstance(ckpt_obj, dict):
+        state_dict = ckpt_obj
+    else:
+        raise RuntimeError(f"Unsupported checkpoint payload type: {type(ckpt_obj)!r}")
+    trainer.model.load_state_dict(state_dict, strict=True)
+
+    start_time = time.time()
+    result = _evaluate_loaded_model(
+        trainer=trainer,
+        config=config,
+        cfg_i=cfg_i,
+        valid_data=valid_data,
+        test_data=test_data,
+        best_valid_result={},
+        run_logger=run_logger,
+        start_time=start_time,
+        avg_epoch_time_sec=0.0,
+        epoch_count=0,
+        eval_show=True,
+    )
+    if case_filter_stats:
+        result["case_eval_filter_stats"] = case_filter_stats
+    result["best_checkpoint_file"] = str(Path(checkpoint_path).resolve())
+    if run_logger is not None and hasattr(run_logger, "output_path"):
+        result["logging_output_dir"] = str(run_logger.output_path)
     return result
 
 
@@ -1393,6 +1823,8 @@ def main():
         print(f"  Test:       HR@5={test_result.get('hit@5', 0):.4f}, "
               f"HR@10={test_result.get('hit@10', 0):.4f}, "
               f"MRR@20={test_result.get('mrr@20', 0):.4f}")
+        print(f"  Avg Epoch:  {result.get('avg_epoch_time_sec', 0.0):.2f} sec ({result.get('avg_epoch_time_ms', 0.0):.0f} ms)")
+        print(f"  Test Infer: {result.get('test_inference_time_sec', 0.0):.3f} sec")
         print(f"  Time: {elapsed_time/60:.2f} min")
 
         metric_key = str(cfg_i.get('valid_metric', 'mrr@20')).lower()
