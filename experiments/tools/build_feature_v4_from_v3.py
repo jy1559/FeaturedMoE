@@ -122,7 +122,10 @@ def _copy_metadata_files(src_dir: Path, dst_dir: Path, dataset: str) -> None:
             continue
         if src.name in split_names:
             continue
-        shutil.copy2(src, dst_dir / src.name)
+        dst = dst_dir / src.name
+        if src.resolve() == dst.resolve():
+            continue
+        shutil.copy2(src, dst)
 
 
 def process_dataset(*, src_root: Path, dst_root: Path, dataset: str, overwrite: bool) -> dict:
@@ -151,7 +154,8 @@ def process_dataset(*, src_root: Path, dst_root: Path, dataset: str, overwrite: 
     dst_train_path = dst_dir / f"{dataset}.train.inter"
     if dst_train_path.exists() and not overwrite:
         raise FileExistsError(f"Output exists (use --overwrite): {dst_train_path}")
-    shutil.copy2(train_path, dst_train_path)
+    if train_path.resolve() != dst_train_path.resolve():
+        shutil.copy2(train_path, dst_train_path)
 
     train_items = set(str(row[item_col]) for row in train_rows)
 
