@@ -30,8 +30,9 @@ from typing import Dict, List, Tuple
 
 
 REPO_ROOT  = Path(__file__).resolve().parents[2]
-DEFAULT_RAW = REPO_ROOT / "Datasets" / "raw" / "lastfm-dataset-1K" / "userid-timestamp-artid-artname-traid-traname.tsv"
-DEFAULT_OUT = REPO_ROOT / "Datasets" / "processed" / "basic"
+DEFAULT_RAW        = REPO_ROOT / "Datasets" / "raw" / "lastfm-dataset-1K" / "userid-timestamp-artid-artname-traid-traname.tsv"
+DEFAULT_OUT        = REPO_ROOT / "Datasets" / "processed" / "basic"
+DEFAULT_GENRE_TSV  = REPO_ROOT / "Datasets" / "raw" / "lastfm-dataset-1K" / "artist_genre.tsv"
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,6 +40,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--raw",           type=Path, default=DEFAULT_RAW)
     p.add_argument("--output-root",   type=Path, default=DEFAULT_OUT)
     p.add_argument("--dataset",       type=str,  default="lastfm")
+    p.add_argument("--genre-tsv",     type=Path, default=DEFAULT_GENRE_TSV,
+                   help="artist_mbid→genre TSV from fetch_lastfm_artist_genres.py map step. "
+                        "If absent, artist_id UUID is used as category (sparse fallback).")
     p.add_argument("--session-gap-ms", type=int, default=1_800_000,
                    help="Inactivity gap in milliseconds to split sessions (default: 1800000 = 30 min)")
     p.add_argument("--min-session-len", type=int, default=5)
@@ -171,7 +175,7 @@ def iterative_kcore(
 
 
 # ---------------------------------------------------------------------------
-# Step 4: Collect item→artist mapping and write output
+# Step 4: Collect item→artist mapping, load genre TSV, and write output
 # ---------------------------------------------------------------------------
 
 def build_item_artist(
@@ -185,12 +189,26 @@ def build_item_artist(
     return {track: cnt.most_common(1)[0][0] for track, cnt in track_artist_cnt.items()}
 
 
+def load_artist_genre(genre_tsv: Path) -> Dict[str, str]:
+    """Return {artist_mbid: genre_label} from artist_genre.tsv."""
+    mapping: Dict[str, str] = {}
+    with genre_tsv.open("r", encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        for row in reader:
+            mbid  = (row.get("artist_mbid") or "").strip()
+            genre = (row.get("genre") or "Unknown").strip()
+            if mbid:
+                mapping[mbid] = genre
+    return mapping
+
+
 def write_basic(
     *,
     out_dir: Path,
     dataset: str,
     sessions: Dict[str, List[Tuple[str, str, int]]],
     item_artist: Dict[str, str],
+    artist_genre: Dict[str, str],
 ) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -210,20 +228,25 @@ def write_basic(
         w = csv.writer(fh, delimiter="\t")
         w.writerow(["item_id:token", "category:token"])
         for track_id in sorted(all_items):
-            w.writerow([track_id, item_artist.get(track_id, "Unknown")])
+            artist_id = item_artist.get(track_id, "")
+            # use genre label if available, else fall back to artist_id UUID
+            category = artist_genre.get(artist_id, artist_id) if artist_id else "Unknown"
+            w.writerow([track_id, category])
 
     item_freq: Counter = Counter()
     for evts in sessions.values():
         for t, _, _ in evts:
             item_freq[t] += 1
 
+    categories = {artist_genre.get(item_artist.get(t, ""), item_artist.get(t, "")) for t in all_items}
     return {
         "inter_path": str(inter_path),
         "item_path":  str(item_path),
-        "rows":     sum(len(v) for v in sessions.values()),
-        "sessions": len(sessions),
-        "users":    len({s.rsplit("_s", 1)[0] for s in sessions}),
-        "items":    len(all_items),
+        "rows":       sum(len(v) for v in sessions.values()),
+        "sessions":   len(sessions),
+        "users":      len({s.rsplit("_s", 1)[0] for s in sessions}),
+        "items":      len(all_items),
+        "categories": len(categories),
         "min_session_len": min((len(v) for v in sessions.values()), default=0),
         "min_item_freq":   min(item_freq.values()) if item_freq else 0,
     }
@@ -259,12 +282,21 @@ def main() -> None:
     item_artist = build_item_artist(sessions)
     print(f"  unique tracks={len(item_artist):,}")
 
+    genre_tsv = Path(args.genre_tsv)
+    if genre_tsv.exists():
+        artist_genre = load_artist_genre(genre_tsv)
+        print(f"  loaded genre mapping: {len(artist_genre):,} artists  unique_genres={len(set(artist_genre.values()))}")
+    else:
+        artist_genre = {}
+        print(f"  no genre TSV found at {genre_tsv} — using raw artist_id as category (sparse fallback)")
+
     print("[5/5] writing basic dataset")
     write_stats = write_basic(
         out_dir=out_dir,
         dataset=str(args.dataset),
         sessions=sessions,
         item_artist=item_artist,
+        artist_genre=artist_genre,
     )
 
     summary = {
@@ -281,7 +313,8 @@ def main() -> None:
     summary_path = out_dir / f"{args.dataset}.basic_summary.json"
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"done → {summary_path}")
-    print(f"  users={write_stats['users']:,}  sessions={write_stats['sessions']:,}  items={write_stats['items']:,}  rows={write_stats['rows']:,}")
+    cats = write_stats.get('categories', '?')
+    print(f"  users={write_stats['users']:,}  sessions={write_stats['sessions']:,}  items={write_stats['items']:,}  rows={write_stats['rows']:,}  categories={cats}")
 
 
 if __name__ == "__main__":

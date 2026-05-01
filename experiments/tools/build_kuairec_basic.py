@@ -29,15 +29,17 @@ from typing import Dict, List, Tuple
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BIG_MATRIX = REPO_ROOT / "Datasets" / "raw" / "KuaiRec" / "KuaiRec 2.0" / "data" / "big_matrix.csv"
-DEFAULT_ITEM_CATS  = REPO_ROOT / "Datasets" / "raw" / "KuaiRec" / "KuaiRec 2.0" / "data" / "item_categories.csv"
-DEFAULT_OUT_ROOT   = REPO_ROOT / "Datasets" / "processed" / "basic"
+DEFAULT_BIG_MATRIX    = REPO_ROOT / "Datasets" / "raw" / "KuaiRec" / "KuaiRec 2.0" / "data" / "big_matrix.csv"
+DEFAULT_ITEM_CATS     = REPO_ROOT / "Datasets" / "raw" / "KuaiRec" / "KuaiRec 2.0" / "data" / "item_categories.csv"
+DEFAULT_CAPTION_CATS  = REPO_ROOT / "Datasets" / "raw" / "KuaiRec" / "KuaiRec 2.0" / "data" / "kuairec_caption_category.csv"
+DEFAULT_OUT_ROOT      = REPO_ROOT / "Datasets" / "processed" / "basic"
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--big-matrix",    type=Path, default=DEFAULT_BIG_MATRIX)
     p.add_argument("--item-cats",     type=Path, default=DEFAULT_ITEM_CATS)
+    p.add_argument("--caption-cats",  type=Path, default=DEFAULT_CAPTION_CATS)
     p.add_argument("--output-root",   type=Path, default=DEFAULT_OUT_ROOT)
     p.add_argument("--dataset",       type=str,  default="KuaiRec")
     p.add_argument("--session-gap",   type=int,  default=1800,
@@ -188,19 +190,43 @@ def filter_watch_ratio(
 # Step 5: Load item categories
 # ---------------------------------------------------------------------------
 
-def load_item_categories(item_cats: Path) -> Dict[int, int]:
-    """Return {video_id: first_category_int}."""
-    cat_map: Dict[int, int] = {}
+def load_item_categories(item_cats: Path, caption_cats: Path) -> Dict[int, str]:
+    """Return {video_id: category_id_str}.
+
+    Primary source: kuairec_caption_category.csv (first_level_category_id).
+    Fallback: item_categories.csv feat[0] for items not in caption file or with id=-124.
+    """
+    # Fallback: item_categories.csv feat[0]
+    fallback_map: Dict[int, str] = {}
     with item_cats.open("r", encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh)
         for row in reader:
             try:
                 vid  = int(row["video_id"])
                 feat = ast.literal_eval(row["feat"])
-                cat_map[vid] = int(feat[0])
+                cat_id = int(feat[0])
+                # remap placeholder IDs 0 and 30 to -1 so caption takes priority
+                if cat_id not in (0, 30):
+                    fallback_map[vid] = str(cat_id)
             except (KeyError, ValueError, IndexError, SyntaxError):
                 continue
-    return cat_map
+
+    # Primary: kuairec_caption_category.csv first_level_category_id
+    caption_map: Dict[int, str] = {}
+    with caption_cats.open("r", encoding="utf-8", errors="replace", newline="") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            try:
+                vid    = int(row["video_id"])
+                raw_cat = row.get("first_level_category_id") or ""
+                cat_id = raw_cat.strip()
+                if cat_id and cat_id != "-124":
+                    caption_map[vid] = cat_id
+            except (KeyError, ValueError):
+                continue
+
+    # caption_map takes priority over fallback_map
+    return {**fallback_map, **caption_map}
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +238,7 @@ def write_basic(
     out_dir: Path,
     dataset: str,
     sessions: Dict[str, List[Tuple[int, float, float]]],
-    item_cat: Dict[int, int],
+    item_cat: Dict[int, str],
 ) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -293,9 +319,9 @@ def main() -> None:
     rows_final  = sum(len(v) for v in sessions.values())
     print(f"  final: sessions={len(sessions):,}  users={users_final:,}  items={len({vid for evts in sessions.values() for vid,_,_ in evts}):,}  rows={rows_final:,}")
 
-    print(f"[5/6] loading item categories: {args.item_cats}")
-    item_cat = load_item_categories(Path(args.item_cats))
-    print(f"  categories loaded: {len(item_cat):,} videos")
+    print(f"[5/6] loading item categories: {args.item_cats} + {args.caption_cats}")
+    item_cat = load_item_categories(Path(args.item_cats), Path(args.caption_cats))
+    print(f"  categories loaded: {len(item_cat):,} videos  unique_cats={len(set(item_cat.values()))}")
 
     print("[6/6] writing basic dataset")
     write_stats = write_basic(
