@@ -204,17 +204,42 @@ TAG_TO_GENRE: List[tuple[str, str]] = [
     ("african", "World/Ethnic"),
     ("middle eastern", "World/Ethnic"),
     ("indian", "World/Ethnic"),
+    ("chanson", "World/Ethnic"),
+    ("ye-ye", "World/Ethnic"),
+    ("french", "World/Ethnic"),
+    ("bossa", "World/Ethnic"),
+    ("turkish", "World/Ethnic"),
+    ("deutsch", "World/Ethnic"),
 
     # Experimental
     ("experimental", "Experimental"),
     ("avant-garde", "Experimental"),
     ("noise rock", "Experimental"),
+    ("breakbeat", "Experimental"),
+    ("mashup", "Experimental"),
+    ("mash-up", "Experimental"),
 
     # Soundtrack
     ("soundtrack", "Soundtrack"),
     ("film score", "Soundtrack"),
     ("video game music", "Soundtrack"),
     ("anime", "Soundtrack"),
+    ("audiobook", "Soundtrack"),
+    ("spoken word", "Soundtrack"),
+
+    # Blues (additional)
+    ("rockabilly", "Blues"),
+
+    # Electronica/Downtempo (additional)
+    ("lounge", "Electronica/Downtempo"),
+    ("eurobeat", "Dance/Club"),
+    ("instrumental", "Electronica/Downtempo"),
+
+    # Others (non-music / meta tags)
+    ("comedy", "Others"),
+    ("humor", "Others"),
+    ("funny", "Others"),
+    ("stand-up", "Others"),
 ]
 
 
@@ -265,13 +290,28 @@ def _tag_matches(pattern: str, tag: str) -> bool:
 
 
 def map_tags_to_genre(tags: List[str]) -> str:
-    """Map a list of tags to canonical genre. Returns 'Unknown' if no match."""
-    for tag in tags:
+    """Map a list of tags to canonical genre using vote-across-all-tags strategy.
+
+    Each tag that matches a pattern casts a vote for that genre. The genre with
+    the most votes wins. Ties broken by order of first match. Falls back to
+    'Unknown' if no tag matches any pattern.
+    """
+    from collections import Counter
+    votes: Counter = Counter()
+    first_match_rank: dict = {}  # genre -> index of first matching tag (lower = earlier)
+    for tag_idx, tag in enumerate(tags):
         tag_lower = tag.lower().strip()
         for pattern, genre in TAG_TO_GENRE:
             if _tag_matches(pattern, tag_lower):
-                return genre
-    return "Unknown"
+                votes[genre] += 1
+                if genre not in first_match_rank:
+                    first_match_rank[genre] = tag_idx
+                break  # one pattern match per tag
+    if not votes:
+        return "Unknown"
+    # pick genre with most votes; break ties by earliest first match
+    best = max(votes, key=lambda g: (votes[g], -first_match_rank[g]))
+    return best
 
 
 def cmd_fetch(args: argparse.Namespace) -> None:
