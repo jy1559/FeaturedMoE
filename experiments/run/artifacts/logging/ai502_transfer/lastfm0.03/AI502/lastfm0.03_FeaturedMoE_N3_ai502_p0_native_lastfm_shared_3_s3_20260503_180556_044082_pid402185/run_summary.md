@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: lastfm0.03
+- run_group: ai502_transfer
+- run_axis: transfer
+- run_phase: AI502_P0_NATIVE_lastfm_shared_3_s3
+- best_mrr@20: 0.3076
+- test_mrr@20: 0.3075
+- test_hr@10: 0.3896
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/raw/trial_summary.csv
+- diag_raw_best_valid: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/raw/best_valid_diag.json
+- diag_raw_test: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/raw/test_diag.json
+- diag_raw_epoch_trace: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/lastfm0.03/AI502/lastfm0.03_FeaturedMoE_N3_ai502_p0_native_lastfm_shared_3_s3_20260503_180556_044082_pid402185/diag/raw/epoch_trace.csv
+- feature_ablation: 

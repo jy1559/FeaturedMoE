@@ -81,6 +81,28 @@ for _v in (
 import torch
 torch.set_num_threads(4)
 from tqdm import tqdm
+import numpy as np
+
+# Older Ray/Tune versions used by this RecBole environment still reference
+# NumPy aliases that were removed in newer NumPy releases.
+if not hasattr(np, "bool8"):
+    np.bool8 = np.bool_
+if not hasattr(np, "float_"):
+    np.float_ = np.float64
+if not hasattr(np, "complex_"):
+    np.complex_ = np.complex128
+if not hasattr(np, "object_"):
+    np.object_ = object
+if not hasattr(np, "str_"):
+    np.str_ = str
+if not hasattr(np, "unicode_"):
+    np.unicode_ = str
+if not hasattr(np, "float"):
+    np.float = float
+if not hasattr(np, "int"):
+    np.int = int
+if not hasattr(np, "complex"):
+    np.complex = complex
 
 # RecBole 1.2.1 bugfix + custom model registration
 import recbole_patch  # noqa: F401
@@ -101,7 +123,6 @@ import signal
 import atexit
 import re
 from itertools import product
-import numpy as np
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -169,6 +190,8 @@ _SIDEINFO_SEQ_MODELS = {
     "difsr",
     "fdsa",
 }
+
+_FEATURE_ENRICHED_MODES = {"full", "full_v2", "full_v3", "full_v4", "feature_added", "final"}
 
 
 def _config_get(config_obj, key, default=None):
@@ -339,8 +362,8 @@ def _ensure_feature_load_columns(cfg_dict: dict) -> None:
 
     feature_mode = str(cfg_dict.get("feature_mode", "")).strip().lower()
     data_path = str(cfg_dict.get("data_path", "")).strip().lower()
-    uses_feature_added = ("feature_added" in data_path) or (
-        feature_mode in {"full", "full_v2", "full_v3", "full_v4", "feature_added"}
+    uses_feature_added = ("feature_added" in data_path) or ("final_dataset" in data_path) or (
+        feature_mode in _FEATURE_ENRICHED_MODES
     )
     if not uses_feature_added:
         return
@@ -399,7 +422,7 @@ def _model_uses_feature_inputs(cfg_dict: dict) -> bool:
         return False
     feature_mode = str(cfg_dict.get("feature_mode", "")).strip().lower()
     data_path = str(cfg_dict.get("data_path", "")).strip().lower()
-    return ("feature_added" in data_path) or (feature_mode in {"full", "full_v2", "full_v3", "full_v4", "feature_added"})
+    return ("feature_added" in data_path) or ("final_dataset" in data_path) or (feature_mode in _FEATURE_ENRICHED_MODES)
 
     # Legacy behavior for v1/baseline models.
     if "hidden_size" in cfg_dict:
@@ -2423,6 +2446,15 @@ def _transfer_group_router_name(source_architecture: str) -> str:
     )
 
 
+def _transfer_arch_router_names(source_architecture: str) -> list[str]:
+    arch = str(source_architecture or "").strip().upper()
+    if arch == "A10":
+        return ["router_b"]
+    if arch == "A12":
+        return ["router_d", "router_e"]
+    return ["router_a", "router_b", "router_c", "router_d", "router_e"]
+
+
 def _transfer_prefixes(*, mode: str, source_architecture: str) -> list[str]:
     def _stage_prefix(stage: str) -> str:
         return f"stage_executor.stage_blocks.{stage}."
@@ -2436,6 +2468,10 @@ def _transfer_prefixes(*, mode: str, source_architecture: str) -> list[str]:
             base + "router_d.",
             base + "router_e.",
         ]
+
+    def _active_router_prefixes(stage: str) -> list[str]:
+        base = _stage_prefix(stage)
+        return [base + router_name + "." for router_name in _transfer_arch_router_names(source_architecture)]
 
     macro_prefix = _stage_prefix("macro")
     group_router = _transfer_group_router_name(source_architecture)
@@ -2454,12 +2490,27 @@ def _transfer_prefixes(*, mode: str, source_architecture: str) -> list[str]:
         ]
     if mode == "all_stage_full_router":
         return _all_router_prefixes("macro") + _all_router_prefixes("mid") + _all_router_prefixes("micro")
+    if mode == "all_stage_active_router":
+        return _active_router_prefixes("macro") + _active_router_prefixes("mid") + _active_router_prefixes("micro")
     if mode == "all_stage_feature_encoder":
         return [
             _stage_prefix("macro") + "feature_encoder.",
+            _stage_prefix("macro") + "group_feature_projections.",
             _stage_prefix("mid") + "feature_encoder.",
+            _stage_prefix("mid") + "group_feature_projections.",
             _stage_prefix("micro") + "feature_encoder.",
+            _stage_prefix("micro") + "group_feature_projections.",
         ]
+    if mode == "feature_encoder_group_router":
+        return _transfer_prefixes(mode="all_stage_feature_encoder", source_architecture=source_architecture) + _transfer_prefixes(
+            mode="all_stage_group_router",
+            source_architecture=source_architecture,
+        )
+    if mode == "feature_encoder_active_router":
+        return _transfer_prefixes(mode="all_stage_feature_encoder", source_architecture=source_architecture) + _transfer_prefixes(
+            mode="all_stage_active_router",
+            source_architecture=source_architecture,
+        )
     if mode == "macro_encoder_all":
         return [
             macro_prefix + "feature_encoder.",
@@ -2469,10 +2520,219 @@ def _transfer_prefixes(*, mode: str, source_architecture: str) -> list[str]:
     return []
 
 
+def _normalize_transfer_mode(mode: str) -> str:
+    aliases = {
+        "feature_encoder_init": "all_stage_feature_encoder",
+        "group_router_init": "all_stage_group_router",
+        "all_router_init": "all_stage_full_router",
+        "feature_encoder_router_init": "feature_encoder_router",
+        "feature_encoder_group_router_init": "feature_encoder_group_router",
+        "feature_encoder_a12_router_init": "feature_encoder_active_router",
+        "feature_encoder_active_router_init": "feature_encoder_active_router",
+        "a12_router_init": "all_stage_active_router",
+        "active_router_init": "all_stage_active_router",
+        "full_model_init": "full_model",
+        "full_except_feature_router_init": "full_except_feature_router",
+    }
+    key = str(mode or "none").strip().lower()
+    return aliases.get(key, key)
+
+
+def _unwrap_transfer_state_dict(payload) -> dict:
+    if isinstance(payload, dict):
+        for key in ("state_dict", "model_state_dict", "model", "best_model_state_dict"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                return value
+        if all(isinstance(key, str) for key in payload.keys()):
+            return payload
+    raise RuntimeError("Transfer checkpoint does not contain a readable state_dict payload.")
+
+
+def _transfer_excluded_key_reason(key: str, *, mode: str) -> str:
+    if mode != "full_except_feature_router":
+        return ""
+    router_tokens = (
+        ".router_a.",
+        ".router_b.",
+        ".router_c.",
+        ".router_d.",
+        ".router_e.",
+        ".rule_router.",
+        ".router_wrapper.",
+    )
+    if key.startswith("item_embedding.") or ".item_embedding." in key:
+        return "item_embedding"
+    if ".feature_encoder." in key:
+        return "feature_encoder"
+    if ".group_feature_projections." in key:
+        return "feature_encoder"
+    if any(token in key for token in router_tokens):
+        return "router"
+    return ""
+
+
+def _freeze_loaded_parameters(model, loaded_tensor_keys: set[str], *, enabled: bool) -> dict:
+    report = {
+        "enabled": bool(enabled),
+        "frozen_tensors": 0,
+        "frozen_parameters": 0,
+        "trainable_parameters_after_freeze": None,
+        "frozen_parameter_names_sample": [],
+    }
+    if not enabled:
+        return report
+
+    loaded_params = set(loaded_tensor_keys)
+    frozen_names: list[str] = []
+    frozen_count = 0
+    frozen_elements = 0
+    for name, param in model.named_parameters():
+        if name not in loaded_params:
+            continue
+        param.requires_grad = False
+        frozen_count += 1
+        frozen_elements += int(param.numel())
+        if len(frozen_names) < 20:
+            frozen_names.append(name)
+
+    trainable_after = sum(int(param.numel()) for param in model.parameters() if param.requires_grad)
+    report.update(
+        {
+            "frozen_tensors": int(frozen_count),
+            "frozen_parameters": int(frozen_elements),
+            "trainable_parameters_after_freeze": int(trainable_after),
+            "frozen_parameter_names_sample": frozen_names,
+        }
+    )
+    return report
+
+
+def _transfer_delta_summary(before: dict, after: dict, keys: set[str]) -> dict:
+    changed = 0
+    max_abs = 0.0
+    total_abs = 0.0
+    checked = 0
+    for key in keys:
+        lhs = before.get(key)
+        rhs = after.get(key)
+        if lhs is None or rhs is None or tuple(lhs.shape) != tuple(rhs.shape):
+            continue
+        delta = (lhs.detach().float().cpu() - rhs.detach().float().cpu()).abs()
+        item_max = float(delta.max().item()) if delta.numel() else 0.0
+        item_sum = float(delta.sum().item()) if delta.numel() else 0.0
+        checked += 1
+        max_abs = max(max_abs, item_max)
+        total_abs += item_sum
+        if item_max > 0.0:
+            changed += 1
+    return {
+        "checked_tensors": int(checked),
+        "changed_tensors": int(changed),
+        "unchanged_tensors": int(max(0, checked - changed)),
+        "max_abs_delta": float(max_abs),
+        "total_abs_delta": float(total_abs),
+    }
+
+
+def _transfer_snapshot(model, keys: set[str]) -> dict[str, torch.Tensor]:
+    state = model.state_dict()
+    return {
+        key: state[key].detach().cpu().clone()
+        for key in keys
+        if key in state
+    }
+
+
+def _transfer_trainable_loaded_count(model, loaded_tensor_keys: set[str]) -> int:
+    return sum(1 for name, param in model.named_parameters() if name in loaded_tensor_keys and param.requires_grad)
+
+
+def _apply_loaded_lr_scale(trainer, model, transfer_report: dict, cfg_dict: dict) -> dict:
+    transfer = _transfer_cfg(cfg_dict)
+    if not isinstance(transfer_report, dict) or not transfer_report.get("enabled"):
+        return {"enabled": False}
+    try:
+        scale = float(transfer.get("loaded_lr_scale", 1.0) or 1.0)
+    except Exception:
+        scale = 1.0
+    if scale <= 0.0:
+        raise RuntimeError(f"transfer.loaded_lr_scale must be positive, got {scale!r}")
+    if abs(scale - 1.0) < 1e-12:
+        return {"enabled": False, "loaded_lr_scale": 1.0}
+
+    loaded_keys = set(transfer_report.get("_loaded_tensor_keys") or [])
+    if not loaded_keys:
+        if _transfer_enabled(transfer.get("allow_empty", False)):
+            return {"enabled": False, "reason": "no_loaded_tensor_keys", "loaded_lr_scale": scale}
+        raise RuntimeError("transfer.loaded_lr_scale was requested but no loaded tensor keys were recorded.")
+
+    named_params = [(name, param) for name, param in model.named_parameters() if param.requires_grad]
+    loaded_params = [param for name, param in named_params if name in loaded_keys]
+    other_params = [param for name, param in named_params if name not in loaded_keys]
+    if not loaded_params:
+        if _transfer_enabled(transfer.get("allow_empty", False)):
+            return {"enabled": False, "reason": "no_trainable_loaded_params", "loaded_lr_scale": scale}
+        raise RuntimeError("transfer.loaded_lr_scale was requested but no loaded parameters are trainable.")
+
+    old_optimizer = trainer.optimizer
+    old_groups = getattr(old_optimizer, "param_groups", []) or []
+    base_lr = float(old_groups[0].get("lr", getattr(trainer, "learning_rate", cfg_dict.get("learning_rate", 0.0))) or 0.0)
+    defaults = dict(getattr(old_optimizer, "defaults", {}) or {})
+    optimizer_cls = old_optimizer.__class__
+    param_groups = []
+    if other_params:
+        param_groups.append({"params": other_params, "lr": base_lr, "name": "non_loaded"})
+    param_groups.append({"params": loaded_params, "lr": base_lr * scale, "name": "loaded_transfer"})
+    kwargs = {key: value for key, value in defaults.items() if key != "params"}
+    trainer.optimizer = optimizer_cls(param_groups, **kwargs)
+    report = {
+        "enabled": True,
+        "loaded_lr_scale": float(scale),
+        "base_lr": float(base_lr),
+        "loaded_lr": float(base_lr * scale),
+        "loaded_param_tensors": int(len(loaded_params)),
+        "loaded_parameters": int(sum(param.numel() for param in loaded_params)),
+        "other_param_tensors": int(len(other_params)),
+        "other_parameters": int(sum(param.numel() for param in other_params)),
+    }
+    print(
+        "[transfer-optimizer] "
+        f"loaded_lr_scale={report['loaded_lr_scale']} loaded_lr={report['loaded_lr']:.6g} "
+        f"loaded_tensors={report['loaded_param_tensors']} other_tensors={report['other_param_tensors']}"
+    )
+    return report
+
+
+def _fallback_group_router_prefixes(
+    *,
+    mode: str,
+    source_state: dict,
+    target_state: dict,
+) -> list[str]:
+    if mode not in {"macro_group_router", "all_stage_group_router", "macro_encoder_all"}:
+        return []
+
+    def _stage_prefix(stage: str) -> str:
+        return f"stage_executor.stage_blocks.{stage}."
+
+    stages = ["macro"] if mode in {"macro_group_router", "macro_encoder_all"} else ["macro", "mid", "micro"]
+    for router_name in ("router_e", "router_b", "router_a", "router_d", "router_c"):
+        prefixes = [_stage_prefix(stage) + router_name + "." for stage in stages]
+        source_has = any(any(key.startswith(prefix) for prefix in prefixes) for key in source_state)
+        target_has = any(any(key.startswith(prefix) for prefix in prefixes) for key in target_state)
+        if source_has and target_has:
+            if mode == "macro_encoder_all":
+                return [_stage_prefix("macro") + "feature_encoder.", *prefixes]
+            return prefixes
+    return []
+
+
 def _apply_transfer_initialization(model, cfg_dict: dict) -> dict:
     transfer = _transfer_cfg(cfg_dict)
     enabled = _transfer_enabled(transfer.get("enable", False))
-    mode = str(transfer.get("mode", "none") or "none").strip().lower()
+    requested_mode = str(transfer.get("mode", "none") or "none").strip().lower()
+    mode = _normalize_transfer_mode(requested_mode)
     if not enabled or mode in {"", "none"}:
         return {"enabled": False, "mode": "none"}
 
@@ -2485,62 +2745,115 @@ def _apply_transfer_initialization(model, cfg_dict: dict) -> dict:
 
     source_architecture = str(transfer.get("source_architecture", "") or "").strip().upper()
     strict_shape = _transfer_enabled(transfer.get("strict_shape", False))
-    source_state = torch.load(checkpoint_path, map_location="cpu")
+    freeze_loaded = _transfer_enabled(transfer.get("freeze_loaded", False))
+    allow_empty = _transfer_enabled(transfer.get("allow_empty", False))
+    allow_router_fallback = _transfer_enabled(transfer.get("allow_router_fallback", False))
+    source_state = _unwrap_transfer_state_dict(torch.load(checkpoint_path, map_location="cpu"))
     target_state = model.state_dict()
+    target_before_state = {key: value.detach().cpu().clone() for key, value in target_state.items()}
 
-    if mode == "full_model":
+    if mode in {"full_model", "full_except_feature_router"}:
         if strict_shape:
+            if mode == "full_except_feature_router":
+                raise RuntimeError("strict_shape=true is not supported for full_except_feature_router transfer mode.")
             missing, unexpected = model.load_state_dict(source_state, strict=True)
+            freeze_report = _freeze_loaded_parameters(model, set(source_state.keys()), enabled=freeze_loaded)
             # strict=True should already raise on mismatch; keep a stable report shape.
             return {
                 "enabled": True,
                 "mode": mode,
+                "requested_mode": requested_mode,
                 "loaded_tensors": len(source_state),
                 "skipped_shape": 0,
                 "skipped_missing": 0,
+                "skipped_excluded": 0,
                 "missing_keys": len(missing),
                 "unexpected_keys": len(unexpected),
                 "source_checkpoint": str(checkpoint_path.resolve()),
+                "freeze_report": freeze_report,
             }
-        matched = {
-            key: value
-            for key, value in source_state.items()
-            if key in target_state and tuple(target_state[key].shape) == tuple(value.shape)
-        }
-        skipped_shape = sum(
-            1
-            for key, value in source_state.items()
-            if key in target_state and tuple(target_state[key].shape) != tuple(value.shape)
-        )
-        skipped_missing = sum(1 for key in source_state if key not in target_state)
+        matched = {}
+        skipped_shape = 0
+        skipped_missing = 0
+        skipped_excluded = 0
+        skipped_reasons: dict[str, int] = {}
+        for key, value in source_state.items():
+            excluded_reason = _transfer_excluded_key_reason(key, mode=mode)
+            if excluded_reason:
+                skipped_excluded += 1
+                skipped_reasons[excluded_reason] = skipped_reasons.get(excluded_reason, 0) + 1
+                continue
+            target_tensor = target_state.get(key)
+            if target_tensor is None:
+                skipped_missing += 1
+                skipped_reasons["missing"] = skipped_reasons.get("missing", 0) + 1
+                continue
+            if tuple(target_tensor.shape) != tuple(value.shape):
+                skipped_shape += 1
+                skipped_reasons["shape"] = skipped_reasons.get("shape", 0) + 1
+                continue
+            matched[key] = value
         merged_state = model.state_dict()
         merged_state.update(matched)
         load_result = model.load_state_dict(merged_state, strict=False)
+        loaded_keys = set(matched.keys())
+        post_load_state = model.state_dict()
+        freeze_report = _freeze_loaded_parameters(model, loaded_keys, enabled=freeze_loaded)
         report = {
             "enabled": True,
             "mode": mode,
+            "requested_mode": requested_mode,
             "loaded_tensors": len(matched),
+            "loaded_tensor_names_sample": sorted(matched.keys())[:20],
             "skipped_shape": skipped_shape,
             "skipped_missing": skipped_missing,
+            "skipped_excluded": skipped_excluded,
+            "skipped_reasons": skipped_reasons,
             "missing_keys": len(getattr(load_result, "missing_keys", []) or []),
             "unexpected_keys": len(getattr(load_result, "unexpected_keys", []) or []),
             "source_checkpoint": str(checkpoint_path.resolve()),
+            "freeze_report": freeze_report,
+            "init_delta_from_target": _transfer_delta_summary(target_before_state, post_load_state, loaded_keys),
+            "trainable_loaded_tensors": _transfer_trainable_loaded_count(model, loaded_keys),
+            "_loaded_tensor_keys": sorted(loaded_keys),
+            "_loaded_tensor_snapshot": _transfer_snapshot(model, loaded_keys),
         }
         print(
             "[transfer-init] "
             f"mode={mode} source_architecture={source_architecture or '-'} "
             f"loaded={report['loaded_tensors']} skipped_shape={report['skipped_shape']} "
-            f"skipped_missing={report['skipped_missing']} source={report['source_checkpoint']}"
+            f"skipped_missing={report['skipped_missing']} skipped_excluded={report['skipped_excluded']} "
+            f"frozen={freeze_report['frozen_tensors']} source={report['source_checkpoint']}"
         )
+        if not matched:
+            message = f"no compatible tensors loaded for mode={mode}"
+            if allow_empty:
+                print(f"[transfer-init][warn] {message}")
+            else:
+                raise RuntimeError(f"Transfer failed: {message}")
         return report
 
     prefixes = _transfer_prefixes(mode=mode, source_architecture=source_architecture)
+    if mode == "feature_encoder_router":
+        prefixes = _transfer_prefixes(mode="all_stage_feature_encoder", source_architecture=source_architecture)
+        prefixes += _transfer_prefixes(mode="all_stage_full_router", source_architecture=source_architecture)
+    prefix_resolution = "configured"
+    if allow_router_fallback and prefixes and not any(any(key.startswith(prefix) for prefix in prefixes) for key in source_state):
+        fallback_prefixes = _fallback_group_router_prefixes(
+            mode=mode,
+            source_state=source_state,
+            target_state=target_state,
+        )
+        if fallback_prefixes:
+            prefixes = fallback_prefixes
+            prefix_resolution = "fallback_existing_router"
     if not prefixes:
         raise RuntimeError(
             f"Unsupported transfer.mode={mode!r}. "
             "Expected one of: none, macro_feature_encoder, macro_group_router, macro_group_router_all, "
             "macro_full_router, all_stage_group_router, all_stage_full_router, all_stage_feature_encoder, "
-            "macro_encoder_all, full_model."
+            "feature_encoder_router, feature_encoder_group_router, feature_encoder_active_router, "
+            "macro_encoder_all, full_model, full_except_feature_router."
         )
 
     matched: dict[str, torch.Tensor] = {}
@@ -2563,27 +2876,45 @@ def _apply_transfer_initialization(model, cfg_dict: dict) -> dict:
     merged_state = model.state_dict()
     merged_state.update(matched)
     load_result = model.load_state_dict(merged_state, strict=False)
+    loaded_keys = set(matched.keys())
+    post_load_state = model.state_dict()
+    freeze_report = _freeze_loaded_parameters(model, loaded_keys, enabled=freeze_loaded)
     report = {
         "enabled": True,
         "mode": mode,
+        "requested_mode": requested_mode,
         "loaded_tensors": len(matched),
+        "loaded_tensor_names_sample": sorted(matched.keys())[:20],
         "considered_tensors": considered,
         "skipped_shape": skipped_shape,
         "skipped_missing": skipped_missing,
+        "skipped_excluded": 0,
         "missing_keys": len(getattr(load_result, "missing_keys", []) or []),
         "unexpected_keys": len(getattr(load_result, "unexpected_keys", []) or []),
         "source_checkpoint": str(checkpoint_path.resolve()),
         "prefixes": prefixes,
+        "prefix_resolution": prefix_resolution,
+        "freeze_report": freeze_report,
+        "init_delta_from_target": _transfer_delta_summary(target_before_state, post_load_state, loaded_keys),
+        "trainable_loaded_tensors": _transfer_trainable_loaded_count(model, loaded_keys),
+        "_loaded_tensor_keys": sorted(loaded_keys),
+        "_loaded_tensor_snapshot": _transfer_snapshot(model, loaded_keys),
     }
     print(
         "[transfer-init] "
         f"mode={mode} source_architecture={source_architecture or '-'} "
         f"loaded={report['loaded_tensors']}/{report['considered_tensors']} "
         f"skipped_shape={report['skipped_shape']} skipped_missing={report['skipped_missing']} "
+        f"frozen={freeze_report['frozen_tensors']} prefix={prefix_resolution} "
+        f"changed_at_init={report['init_delta_from_target']['changed_tensors']} "
         f"source={report['source_checkpoint']}"
     )
     if not matched:
-        print(f"[transfer-init][warn] no compatible tensors loaded for mode={mode} prefixes={prefixes}")
+        message = f"no compatible tensors loaded for mode={mode} prefixes={prefixes}"
+        if allow_empty:
+            print(f"[transfer-init][warn] {message}")
+        else:
+            raise RuntimeError(f"Transfer failed: {message}")
     return report
 
 
@@ -2938,6 +3269,8 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
 
     trainer_cls = get_trainer(config["MODEL_TYPE"], config["model"])
     trainer = trainer_cls(config, model)
+    if isinstance(transfer_report, dict) and transfer_report.get("enabled"):
+        transfer_report["optimizer_report"] = _apply_loaded_lr_scale(trainer, model, transfer_report, cfg)
     setattr(trainer, "_disable_patch_logging", True)
     # Keep train-based seen/unseen reference stable across valid/test evaluation.
     trainer._fmoe_special_item_counts_train = _build_item_counts_from_loader(train_data)
@@ -3022,6 +3355,13 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
         neg_items = neg_items[neg_items != 0][:sample_num]
         from recbole_patch import setup_sampled_eval
         setup_sampled_eval(trainer, neg_items, sample_num, n_items, config["device"])
+
+    if not use_mem_cache and bool(cfg.get("drop_raw_dataset_after_prepare", True)):
+        # The converted train/valid/test datasets are held by the dataloaders. Dropping the
+        # pre-split raw dataset keeps large LastFM jobs from retaining another huge copy.
+        del dataset
+        dataset = None
+        gc.collect()
 
     # Training loop with early stopping + temp best-stage checkpoint for test.
     best_stage_path = _best_stage_temp_path(cfg)
@@ -3249,6 +3589,26 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             best_result = {k: float(v) for k, v in best_valid_eval_result.items()}
             best_mrr20 = float(best_result.get("mrr@20", best_mrr20) or best_mrr20)
 
+        loaded_snapshot = {}
+        if isinstance(transfer_report, dict):
+            loaded_snapshot = transfer_report.pop("_loaded_tensor_snapshot", {}) or {}
+            transfer_report.pop("_loaded_tensor_keys", None)
+        transfer_train_delta = {}
+        if loaded_snapshot:
+            loaded_keys = set(loaded_snapshot.keys())
+            transfer_train_delta = _transfer_delta_summary(
+                loaded_snapshot,
+                trainer.model.state_dict(),
+                loaded_keys,
+            )
+            transfer_report["train_delta_from_init"] = transfer_train_delta
+            print(
+                "[transfer-train] "
+                f"loaded_checked={transfer_train_delta['checked_tensors']} "
+                f"changed_after_train={transfer_train_delta['changed_tensors']} "
+                f"max_abs_delta={transfer_train_delta['max_abs_delta']:.6g}"
+            )
+
         if (
             feature_ablation_logging_enabled
             and not defer_detailed_artifacts
@@ -3346,6 +3706,16 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "artifact_probe_checkpoint": artifact_probe_checkpoint,
             "artifact_logging_policy": artifact_logging_policy,
             "transfer_report": transfer_report,
+            "freeze_report": transfer_report.get("freeze_report", {"enabled": False})
+            if isinstance(transfer_report, dict)
+            else {"enabled": False},
+            "source_checkpoint": (
+                transfer_report.get("source_checkpoint", "")
+                if isinstance(transfer_report, dict)
+                else str((_transfer_cfg(cfg).get("source_checkpoint", "") or ""))
+            ),
+            "baseline_native_result": str(cfg.get("baseline_native_result", "") or ""),
+            "baseline_native_checkpoint": str(cfg.get("baseline_native_checkpoint", "") or ""),
         }
     finally:
         _cleanup_temp_path(best_stage_path)
@@ -3505,6 +3875,11 @@ def _save_results(
         data["test_main_eval_filter"] = bt.get("test_main_eval_filter") or {}
         data["best_valid_cold_target_metrics"] = bt.get("valid_cold_target_metrics") or {}
         data["test_cold_target_metrics"] = bt.get("test_cold_target_metrics") or {}
+        data["transfer_report"] = bt.get("transfer_report") or {}
+        data["freeze_report"] = bt.get("freeze_report") or {}
+        data["source_checkpoint"] = bt.get("source_checkpoint") or ""
+        data["baseline_native_result"] = bt.get("baseline_native_result") or ""
+        data["baseline_native_checkpoint"] = bt.get("baseline_native_checkpoint") or ""
         if bt.get("feature_ablation_metrics"):
             data["feature_ablation_metrics"] = bt.get("feature_ablation_metrics") or {}
     data["normal_result_mirror_file"] = str(mirror_paths["normal_result"].resolve())
@@ -4333,9 +4708,14 @@ def main():
         result_file = results_dir / ("_".join(file_parts) + ".json")
 
     export_final_checkpoints = bool(cfg.get("artifact_export_final_checkpoint", True))
+    # artifact_export_all_checkpoints=True: extends checkpoint export to non-FMoE models
+    # (used selectively in cue-tier eval baseline runs; off by default to save disk space)
+    _export_all_ckpts = bool(cfg.get("artifact_export_all_checkpoints", False))
 
     # Future case-eval / re-inference workflows need a stable exported checkpoint path.
-    if export_final_checkpoints and _normalize_model_name(model) in _FEATURE_AWARE_MOE_MODELS:
+    if export_final_checkpoints and (
+        _normalize_model_name(model) in _FEATURE_AWARE_MOE_MODELS or _export_all_ckpts
+    ):
         checkpoint_stem = result_file.stem if result_file.stem else "result"
         cfg.setdefault(
             "__artifact_combo_best_export_path",
@@ -4609,6 +4989,11 @@ def main():
                 "status": "ok",
                 "artifact_best_checkpoint": current_artifact_best,
                 "artifact_probe_checkpoint": current_artifact_probe,
+                "transfer_report": result.get("transfer_report") or {},
+                "freeze_report": result.get("freeze_report") or {},
+                "source_checkpoint": result.get("source_checkpoint") or "",
+                "baseline_native_result": result.get("baseline_native_result") or "",
+                "baseline_native_checkpoint": result.get("baseline_native_checkpoint") or "",
             }
             trial_record.update(_diag_scalar_metrics(trial_record.get("valid_diag")))
             trial_record.update({f"feature_ablation.{k}": v for k, v in (trial_record.get("feature_ablation_metrics") or {}).items()})
@@ -4892,11 +5277,12 @@ def main():
     if export_final_checkpoints:
         combo_best_export_path = str(cfg.get("__artifact_combo_best_export_path", "") or "").strip()
         combo_probe_export_path = str(cfg.get("__artifact_combo_probe_export_path", "") or "").strip()
+        keep_probe_checkpoint = _transfer_enabled(cfg.get("artifact_keep_probe_checkpoint", False))
         if combo_best_export_path and combo_best_artifact_state.get("best_checkpoint"):
             best_ckpt_src = Path(str(combo_best_artifact_state.get("best_checkpoint") or ""))
             if best_ckpt_src.exists():
                 exported_best_checkpoint = _export_stage_file(best_ckpt_src, combo_best_export_path)
-        if combo_probe_export_path and combo_best_artifact_state.get("probe_checkpoint"):
+        if keep_probe_checkpoint and combo_probe_export_path and combo_best_artifact_state.get("probe_checkpoint"):
             probe_ckpt_src = Path(str(combo_best_artifact_state.get("probe_checkpoint") or ""))
             if probe_ckpt_src.exists():
                 exported_probe_checkpoint = _export_stage_file(probe_ckpt_src, combo_probe_export_path)

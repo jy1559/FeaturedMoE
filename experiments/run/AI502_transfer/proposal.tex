@@ -1,0 +1,89 @@
+\documentclass{article}
+\usepackage[margin=0.72in]{geometry}
+\usepackage{times}
+\usepackage{amsmath}
+\usepackage{microtype}
+\usepackage{titlesec}
+\setlength{\columnsep}{0.23in}
+\setlength{\parskip}{0pt}
+\setlength{\textfloatsep}{6pt}
+\setlength{\abovecaptionskip}{4pt}
+\setlength{\belowcaptionskip}{0pt}
+\titlespacing*{\section}{0pt}{6pt}{3pt}
+\titlespacing*{\subsection}{0pt}{4pt}{2pt}
+\pagestyle{empty}
+
+\title{AI502 Term Project Proposal: Transfer Learning for RouteRec}
+\author{Jongbok Lee, Junyeong Song}
+\date{April 2026}
+
+\begin{document}
+
+\maketitle
+\vspace{-1.0em}
+
+\begin{abstract}
+This project extends our recent work on \textbf{RouteRec}, a sequential recommendation model that uses Mixture-of-Experts (MoE) routing guided by user behavior. Sequential recommendation is the task of predicting the next item a user will interact with, given their ordered interaction history. RouteRec routes each session to specialized sub-networks called \emph{experts}, based on behavioral cues---\emph{Tempo}, \emph{Focus}, \emph{Memory}, and \emph{Exposure}---computed at three scales: macro, mid, and micro. Because the router reads only normalized cue values rather than raw item IDs, we hypothesize that its learned routing patterns may transfer across datasets. This project tests that hypothesis by comparing several initialization strategies---\emph{feature encoder init}, \emph{router init}, and their combination---against training from scratch on a new dataset.
+\end{abstract}
+
+\section{Motivation}
+Sequential recommendation models predict the next item a user will interact with, given their ordered interaction history. Most models process every user through a single shared computation path. This works poorly when behavior is diverse: some users browse rapidly through many items, others keep revisiting the same few, and others stay narrowly focused on one topic. A single path treats all of these styles the same way.
+
+RouteRec, developed in our prior work, solves this with a Mixture-of-Experts (MoE) design. Instead of one fixed path, the model maintains multiple specialized sub-networks---called \emph{experts}---and routes each session to the most relevant ones. Routing is driven by \emph{behavioral cues}, lightweight statistics computed from the interaction history. There are four cue families: \emph{Tempo} (how fast the user is browsing), \emph{Focus} (how narrow their interest is), \emph{Memory} (how often they revisit the same items), and \emph{Exposure} (how many distinct items they have seen). Cues are computed at three scales---\emph{macro} (across sessions), \emph{mid} (within the current session), and \emph{micro} (the most recent few items)---to capture long-term habit, current-session trend, and immediate context.
+
+A key design choice is that the router sees only \emph{normalized} cue values, not the actual item IDs. Routing is based on \emph{how} a user is browsing, not \emph{what} they are browsing. This raises a natural question: if routing does not depend on item identity, can the learned router be reused on a completely different dataset?
+
+Standard components like item embeddings cannot transfer, since each dataset has its own set of items. But the feature encoder (which computes cues) and the router (which maps cues to experts) work entirely on behavioral statistics---patterns that may look similar across different domains. A session with rapid, wide-ranging browsing may call for the same expert whether the items are movies, books, or products. We say a component is \emph{portable} if it can be reused on a new dataset without losing its usefulness. This project tests whether RouteRec's encoder and router are portable, as a direct follow-up to the RouteRec work.
+
+\section{Background: Sequential Recommendation}
+
+A sequential recommendation system takes a user's interaction history---an ordered list of items they clicked, watched, or purchased---and predicts what they are most likely to interact with next. The challenge is that histories can be very long, and different parts carry different weight: behavior from many past sessions shapes a user's general taste, while the most recent clicks reveal their current intent.
+
+Modern sequential recommendation models handle this with self-attention. The dominant backbone, \textbf{SASRec} (Self-Attentive Sequential Recommendation), first maps each item to a learned vector called an \emph{item embedding}, which captures the item's identity in a form the model can process. It then applies self-attention across the full history: each item looks at all other items and learns how much weight to give them. This lets the model capture both long-range patterns (e.g., a user who consistently buys cooking books) and short-range transitions (e.g., a user who just switched from drama to comedy), without any hand-crafted features. The result is a single vector summarizing the user's current state, which is used to rank candidate items by predicted relevance.
+
+SASRec and its variants have become the standard backbone for sequential recommendation because they train efficiently and generalize well across domains. RouteRec extends this backbone by adding behavior-guided MoE routing, as described below.
+
+\section{Proposed Method}
+
+\subsection{RouteRec Backbone}
+We use RouteRec without any architectural changes. The model first encodes the interaction history with a SASRec-style self-attention encoder. It then computes a behavioral cue vector at each scale $s \in \{\text{macro}, \text{mid}, \text{micro}\}$:
+\[
+\mathbf{f}^{(s)} = [\mathbf{f}^{(s)}_{\text{Tempo}} \;\|\; \mathbf{f}^{(s)}_{\text{Focus}} \;\|\; \mathbf{f}^{(s)}_{\text{Memory}} \;\|\; \mathbf{f}^{(s)}_{\text{Exposure}}].
+\]
+The router normalizes this vector and produces a weight for each expert. The top-$K$ experts with the highest weights are selected and combined:
+\[
+\boldsymbol{\pi}^{(s)} = \mathrm{Router}^{(s)}\!\left(\mathrm{Norm}(\mathbf{f}^{(s)})\right), \qquad
+\mathbf{h}' = \sum_{e \in \mathrm{TopK}(\boldsymbol{\pi}^{(s)})} \pi^{(s)}_e\, \mathrm{Expert}^{(s)}_e(\mathbf{h}).
+\]
+Using three scales instead of one lets the router respond to signals from different time ranges at the same time. A user's long-term pattern (macro) may call for different experts than their most recent clicks (micro), and capturing both leads to more precise routing. Since the router input is normalized and contains no item IDs, we expect the learned routing function to be at least partly portable across datasets.
+
+\subsection{Transfer Settings}
+We refer to the dataset used for pre-training as the \emph{source} dataset and the new dataset as the \emph{target} dataset. We train RouteRec fully on the source, then initialize a fresh model with selected source parameters and fine-tune it on the target using the same training pipeline. No additional modules are introduced. We compare five settings:
+
+\begin{itemize}
+  \setlength{\itemsep}{1pt}
+  \item \textbf{Scratch}: all parameters initialized randomly (baseline).
+  \item \textbf{Feature encoder init}: copy $\Theta_{\text{enc}}$ from source; all other parameters are random.
+  \item \textbf{Router init}: copy $\Theta_{\text{router}}$ from source; all other parameters are random.
+  \item \textbf{Encoder + router init}: copy both $\Theta_{\text{enc}}$ and $\Theta_{\text{router}}$ from source.
+  \item \textbf{Full model init}: copy all parameters except item embeddings and the output layer from source; those are re-initialized for the target item set.
+\end{itemize}
+
+In all settings, item embeddings and the output layer---which produces a score for each candidate item---are always re-initialized from scratch, since they are tied to each dataset's own item set. We test the encoder and router both separately and together because their portability may differ: the encoder extracts cues from raw sequences, while the router learns to map those cues to expert choices. If one transfers well but the other does not, that tells us which part is more sensitive to the difference between source and target.
+
+The training objective is the same in all settings:
+\[
+\mathcal{L} = \mathcal{L}_{\mathrm{CE}} + \lambda_{\mathrm{cons}}\,\mathcal{L}_{\mathrm{cons}} + \lambda_z\,\mathcal{L}_z,
+\]
+where $\mathcal{L}_{\mathrm{CE}}$ is the next-item prediction loss, $\mathcal{L}_{\mathrm{cons}}$ encourages the router to assign the same experts to sessions with similar behavioral cues, and $\mathcal{L}_z$ prevents routing weights from becoming too extreme. Using transfer only as initialization---with no extra loss terms---keeps the comparison between settings fair and clean.
+
+\section{Experiment Plan}
+We run experiments across multiple source-to-target dataset pairs using the RouteRec codebase. We prefer pairs from different item domains (e.g., books to movies) so that any observed gain comes from behavioral transfer, not from items shared between the two datasets.
+
+For each pair, we measure three things: (1) final performance on the target test set using standard recommendation ranking metrics (Recall@K and NDCG@K), (2) how fast validation performance improves each epoch, to track learning speed, and (3) how consistent the results are across multiple runs with different random seeds. A transfer setting is useful if it learns faster than scratch, reaches better final performance, or both.
+
+We expect different results from each setting. Router-only init may give the clearest early gain, since the router directly maps behavioral cues to experts and this mapping may carry over well to a new domain. Encoder + router init may do even better: the encoder and router are trained together, so the cues the encoder produces are shaped to match what the router expects---copying one without the other may leave a mismatch. Full model init is the strongest baseline, as it copies the most parameters, but some may reflect patterns specific to the source domain that do not generalize to the target.
+
+These comparisons will help us identify which parts of RouteRec are portable across datasets. If routing transfer works, it supports the claim that RouteRec's experts learn patterns that go beyond any one item domain---a meaningful result for building more flexible recommendation models. If it does not, that is equally informative: it would mean that even normalized behavioral cues carry dataset-specific signals, a limitation worth addressing in future work.
+
+\end{document}

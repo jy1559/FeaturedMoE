@@ -1,0 +1,29 @@
+# Run Logging Summary
+
+- model: FeaturedMoE_N3
+- dataset: beauty
+- run_group: ai502_transfer
+- run_axis: transfer
+- run_phase: AI502_P2_FREEZE_retail_rocket_to_beauty_shared_4_all_router_init_s1
+- best_mrr@20: 0.0713
+- test_mrr@20: 0.0305
+- test_hr@10: 0.0687
+
+## Artifacts
+
+- result_json: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/result.json
+- special_metrics: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/special_metrics.json
+- special_log: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/special_log.json
+- diag_dir: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/diag
+- diag_meta: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/diag/meta.json
+- diag_tier_a_final: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/diag/tier_a_final/final_metrics.csv
+- diag_tier_b_internal: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/diag/tier_b_internal/internal_metrics.csv
+- diag_viz_manifest: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/diag/tier_c_viz/viz_manifest.json
+- diag_viz_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/diag/tier_c_viz/viz_feature_pca.csv.gz
+- diag_viz_router_input_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/diag/tier_c_viz/viz_router_input_pca.csv.gz
+- diag_viz_group_feature_pca: /workspace/FeaturedMoE/experiments/run/artifacts/logging/ai502_transfer/beauty/AI502/beauty_FeaturedMoE_N3_ai502_p2_freeze_retail_rocket_to_beauty_shared_4_all_router_init_s1_20260502_042751_681519_pid349919/diag/tier_c_viz/viz_group_feature_pca.csv.gz
+- diag_raw_trial_summary: 
+- diag_raw_best_valid: 
+- diag_raw_test: 
+- diag_raw_epoch_trace: 
+- feature_ablation: 

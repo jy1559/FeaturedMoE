@@ -1,0 +1,75 @@
+# job_id=KuaiRec_fame  dataset=KuaiRec  model=fame
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_cikm --search-algo tpe --max-evals 5 --tune-epochs 100 --tune-patience 10 --seed 42 --run-group cikm --run-axis cikm_main_baselines --run-phase P0 model=fame dataset=KuaiRec eval_mode=session_fixed feature_mode=final ++dataset_root=/workspace/FeaturedMoE/Datasets/processed ++data_path=/workspace/FeaturedMoE/Datasets/processed/final_dataset ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=1 log_wandb=false show_progress=false ++seed=42 ++MAX_ITEM_LIST_LENGTH=20 ++hidden_dropout_prob=0.1 ++search.hidden_dropout_prob=0.1 ++attn_dropout_prob=0.1 ++search.attn_dropout_prob=0.1 ++num_experts=4 ++search.num_experts=4 ++num_heads=8 ++search.num_heads=8 ++num_layers=3 ++search.num_layers=3 ++search.learning_rate=[0.0004,0.0008,0.0012,0.002,0.003] ++search_space_type_overrides.learning_rate=loguniform ++search.weight_decay=[0,5e-05,0.0002] ++search_space_type_overrides.weight_decay=loguniform_zero
+
+/workspace/FeaturedMoE/experiments/recbole_patch.py:98: FutureWarning: In the future `np.object` will be defined as the corresponding NumPy scalar.
+  if not hasattr(np, _k):
+/workspace/FeaturedMoE/experiments/recbole_patch.py:98: FutureWarning: In the future `np.str` will be defined as the corresponding NumPy scalar.
+  if not hasattr(np, _k):
+[RUN_STATUS] START pid=701015 ts=2026-05-09T03:30:19
+
+=================================================================
+  Hyperopt  |  FAME x KuaiRec
+  max_evals=5  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=2048/2048/2048
+  track=cikm  axis=cikm_main_baselines  phase=P0
+=================================================================
+Changed knobs: learning_rate, weight_decay
+Tuned params(len>1): 2  (~1 discrete combos)
+Tuned groups: 2
+  [optimization]
+    learning_rate                   [0.0004, 0.0008, 0.0012, 0.002, 0.003]    -> loguniform
+    weight_decay                    [0, 5e-05, 0.0002]                        -> loguniform_zero
+Fixed params(singleton/non-list): 5
+Fixed groups: 5
+  [optimization]
+    hidden_dropout_prob             0.1                                     
+  [model_core]
+    attn_dropout_prob               0.1                                     
+    num_heads                       8                                       
+    num_layers                      3                                       
+  [other]
+    num_experts                     4                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/5] learning_rate=0.001395, weight_decay=0
+  -> MRR@20=0.013400  best=0.013400  (early_stop@29, trial=1.36h, avg=1.39h/trial, total=1.39h, ETA=5.56h)
+[TRIAL_METRICS] cur_best_mrr20=0.013400 cur_best_hr10=0.028900 cur_test_mrr20=0.326200 cur_test_hr10=0.366000 avg_epoch_time_sec=168.3459 test_eval_time_sec=0.7858 test_eval_batches_per_sec=19.0889 test_eval_targets_per_sec=37247.5164 run_best_mrr20=0.013400 run_best_hr10=0.028900 run_test_mrr20=0.326200 run_test_hr10=0.366000
+
+[2/5] learning_rate=0.002267, weight_decay=0.0001162
+  -> MRR@20=0.011300  best=0.013400  (early_stop@31, trial=1.45h, avg=1.42h/trial, total=2.84h, ETA=4.26h)
+[TRIAL_METRICS] cur_best_mrr20=0.011300 cur_best_hr10=0.023200 cur_test_mrr20=0.182900 cur_test_hr10=0.203000 avg_epoch_time_sec=168.3536 test_eval_time_sec=0.8543 test_eval_batches_per_sec=17.5573 test_eval_targets_per_sec=34259.0191 run_best_mrr20=0.013400 run_best_hr10=0.028900 run_test_mrr20=0.326200 run_test_hr10=0.366000
+
+[3/5] learning_rate=0.000464, weight_decay=0
+  -> MRR@20=0.014600  best=0.014600  (early_stop@48, trial=2.31h, avg=1.72h/trial, total=5.15h, ETA=3.44h)
+[TRIAL_METRICS] cur_best_mrr20=0.014600 cur_best_hr10=0.027800 cur_test_mrr20=0.352100 cur_test_hr10=0.377600 avg_epoch_time_sec=173.5029 test_eval_time_sec=0.8216 test_eval_batches_per_sec=18.2576 test_eval_targets_per_sec=35625.3753 run_best_mrr20=0.014600 run_best_hr10=0.027800 run_test_mrr20=0.352100 run_test_hr10=0.377600
+
+[4/5] learning_rate=0.00132, weight_decay=6.71e-05
+  -> MRR@20=0.011400  best=0.014600  (early_stop@30, trial=1.38h, avg=1.63h/trial, total=6.54h, ETA=1.63h)
+[TRIAL_METRICS] cur_best_mrr20=0.011400 cur_best_hr10=0.026400 cur_test_mrr20=0.152200 cur_test_hr10=0.186500 avg_epoch_time_sec=166.0083 test_eval_time_sec=0.8073 test_eval_batches_per_sec=18.5799 test_eval_targets_per_sec=36254.2696 run_best_mrr20=0.014600 run_best_hr10=0.027800 run_test_mrr20=0.352100 run_test_hr10=0.377600
+
+[5/5] learning_rate=0.000486, weight_decay=0
+  -> MRR@20=0.015200  best=0.015200  (early_stop@79, trial=3.64h, avg=2.04h/trial, total=10.18h, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.015200 cur_best_hr10=0.030100 cur_test_mrr20=0.345800 cur_test_hr10=0.378300 avg_epoch_time_sec=165.9763 test_eval_time_sec=0.7844 test_eval_batches_per_sec=19.1229 test_eval_targets_per_sec=37313.9392 run_best_mrr20=0.015200 run_best_hr10=0.030100 run_test_mrr20=0.345800 run_test_hr10=0.378300
+
+=================================================================
+  DONE  |  FAME x KuaiRec
+  Best MRR@20 = 0.015200  |  5/5 trials OK
+  Best HR@10  = 0.030100
+  Test MRR@20 = 0.345800  (best-valid checkpoint)
+  Test HR@10  = 0.378300  (best-valid checkpoint)
+  Avg epoch time = 165.976 sec/epoch
+  Final test eval = 0.784 sec | batches/s=19.123 | targets/s=37313.939
+[RUN_METRICS] best_valid_mrr20=0.015200 best_valid_hr10=0.030100 test_mrr20=0.345800 test_hr10=0.378300 avg_epoch_time_sec=165.9763 test_eval_time_sec=0.7844 test_eval_batches_per_sec=19.1229 test_eval_targets_per_sec=37313.9392
+  Total time: 610.9 min
+  Best params:
+    learning_rate: 0.000485993
+    weight_decay: 0
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/cikm/KuaiRec_FAME_p0_20260509_033019_554135_pid701015.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/cikm/normal/cikm_main_baselines/P0/KuaiRec/FAME/KuaiRec_FAME_p0_20260509_033019_554135_pid701015.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/cikm/special/cikm_main_baselines/P0/KuaiRec/FAME/KuaiRec_FAME_p0_20260509_033019_554135_pid701015_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/cikm/special/cikm_main_baselines/P0/KuaiRec/FAME/KuaiRec_FAME_p0_20260509_033019_554135_pid701015_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=701015 start=2026-05-09T03:30:19 end=2026-05-09T13:41:11

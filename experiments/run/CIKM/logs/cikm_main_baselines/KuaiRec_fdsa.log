@@ -1,0 +1,127 @@
+# job_id=KuaiRec_fdsa  dataset=KuaiRec  model=fdsa
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_cikm --search-algo tpe --max-evals 5 --tune-epochs 100 --tune-patience 10 --seed 42 --run-group cikm --run-axis cikm_main_baselines --run-phase P0 model=fdsa dataset=KuaiRec eval_mode=session_fixed feature_mode=final ++dataset_root=/workspace/FeaturedMoE/Datasets/processed ++data_path=/workspace/FeaturedMoE/Datasets/processed/final_dataset ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=2 log_wandb=false show_progress=false ++seed=42 ++MAX_ITEM_LIST_LENGTH=50 ++hidden_dropout_prob=0.1 ++search.hidden_dropout_prob=0.1 ++attn_dropout_prob=0.1 ++search.attn_dropout_prob=0.1 ++attribute_hidden_size=160 ++search.attribute_hidden_size=160 ++lambda_attr=0.12 ++search.lambda_attr=0.12 ++n_layers=2 ++search.n_layers=2 ++n_heads=4 ++search.n_heads=4 ++search.learning_rate=[0.0001,0.0003,0.0005,0.0008,0.0015] ++search_space_type_overrides.learning_rate=loguniform ++search.weight_decay=[0,5e-05,0.0001] ++search_space_type_overrides.weight_decay=loguniform_zero
+
+/workspace/FeaturedMoE/experiments/recbole_patch.py:98: FutureWarning: In the future `np.object` will be defined as the corresponding NumPy scalar.
+  if not hasattr(np, _k):
+/workspace/FeaturedMoE/experiments/recbole_patch.py:98: FutureWarning: In the future `np.str` will be defined as the corresponding NumPy scalar.
+  if not hasattr(np, _k):
+[RUN_STATUS] START pid=701649 ts=2026-05-09T03:50:55
+
+=================================================================
+  Hyperopt  |  FDSA x KuaiRec
+  max_evals=5  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=2048/2048/2048
+  track=cikm  axis=cikm_main_baselines  phase=P0
+=================================================================
+Changed knobs: learning_rate, weight_decay
+Tuned params(len>1): 2  (~1 discrete combos)
+Tuned groups: 2
+  [optimization]
+    learning_rate                   [0.0001, 0.0003, 0.0005, 0.0008, 0.0015]  -> loguniform
+    weight_decay                    [0, 5e-05, 0.0001]                        -> loguniform_zero
+Fixed params(singleton/non-list): 6
+Fixed groups: 6
+  [optimization]
+    hidden_dropout_prob             0.1                                     
+  [model_core]
+    attn_dropout_prob               0.1                                     
+  [other]
+    attribute_hidden_size           160                                     
+    lambda_attr                     0.12                                    
+    n_heads                         4                                       
+    n_layers                        2                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/5] learning_rate=0.0005362, weight_decay=0
+  -> FAILED: 'category'
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4815, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3265, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 64, in __init__
+    self.feature_embed_layer = FeatureSeqEmbLayer(
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 1269, in __init__
+    self.get_fields_name_dim()
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 905, in get_fields_name_dim
+    if self.dataset.field2type[field_name] == FeatureType.TOKEN:
+KeyError: 'category'
+
+[2/5] learning_rate=0.001029, weight_decay=7.622e-05
+  -> FAILED: 'category'
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4815, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3265, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 64, in __init__
+    self.feature_embed_layer = FeatureSeqEmbLayer(
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 1269, in __init__
+    self.get_fields_name_dim()
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 905, in get_fields_name_dim
+    if self.dataset.field2type[field_name] == FeatureType.TOKEN:
+KeyError: 'category'
+
+[3/5] learning_rate=0.0001221, weight_decay=0
+  -> FAILED: 'category'
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4815, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3265, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 64, in __init__
+    self.feature_embed_layer = FeatureSeqEmbLayer(
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 1269, in __init__
+    self.get_fields_name_dim()
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 905, in get_fields_name_dim
+    if self.dataset.field2type[field_name] == FeatureType.TOKEN:
+KeyError: 'category'
+
+[4/5] learning_rate=0.0004975, weight_decay=5.792e-05
+  -> FAILED: 'category'
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4815, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3265, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 64, in __init__
+    self.feature_embed_layer = FeatureSeqEmbLayer(
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 1269, in __init__
+    self.get_fields_name_dim()
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 905, in get_fields_name_dim
+    if self.dataset.field2type[field_name] == FeatureType.TOKEN:
+KeyError: 'category'
+
+[5/5] learning_rate=0.0001299, weight_decay=0
+  -> FAILED: 'category'
+Traceback (most recent call last):
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 4815, in objective
+    result = train_and_evaluate(
+  File "/workspace/FeaturedMoE/experiments/hyperopt_tune.py", line 3265, in train_and_evaluate
+    model = model_cls(config, train_data.dataset).to(config["device"])
+  File "/workspace/FeaturedMoE/experiments/models/fdsa.py", line 64, in __init__
+    self.feature_embed_layer = FeatureSeqEmbLayer(
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 1269, in __init__
+    self.get_fields_name_dim()
+  File "/venv/FMoE/lib/python3.10/site-packages/recbole/model/layers.py", line 905, in get_fields_name_dim
+    if self.dataset.field2type[field_name] == FeatureType.TOKEN:
+KeyError: 'category'
+
+[WARN] fmin ended with: 
+
+=================================================================
+  DONE  |  FDSA x KuaiRec
+  Best MRR@20 = 0.000000  |  0/5 trials OK
+  Best HR@10  = 0.000000
+  Test MRR@20 = 0.000000  (best-valid checkpoint)
+  Test HR@10  = 0.000000  (best-valid checkpoint)
+[RUN_METRICS] best_valid_mrr20=0.000000 best_valid_hr10=0.000000 test_mrr20=0.000000 test_hr10=0.000000 avg_epoch_time_sec=0.0000 test_eval_time_sec=0.0000 test_eval_batches_per_sec=0.0000 test_eval_targets_per_sec=0.0000
+  Total time: 2.0 min
+  Best params:
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/cikm/KuaiRec_FDSA_p0_20260509_035055_753230_pid701649.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/cikm/normal/cikm_main_baselines/P0/KuaiRec/FDSA/KuaiRec_FDSA_p0_20260509_035055_753230_pid701649.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=701649 start=2026-05-09T03:50:55 end=2026-05-09T03:52:57

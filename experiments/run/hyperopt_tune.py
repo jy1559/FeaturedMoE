@@ -81,6 +81,28 @@ for _v in (
 import torch
 torch.set_num_threads(4)
 from tqdm import tqdm
+import numpy as np
+
+# Older Ray/Tune versions used by this RecBole environment still reference
+# NumPy aliases that were removed in newer NumPy releases.
+if not hasattr(np, "bool8"):
+    np.bool8 = np.bool_
+if not hasattr(np, "float_"):
+    np.float_ = np.float64
+if not hasattr(np, "complex_"):
+    np.complex_ = np.complex128
+if not hasattr(np, "object_"):
+    np.object_ = object
+if not hasattr(np, "str_"):
+    np.str_ = str
+if not hasattr(np, "unicode_"):
+    np.unicode_ = str
+if not hasattr(np, "float"):
+    np.float = float
+if not hasattr(np, "int"):
+    np.int = int
+if not hasattr(np, "complex"):
+    np.complex = complex
 
 # RecBole 1.2.1 bugfix + custom model registration
 import recbole_patch  # noqa: F401
@@ -101,7 +123,6 @@ import signal
 import atexit
 import re
 from itertools import product
-import numpy as np
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -2450,10 +2471,92 @@ def _transfer_prefixes(*, mode: str, source_architecture: str) -> list[str]:
     return []
 
 
+def _normalize_transfer_mode(mode: str) -> str:
+    aliases = {
+        "feature_encoder_init": "all_stage_feature_encoder",
+        "group_router_init": "all_stage_group_router",
+        "all_router_init": "all_stage_full_router",
+        "feature_encoder_router_init": "feature_encoder_router",
+        "full_model_init": "full_model",
+        "full_except_feature_router_init": "full_except_feature_router",
+    }
+    key = str(mode or "none").strip().lower()
+    return aliases.get(key, key)
+
+
+def _unwrap_transfer_state_dict(payload) -> dict:
+    if isinstance(payload, dict):
+        for key in ("state_dict", "model_state_dict", "model", "best_model_state_dict"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                return value
+        if all(isinstance(key, str) for key in payload.keys()):
+            return payload
+    raise RuntimeError("Transfer checkpoint does not contain a readable state_dict payload.")
+
+
+def _transfer_excluded_key_reason(key: str, *, mode: str) -> str:
+    if mode != "full_except_feature_router":
+        return ""
+    router_tokens = (
+        ".router_a.",
+        ".router_b.",
+        ".router_c.",
+        ".router_d.",
+        ".router_e.",
+        ".rule_router.",
+        ".router_wrapper.",
+    )
+    if key.startswith("item_embedding.") or ".item_embedding." in key:
+        return "item_embedding"
+    if ".feature_encoder." in key:
+        return "feature_encoder"
+    if any(token in key for token in router_tokens):
+        return "router"
+    return ""
+
+
+def _freeze_loaded_parameters(model, loaded_tensor_keys: set[str], *, enabled: bool) -> dict:
+    report = {
+        "enabled": bool(enabled),
+        "frozen_tensors": 0,
+        "frozen_parameters": 0,
+        "trainable_parameters_after_freeze": None,
+        "frozen_parameter_names_sample": [],
+    }
+    if not enabled:
+        return report
+
+    loaded_params = set(loaded_tensor_keys)
+    frozen_names: list[str] = []
+    frozen_count = 0
+    frozen_elements = 0
+    for name, param in model.named_parameters():
+        if name not in loaded_params:
+            continue
+        param.requires_grad = False
+        frozen_count += 1
+        frozen_elements += int(param.numel())
+        if len(frozen_names) < 20:
+            frozen_names.append(name)
+
+    trainable_after = sum(int(param.numel()) for param in model.parameters() if param.requires_grad)
+    report.update(
+        {
+            "frozen_tensors": int(frozen_count),
+            "frozen_parameters": int(frozen_elements),
+            "trainable_parameters_after_freeze": int(trainable_after),
+            "frozen_parameter_names_sample": frozen_names,
+        }
+    )
+    return report
+
+
 def _apply_transfer_initialization(model, cfg_dict: dict) -> dict:
     transfer = _transfer_cfg(cfg_dict)
     enabled = _transfer_enabled(transfer.get("enable", False))
-    mode = str(transfer.get("mode", "none") or "none").strip().lower()
+    requested_mode = str(transfer.get("mode", "none") or "none").strip().lower()
+    mode = _normalize_transfer_mode(requested_mode)
     if not enabled or mode in {"", "none"}:
         return {"enabled": False, "mode": "none"}
 
@@ -2466,62 +2569,88 @@ def _apply_transfer_initialization(model, cfg_dict: dict) -> dict:
 
     source_architecture = str(transfer.get("source_architecture", "") or "").strip().upper()
     strict_shape = _transfer_enabled(transfer.get("strict_shape", False))
-    source_state = torch.load(checkpoint_path, map_location="cpu")
+    freeze_loaded = _transfer_enabled(transfer.get("freeze_loaded", False))
+    source_state = _unwrap_transfer_state_dict(torch.load(checkpoint_path, map_location="cpu"))
     target_state = model.state_dict()
 
-    if mode == "full_model":
+    if mode in {"full_model", "full_except_feature_router"}:
         if strict_shape:
+            if mode == "full_except_feature_router":
+                raise RuntimeError("strict_shape=true is not supported for full_except_feature_router transfer mode.")
             missing, unexpected = model.load_state_dict(source_state, strict=True)
+            freeze_report = _freeze_loaded_parameters(model, set(source_state.keys()), enabled=freeze_loaded)
             # strict=True should already raise on mismatch; keep a stable report shape.
             return {
                 "enabled": True,
                 "mode": mode,
+                "requested_mode": requested_mode,
                 "loaded_tensors": len(source_state),
                 "skipped_shape": 0,
                 "skipped_missing": 0,
+                "skipped_excluded": 0,
                 "missing_keys": len(missing),
                 "unexpected_keys": len(unexpected),
                 "source_checkpoint": str(checkpoint_path.resolve()),
+                "freeze_report": freeze_report,
             }
-        matched = {
-            key: value
-            for key, value in source_state.items()
-            if key in target_state and tuple(target_state[key].shape) == tuple(value.shape)
-        }
-        skipped_shape = sum(
-            1
-            for key, value in source_state.items()
-            if key in target_state and tuple(target_state[key].shape) != tuple(value.shape)
-        )
-        skipped_missing = sum(1 for key in source_state if key not in target_state)
+        matched = {}
+        skipped_shape = 0
+        skipped_missing = 0
+        skipped_excluded = 0
+        skipped_reasons: dict[str, int] = {}
+        for key, value in source_state.items():
+            excluded_reason = _transfer_excluded_key_reason(key, mode=mode)
+            if excluded_reason:
+                skipped_excluded += 1
+                skipped_reasons[excluded_reason] = skipped_reasons.get(excluded_reason, 0) + 1
+                continue
+            target_tensor = target_state.get(key)
+            if target_tensor is None:
+                skipped_missing += 1
+                skipped_reasons["missing"] = skipped_reasons.get("missing", 0) + 1
+                continue
+            if tuple(target_tensor.shape) != tuple(value.shape):
+                skipped_shape += 1
+                skipped_reasons["shape"] = skipped_reasons.get("shape", 0) + 1
+                continue
+            matched[key] = value
         merged_state = model.state_dict()
         merged_state.update(matched)
         load_result = model.load_state_dict(merged_state, strict=False)
+        freeze_report = _freeze_loaded_parameters(model, set(matched.keys()), enabled=freeze_loaded)
         report = {
             "enabled": True,
             "mode": mode,
+            "requested_mode": requested_mode,
             "loaded_tensors": len(matched),
             "skipped_shape": skipped_shape,
             "skipped_missing": skipped_missing,
+            "skipped_excluded": skipped_excluded,
+            "skipped_reasons": skipped_reasons,
             "missing_keys": len(getattr(load_result, "missing_keys", []) or []),
             "unexpected_keys": len(getattr(load_result, "unexpected_keys", []) or []),
             "source_checkpoint": str(checkpoint_path.resolve()),
+            "freeze_report": freeze_report,
         }
         print(
             "[transfer-init] "
             f"mode={mode} source_architecture={source_architecture or '-'} "
             f"loaded={report['loaded_tensors']} skipped_shape={report['skipped_shape']} "
-            f"skipped_missing={report['skipped_missing']} source={report['source_checkpoint']}"
+            f"skipped_missing={report['skipped_missing']} skipped_excluded={report['skipped_excluded']} "
+            f"frozen={freeze_report['frozen_tensors']} source={report['source_checkpoint']}"
         )
         return report
 
     prefixes = _transfer_prefixes(mode=mode, source_architecture=source_architecture)
+    if mode == "feature_encoder_router":
+        prefixes = _transfer_prefixes(mode="all_stage_feature_encoder", source_architecture=source_architecture)
+        prefixes += _transfer_prefixes(mode="all_stage_full_router", source_architecture=source_architecture)
     if not prefixes:
         raise RuntimeError(
             f"Unsupported transfer.mode={mode!r}. "
             "Expected one of: none, macro_feature_encoder, macro_group_router, macro_group_router_all, "
             "macro_full_router, all_stage_group_router, all_stage_full_router, all_stage_feature_encoder, "
-            "macro_encoder_all, full_model."
+            "feature_encoder_router, macro_encoder_all, full_model, full_except_feature_router."
         )
 
     matched: dict[str, torch.Tensor] = {}
@@ -2544,24 +2673,28 @@ def _apply_transfer_initialization(model, cfg_dict: dict) -> dict:
     merged_state = model.state_dict()
     merged_state.update(matched)
     load_result = model.load_state_dict(merged_state, strict=False)
+    freeze_report = _freeze_loaded_parameters(model, set(matched.keys()), enabled=freeze_loaded)
     report = {
         "enabled": True,
         "mode": mode,
+        "requested_mode": requested_mode,
         "loaded_tensors": len(matched),
         "considered_tensors": considered,
         "skipped_shape": skipped_shape,
         "skipped_missing": skipped_missing,
+        "skipped_excluded": 0,
         "missing_keys": len(getattr(load_result, "missing_keys", []) or []),
         "unexpected_keys": len(getattr(load_result, "unexpected_keys", []) or []),
         "source_checkpoint": str(checkpoint_path.resolve()),
         "prefixes": prefixes,
+        "freeze_report": freeze_report,
     }
     print(
         "[transfer-init] "
         f"mode={mode} source_architecture={source_architecture or '-'} "
         f"loaded={report['loaded_tensors']}/{report['considered_tensors']} "
         f"skipped_shape={report['skipped_shape']} skipped_missing={report['skipped_missing']} "
-        f"source={report['source_checkpoint']}"
+        f"frozen={freeze_report['frozen_tensors']} source={report['source_checkpoint']}"
     )
     if not matched:
         print(f"[transfer-init][warn] no compatible tensors loaded for mode={mode} prefixes={prefixes}")
@@ -3327,6 +3460,16 @@ def train_and_evaluate(cfg_dict: dict, trial_num: int | None = None, progress_cb
             "artifact_probe_checkpoint": artifact_probe_checkpoint,
             "artifact_logging_policy": artifact_logging_policy,
             "transfer_report": transfer_report,
+            "freeze_report": transfer_report.get("freeze_report", {"enabled": False})
+            if isinstance(transfer_report, dict)
+            else {"enabled": False},
+            "source_checkpoint": (
+                transfer_report.get("source_checkpoint", "")
+                if isinstance(transfer_report, dict)
+                else str((_transfer_cfg(cfg).get("source_checkpoint", "") or ""))
+            ),
+            "baseline_native_result": str(cfg.get("baseline_native_result", "") or ""),
+            "baseline_native_checkpoint": str(cfg.get("baseline_native_checkpoint", "") or ""),
         }
     finally:
         _cleanup_temp_path(best_stage_path)
@@ -3486,6 +3629,11 @@ def _save_results(
         data["test_main_eval_filter"] = bt.get("test_main_eval_filter") or {}
         data["best_valid_cold_target_metrics"] = bt.get("valid_cold_target_metrics") or {}
         data["test_cold_target_metrics"] = bt.get("test_cold_target_metrics") or {}
+        data["transfer_report"] = bt.get("transfer_report") or {}
+        data["freeze_report"] = bt.get("freeze_report") or {}
+        data["source_checkpoint"] = bt.get("source_checkpoint") or ""
+        data["baseline_native_result"] = bt.get("baseline_native_result") or ""
+        data["baseline_native_checkpoint"] = bt.get("baseline_native_checkpoint") or ""
         if bt.get("feature_ablation_metrics"):
             data["feature_ablation_metrics"] = bt.get("feature_ablation_metrics") or {}
     data["normal_result_mirror_file"] = str(mirror_paths["normal_result"].resolve())
@@ -4569,6 +4717,11 @@ def main():
                 "status": "ok",
                 "artifact_best_checkpoint": current_artifact_best,
                 "artifact_probe_checkpoint": current_artifact_probe,
+                "transfer_report": result.get("transfer_report") or {},
+                "freeze_report": result.get("freeze_report") or {},
+                "source_checkpoint": result.get("source_checkpoint") or "",
+                "baseline_native_result": result.get("baseline_native_result") or "",
+                "baseline_native_checkpoint": result.get("baseline_native_checkpoint") or "",
             }
             trial_record.update(_diag_scalar_metrics(trial_record.get("valid_diag")))
             trial_record.update({f"feature_ablation.{k}": v for k, v in (trial_record.get("feature_ablation_metrics") or {}).items()})

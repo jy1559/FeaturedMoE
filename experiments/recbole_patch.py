@@ -55,7 +55,49 @@ class MockXGBoost:
     
 sys.modules['xgboost'] = MockXGBoost()
 
+# Mock ray.tune to avoid numpy<2.0 compatibility error (np.bool8 removed in numpy 2.0)
+class _MockRayTune:
+    def run(self, *a, **kw): pass
+    def run_experiments(self, *a, **kw): pass
+    class Analysis: pass
+    ExperimentAnalysis = Analysis
+
+class _MockRay:
+    tune = _MockRayTune()
+    def __getattr__(self, name): return None
+
+import types as _types
+_ray_mod = _types.ModuleType("ray")
+_ray_mod.tune = _MockRayTune()
+_ray_tune_mod = _types.ModuleType("ray.tune")
+for _attr in dir(_MockRayTune):
+    if not _attr.startswith("__"):
+        setattr(_ray_tune_mod, _attr, getattr(_MockRayTune, _attr))
+sys.modules.setdefault("ray", _ray_mod)
+sys.modules.setdefault("ray.tune", _ray_tune_mod)
+
 import numpy as np
+
+# Restore numpy 1.x aliases removed in numpy 2.0 (required by recbole 1.2.1 and ray)
+_np2_compat = {
+    "bool8":    np.bool_,
+    "bool":     np.bool_,
+    "int":      np.int_    if hasattr(np, "int_")    else np.int64,
+    "float":    np.float64,
+    "float_":   np.float64,
+    "complex":  np.complex128,
+    "complex_": np.complex128,
+    "object":   object,
+    "str":      np.str_    if hasattr(np, "str_")    else str,
+    "unicode":  np.str_    if hasattr(np, "str_")    else str,
+    "unicode_": np.str_    if hasattr(np, "str_")    else str,
+    "long":     np.int_    if hasattr(np, "int_")    else np.int64,
+    "int_":     np.int64,
+}
+for _k, _v in _np2_compat.items():
+    if not hasattr(np, _k):
+        setattr(np, _k, _v)
+
 import torch
 from copy import copy
 

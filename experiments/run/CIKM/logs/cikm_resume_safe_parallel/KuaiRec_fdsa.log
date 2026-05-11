@@ -1,0 +1,61 @@
+# job_id=KuaiRec_fdsa  dataset=KuaiRec  model=fdsa
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_cikm --search-algo tpe --max-evals 1 --tune-epochs 100 --tune-patience 10 --seed 42 --run-group cikm --run-axis cikm_resume_safe_parallel --run-phase P0_RESUME model=fdsa dataset=KuaiRec eval_mode=session_fixed feature_mode=final ++dataset_root=/workspace/FeaturedMoE/Datasets/processed ++data_path=/workspace/FeaturedMoE/Datasets/processed/final_dataset ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=0 log_wandb=false show_progress=false ++seed=42 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++MAX_ITEM_LIST_LENGTH=50 ++hidden_dropout_prob=0.1 ++search.hidden_dropout_prob=0.1 ++attn_dropout_prob=0.1 ++search.attn_dropout_prob=0.1 ++attribute_hidden_size=160 ++search.attribute_hidden_size=160 ++lambda_attr=0.12 ++search.lambda_attr=0.12 ++n_layers=2 ++search.n_layers=2 ++n_heads=4 ++search.n_heads=4 ++search.learning_rate=[0.0001,0.0003,0.0005,0.0008,0.0015] ++search_space_type_overrides.learning_rate=loguniform ++search.weight_decay=[0,5e-05,0.0001] ++search_space_type_overrides.weight_decay=loguniform_zero max_evals=1 tune_epochs=100 tune_patience=10 oom_retry_limit=5
+
+/workspace/FeaturedMoE/experiments/recbole_patch.py:98: FutureWarning: In the future `np.object` will be defined as the corresponding NumPy scalar.
+  if not hasattr(np, _k):
+/workspace/FeaturedMoE/experiments/recbole_patch.py:98: FutureWarning: In the future `np.str` will be defined as the corresponding NumPy scalar.
+  if not hasattr(np, _k):
+[RUN_STATUS] START pid=762411 ts=2026-05-10T02:02:25
+
+=================================================================
+  Hyperopt  |  FDSA x KuaiRec
+  max_evals=1  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=2048/2048/2048
+  track=cikm  axis=cikm_resume_safe_parallel  phase=P0_RESUME
+=================================================================
+Changed knobs: learning_rate, weight_decay
+Tuned params(len>1): 2  (~1 discrete combos)
+Tuned groups: 2
+  [optimization]
+    learning_rate                   [0.0001, 0.0003, 0.0005, 0.0008, 0.0015]  -> loguniform
+    weight_decay                    [0, 5e-05, 0.0001]                        -> loguniform_zero
+Fixed params(singleton/non-list): 6
+Fixed groups: 6
+  [optimization]
+    hidden_dropout_prob             0.1                                     
+  [model_core]
+    attn_dropout_prob               0.1                                     
+  [other]
+    attribute_hidden_size           160                                     
+    lambda_attr                     0.12                                    
+    n_heads                         4                                       
+    n_layers                        2                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/1] learning_rate=0.0005362, weight_decay=0
+  -> MRR@20=0.014700  best=0.014700  (early_stop@17, trial=38.3min, avg=40.4min/trial, total=40.4min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.014700 cur_best_hr10=0.030100 cur_test_mrr20=0.299200 cur_test_hr10=0.346900 avg_epoch_time_sec=135.1577 test_eval_time_sec=0.5854 test_eval_batches_per_sec=25.6239 test_eval_targets_per_sec=49998.9956 run_best_mrr20=0.014700 run_best_hr10=0.030100 run_test_mrr20=0.299200 run_test_hr10=0.346900
+
+=================================================================
+  DONE  |  FDSA x KuaiRec
+  Best MRR@20 = 0.014700  |  1/1 trials OK
+  Best HR@10  = 0.030100
+  Test MRR@20 = 0.299200  (best-valid checkpoint)
+  Test HR@10  = 0.346900  (best-valid checkpoint)
+  Avg epoch time = 135.158 sec/epoch
+  Final test eval = 0.585 sec | batches/s=25.624 | targets/s=49998.996
+[RUN_METRICS] best_valid_mrr20=0.014700 best_valid_hr10=0.030100 test_mrr20=0.299200 test_hr10=0.346900 avg_epoch_time_sec=135.1577 test_eval_time_sec=0.5854 test_eval_batches_per_sec=25.6239 test_eval_targets_per_sec=49998.9956
+  Total time: 40.4 min
+  Best params:
+    learning_rate: 0.000536187
+    weight_decay: 0
+  Results -> /workspace/FeaturedMoE/experiments/run/artifacts/results/cikm/KuaiRec_FDSA_p0_resume_20260510_020225_599914_pid762411.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/artifacts/results/cikm/normal/cikm_resume_safe_parallel/P0/KuaiRec/FDSA/KuaiRec_FDSA_p0_resume_20260510_020225_599914_pid762411.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/artifacts/results/cikm/special/cikm_resume_safe_parallel/P0/KuaiRec/FDSA/KuaiRec_FDSA_p0_resume_20260510_020225_599914_pid762411_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/artifacts/logs/cikm/special/cikm_resume_safe_parallel/P0/KuaiRec/FDSA/KuaiRec_FDSA_p0_resume_20260510_020225_599914_pid762411_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=762411 start=2026-05-10T02:02:25 end=2026-05-10T02:42:49

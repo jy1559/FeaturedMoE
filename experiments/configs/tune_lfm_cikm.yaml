@@ -1,0 +1,75 @@
+# LastFM (full) – CIKM 2026 tuning config
+# dataset = lastfm  (Datasets/processed/final_dataset/lastfm)
+# feature_mode = final  → passed via CLI
+# lastfm full: 547K items → sampled eval automatically via eval_sampling.mode=auto
+
+defaults:
+  - eval_mode: session_fixed
+  - feature_mode: final
+  - model: ???
+  - _self_
+
+dataset: lastfm
+dataset_root: ../Datasets/processed
+
+USER_ID_FIELD: session_id
+ITEM_ID_FIELD: item_id
+TIME_FIELD: timestamp
+load_col:
+  inter: [session_id, item_id, timestamp]
+  item: [item_id, category]
+field_separator: "\t"
+
+gpu_id: 0
+use_gpu: true
+enable_tf32: true
+
+save_dataset: false
+save_dataloaders: false
+enable_data_cache: true
+data_cache_dir: saved/recbole_cache
+enable_disk_data_cache: false
+in_memory_data_cache: true
+max_in_memory_data_cache: 2
+cache_dataloaders: false
+large_dataset_cache_policy_enabled: true
+large_dataset_cache_datasets: [lastfm]
+large_dataset_cache_anchor_len: 50
+enable_session_split_cache: false
+use_fast_data_augmentation: true
+sequence_convert_chunk_size: 16384
+fmoe_feature_fp16: true
+
+saved: false
+show_progress: false
+state: INFO
+special_logging: false
+
+loss_type: CE
+train_neg_sample_args: null
+train_batch_size: 2048
+eval_batch_size: 1024
+
+epochs: 100
+stopping_step: 10
+valid_metric: MRR@20
+metrics: [Hit, NDCG, MRR]
+topk: [5, 10, 20]
+
+# 547K items: use sampled eval (1000 negatives)
+eval_sampling:
+  mode: auto
+  strategy: pop
+  sample_num: 1000
+  auto_full_threshold: 100000
+
+clip_grad_norm:
+  max_norm: 5.0
+
+log_wandb: false
+wandb_project: FMoE_CIKM2026
+
+# narrow search space – overridden per-model in runner
+search:
+  learning_rate: [1e-4, 3e-4, 6e-4, 1e-3, 2e-3]
+  weight_decay: [0.0, 1e-5, 1e-4]

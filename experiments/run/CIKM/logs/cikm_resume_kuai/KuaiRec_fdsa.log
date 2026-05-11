@@ -1,0 +1,41 @@
+# job_id=KuaiRec_fdsa  dataset=KuaiRec  model=fdsa
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_kuai_cikm --search-algo tpe --max-evals 5 --tune-epochs 100 --tune-patience 10 --seed 42 --run-group cikm --run-axis cikm_resume_kuai --run-phase P0_RESUME model=fdsa dataset=KuaiRec eval_mode=session_fixed feature_mode=final ++dataset_root=/workspace/FeaturedMoE/Datasets/processed ++data_path=/workspace/FeaturedMoE/Datasets/processed/final_dataset ++exclude_unseen_target_from_main_eval=true ++log_unseen_target_metrics=true gpu_id=0 log_wandb=false show_progress=false ++seed=42 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++MAX_ITEM_LIST_LENGTH=50 ++hidden_dropout_prob=0.1 ++search.hidden_dropout_prob=0.1 ++attn_dropout_prob=0.1 ++search.attn_dropout_prob=0.1 ++attribute_hidden_size=160 ++search.attribute_hidden_size=160 ++lambda_attr=0.12 ++search.lambda_attr=0.12 ++n_layers=2 ++search.n_layers=2 ++n_heads=4 ++search.n_heads=4 ++search.learning_rate=[0.0001,0.0003,0.0005,0.0008,0.0015] ++search_space_type_overrides.learning_rate=loguniform ++search.weight_decay=[0,5e-05,0.0001] ++search_space_type_overrides.weight_decay=loguniform_zero max_evals=1 tune_epochs=100 tune_patience=10 oom_retry_limit=5
+
+/workspace/FeaturedMoE/experiments/recbole_patch.py:98: FutureWarning: In the future `np.object` will be defined as the corresponding NumPy scalar.
+  if not hasattr(np, _k):
+/workspace/FeaturedMoE/experiments/recbole_patch.py:98: FutureWarning: In the future `np.str` will be defined as the corresponding NumPy scalar.
+  if not hasattr(np, _k):
+[RUN_STATUS] START pid=726752 ts=2026-05-09T14:59:42
+
+=================================================================
+  Hyperopt  |  FDSA x KuaiRec
+  max_evals=1  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  oom_retry_limit=5  (halve train/eval batch size on OOM)
+  batch_size(train/valid/test)=2048/2048/2048
+  track=cikm  axis=cikm_resume_kuai  phase=P0_RESUME
+=================================================================
+Changed knobs: learning_rate, weight_decay
+Tuned params(len>1): 2  (~1 discrete combos)
+Tuned groups: 2
+  [optimization]
+    learning_rate                   [0.0001, 0.0003, 0.0005, 0.0008, 0.0015]  -> loguniform
+    weight_decay                    [0, 5e-05, 0.0001]                        -> loguniform_zero
+Fixed params(singleton/non-list): 6
+Fixed groups: 6
+  [optimization]
+    hidden_dropout_prob             0.1                                     
+  [model_core]
+    attn_dropout_prob               0.1                                     
+  [other]
+    attribute_hidden_size           160                                     
+    lambda_attr                     0.12                                    
+    n_heads                         4                                       
+    n_layers                        2                                       
+
+[Wandb] disabled for this hyperopt run
+
+[1/1] learning_rate=0.0005362, weight_decay=0
+[RUN_STATUS] TERMINATED signal=SIGINT(2) pid=726752 ts=2026-05-09T15:34:58
+[RUN_STATUS] TERMINATED signal=SIGTERM(15) pid=726752 ts=2026-05-09T15:34:59
+[RUN_STATUS] END status=terminated signal=SIGTERM(15) pid=726752 start=2026-05-09T14:59:42 end=2026-05-09T15:34:59
