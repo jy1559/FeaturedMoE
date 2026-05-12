@@ -2075,6 +2075,7 @@ def _build_special_metrics_payload(
 
 
 def _save_best_stage(model, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     cpu_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
     torch.save(cpu_state, path)
     del cpu_state

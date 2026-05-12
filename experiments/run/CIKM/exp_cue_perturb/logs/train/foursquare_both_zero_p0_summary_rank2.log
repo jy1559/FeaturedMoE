@@ -1,0 +1,56 @@
+# condition=both_zero  dataset=foursquare  gpu=2
+# hparam={'hparam_source': 'p0_summary_rank2', 'lr': 0.00038866395864867555, 'wd': 6e-07, 'hidden_size': 224, 'd_ff': 448, 'd_expert_hidden': 224, 'd_router_hidden': 112, 'd_feat_emb': 16, 'expert_scale': 4, 'MAX_ITEM_LIST_LENGTH': 10, 'hidden_dropout_prob': 0.1}
+# 학습+eval 모두 cue zero → MoE 구조 자체의 기여
+# cmd=/venv/FMoE/bin/python hyperopt_tune.py --config-name tune_foursq_cikm --search-algo tpe --max-evals 1 --tune-epochs 100 --tune-patience 10 --seed 42 --run-group cikm --run-axis cikm_cue_perturb_train --run-phase P1-cue model=featured_moe_n3_tune dataset=foursquare eval_mode=session_fixed feature_mode=final ++dataset=foursquare ++dataset_root=/workspace/FeaturedMoE/Datasets/processed gpu_id=2 log_wandb=false show_progress=false ++seed=42 ++eval_sampling.mode=full ++eval_sampling.auto_full_threshold=999999999 ++exclude_unseen_target_from_main_eval=true ++search.learning_rate=0.000388664 ++search.weight_decay=6e-07 ++MAX_ITEM_LIST_LENGTH=10 ++hidden_size=224 ++d_ff=448 ++d_expert_hidden=224 ++d_router_hidden=112 ++d_feat_emb=16 ++expert_scale=4 ++hidden_dropout_prob=0.1 ++search.hidden_size=224 ++search.d_ff=448 ++search.d_expert_hidden=224 ++search.d_router_hidden=112 ++search.d_feat_emb=16 ++search.expert_scale=4 ++search.hidden_dropout_prob=0.1 ++fmoe_architecture_id=A12 ++fmoe_architecture_key=A12_ATTN_MICRO_BEFORE_NO_BIAS_ALL_W5 ++layer_layout=["attn","macro_ffn","mid_ffn","attn","micro_ffn"] ++stage_compute_mode={macro:"moe",mid:"moe",micro:"moe"} ++stage_router_mode={macro:"learned",mid:"learned",micro:"learned"} ++stage_router_wrapper={macro:"w5_exd",mid:"w5_exd",micro:"w5_exd"} ++stage_router_granularity={macro:"session",mid:"session",micro:"token"} ++stage_feature_injection={macro:"none",mid:"none",micro:"none"} ++stage_feature_dropout_scope={macro:"token",mid:"token",micro:"token"} ++topk_scope_mode=global_flat ++moe_top_k=0 ++balance_loss_lambda=0.0 ++gate_entropy_lambda=0.0 ++route_smoothness_lambda=0.0 ++route_sharpness_lambda=0.0 ++route_monopoly_lambda=0.0 ++route_prior_lambda=0.0 ++group_prior_align_lambda=0.0 ++factored_group_balance_lambda=0.0 ++rule_agreement_lambda=0.0 ++group_coverage_lambda=0.0 ++feature_group_bias_lambda=0.0 ++rule_bias_scale=0.0 ++bias_mode=none ++route_consistency_pairs=1 ++route_consistency_lambda=0.0 ++macro_history_window=5 ++stage_router_source={macro:"feature",mid:"feature",micro:"feature"} ++stage_router_primitives={macro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},mid:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}},micro:{a_joint:{source:"feature",temperature:1.0,top_k:0},b_group:{source:"feature",temperature:1.0,top_k:0},c_shared:{source:"feature",temperature:1.0,top_k:0},d_cond:{source:"feature",temperature:1.0,top_k:0},e_scalar:{source:"feature",temperature:1.0,top_k:0},wrapper:{alpha_d:1.0,alpha_struct:1.0,alpha_a:1.0}}} ++feature_perturb_mode=zero ++feature_perturb_apply=both
+
+[RUN_STATUS] START pid=883411 ts=2026-05-12T04:06:01
+
+=================================================================
+  Hyperopt  |  FeaturedMoE_N3 x foursquare
+  max_evals=1  epochs=100  patience=10  wandb=off
+  search_algo=tpe
+  batch_size(train/valid/test)=1024/1024/1024
+  track=cikm  axis=cikm_cue_perturb_train  phase=P1-cue
+=================================================================
+Changed knobs: (none; single-run mode)
+Tuned params(len>1): 0  (~1 discrete combos)
+Tuned groups: 0
+  (none)
+Fixed params(singleton/non-list): 9
+Fixed groups: 9
+  [optimization]
+    hidden_dropout_prob             0.1                                     
+    learning_rate                   0.000388664                             
+    weight_decay                    6e-07                                   
+  [model_core]
+    d_expert_hidden                 224                                     
+    d_feat_emb                      16                                      
+    d_ff                            448                                     
+    d_router_hidden                 112                                     
+    expert_scale                    4                                       
+    hidden_size                     224                                     
+
+[Wandb] disabled for this hyperopt run
+
+[1/1] (fixed-only run)
+  -> MRR@20=0.200200  best=0.200200  (early_stop@23, trial=5.9min, avg=6.1min/trial, total=6.1min, ETA=0s)
+[TRIAL_METRICS] cur_best_mrr20=0.200200 cur_best_hr10=0.359900 cur_test_mrr20=0.162600 cur_test_hr10=0.307400 avg_epoch_time_sec=15.4433 test_eval_time_sec=0.5172 test_eval_batches_per_sec=7.7343 test_eval_targets_per_sec=6885.4397 run_best_mrr20=0.200200 run_best_hr10=0.359900 run_test_mrr20=0.162600 run_test_hr10=0.307400
+
+=================================================================
+  DONE  |  FeaturedMoE_N3 x foursquare
+  Best MRR@20 = 0.200200  |  1/1 trials OK
+  Best HR@10  = 0.359900
+  Test MRR@20 = 0.162600  (best-valid checkpoint)
+  Test HR@10  = 0.307400  (best-valid checkpoint)
+  Avg epoch time = 15.443 sec/epoch
+  Final test eval = 0.517 sec | batches/s=7.734 | targets/s=6885.440
+[RUN_METRICS] best_valid_mrr20=0.200200 best_valid_hr10=0.359900 test_mrr20=0.162600 test_hr10=0.307400 avg_epoch_time_sec=15.4433 test_eval_time_sec=0.5172 test_eval_batches_per_sec=7.7343 test_eval_targets_per_sec=6885.4397
+  Total time: 6.3 min
+  Best params:
+  Results -> /workspace/FeaturedMoE/experiments/run/CIKM/exp_cue_perturb/artifacts/results/cikm/foursquare_FeaturedMoE_N3_p1-cue_20260512_040601_764439_pid883411.json
+  Normal mirror -> /workspace/FeaturedMoE/experiments/run/CIKM/exp_cue_perturb/artifacts/results/cikm/normal/cikm_cue_perturb_train/P1-cue/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p1-cue_20260512_040601_764439_pid883411.json
+  Special result -> /workspace/FeaturedMoE/experiments/run/CIKM/exp_cue_perturb/artifacts/results/cikm/special/cikm_cue_perturb_train/P1-cue/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p1-cue_20260512_040601_764439_pid883411_special_metrics.json
+  Special log -> /workspace/FeaturedMoE/experiments/run/CIKM/exp_cue_perturb/artifacts/logs/cikm/special/cikm_cue_perturb_train/P1-cue/foursquare/FMoEN3/foursquare_FeaturedMoE_N3_p1-cue_20260512_040601_764439_pid883411_special_metrics.json
+=================================================================
+
+[RUN_STATUS] END status=normal pid=883411 start=2026-05-12T04:06:01 end=2026-05-12T04:12:21

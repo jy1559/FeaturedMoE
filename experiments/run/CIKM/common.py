@@ -117,6 +117,13 @@ NARROW_SEARCH: dict[str, dict[str, dict[str, list[Any]]]] = {
             "weight_decay":  [0.0, 1e-6, 5e-6, 1e-5],
         },
     },
+    # foursquare: anchors from docs/hparams.md (foursquare featured_moe_n3 raw route row)
+    "foursquare": {
+        "featured_moe_n3": {
+            "learning_rate": [2.5e-4, 5e-4, 7.5e-4, 1.2e-3, 2e-3],
+            "weight_decay":  [0.0, 5e-7, 1e-6, 5e-6],
+        },
+    },
 }
 
 # ── fixed params (non-tuned) per dataset/model ────────────────────────────────
@@ -191,6 +198,23 @@ FIXED_PARAMS: dict[str, dict[str, dict[str, Any]]] = {
                      "attribute_hidden_size": 160, "lambda_attr": 0.12,
                      "n_layers": 3, "n_heads": 2},
         "featured_moe_n3": {"MAX_ITEM_LIST_LENGTH": 10, "hidden_dropout_prob": 0.10, "attn_dropout_prob": 0.10},
+    },
+    # foursquare: anchors from docs/hparams.md (foursquare raw route row)
+    # featured_moe_n3: MAX_ITEM_LIST_LENGTH=10, hidden_size=224, lr=~5e-4, wd=5e-7
+    "foursquare": {
+        "featured_moe_n3": {
+            "MAX_ITEM_LIST_LENGTH": 10,
+            "hidden_dropout_prob": 0.16,
+            "attn_dropout_prob":   0.10,
+            "hidden_size":         224,
+            "d_ff":                448,
+            "d_expert_hidden":     224,
+            "d_router_hidden":     128,
+            "d_feat_emb":          16,
+            "expert_scale":        4,
+            "route_consistency_lambda": 5e-4,
+            "stage_feature_dropout_prob": 0.03,
+        },
     },
 }
 

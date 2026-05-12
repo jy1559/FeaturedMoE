@@ -94,9 +94,12 @@ _np2_compat = {
     "long":     np.int_    if hasattr(np, "int_")    else np.int64,
     "int_":     np.int64,
 }
-for _k, _v in _np2_compat.items():
-    if not hasattr(np, _k):
-        setattr(np, _k, _v)
+import warnings as _warnings
+with _warnings.catch_warnings():
+    _warnings.simplefilter("ignore", FutureWarning)
+    for _k, _v in _np2_compat.items():
+        if not hasattr(np, _k):
+            setattr(np, _k, _v)
 
 import torch
 from copy import copy

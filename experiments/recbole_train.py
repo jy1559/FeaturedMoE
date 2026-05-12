@@ -1127,23 +1127,32 @@ def run_custom_training(cfg_i, run_name: str, save_model: bool = False, run_logg
         remaining = max_epochs - (epoch + 1)
         eta = avg_epoch * remaining
         display_best_mrr20 = best_by_metric['mrr@20'] if best_by_metric['mrr@20'] > -1e8 else 0.0
-        display_valid_mrr20 = valid_result.get('mrr@20', 0.0)
-        eval_tag = "EVAL" if do_eval else f"SKIP@{eval_every}"
+        display_valid_mrr20 = valid_result.get('mrr@20', 0.0) if do_eval else None
+        eval_tag = "eval" if do_eval else f"skip"
 
-        # Concise, aligned epoch line (tabs + fixed widths)
-        progress_pct = (epoch + 1) / max_epochs * 100
-        epoch_line = (
-            f"Ep {epoch+1:>3}/{max_epochs:<3}\t"
-            f"{eval_tag:<8}\t"
-            f"Prog {progress_pct:6.2f}%\t"
-            f"ETA {fmt_time(eta)}\t"
-            f"train_loss {train_loss:7.4f}\t"
-            f"valid M@20 {display_valid_mrr20:7.4f}\t"
-            f"best M@20 {display_best_mrr20:7.4f}\t"
-            f"pat {no_improve:>2}/{patience:<2}\t"
-            f"time {epoch_time:6.2f}s"
+        # train_loss may be a list (multi-stage) or float
+        _loss_val = train_loss if isinstance(train_loss, float) else (
+            sum(train_loss) / len(train_loss) if hasattr(train_loss, '__len__') and len(train_loss) else float(train_loss or 0)
         )
-        print(epoch_line)
+
+        # progress bar: ████░░░░ style
+        bar_len = 20
+        filled = int((epoch + 1) / max_epochs * bar_len)
+        bar = "█" * filled + "░" * (bar_len - filled)
+
+        mrr_str = f"{display_valid_mrr20:.4f}" if display_valid_mrr20 is not None else "  —   "
+        best_str = f"{display_best_mrr20:.4f}"
+        new_marker = " ★" if (do_eval and display_valid_mrr20 is not None and display_valid_mrr20 == display_best_mrr20 and display_best_mrr20 > 0) else "  "
+        epoch_line = (
+            f"[{bar}] {epoch+1:>3}/{max_epochs}  "
+            f"ETA {fmt_time(eta):>8}  "
+            f"loss {_loss_val:6.4f}  "
+            f"mrr {mrr_str}{new_marker}  "
+            f"best {best_str}  "
+            f"pat {no_improve}/{patience}  "
+            f"{epoch_time:.1f}s/ep  [{eval_tag}]"
+        )
+        print(epoch_line, flush=True)
 
         # FeaturedMoE expert/bucket debug logging (per-epoch summary)
         moe_summary = None
